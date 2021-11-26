@@ -24,8 +24,11 @@ void NtripStream::connected()
 bool NtripStream::dataChunkDownloaded(vector<char> dataChunk)
 {
 	receivedDataBufferMtx.lock();
-	for ( int j = 0; j < chunked_message_length; j++ )
-		receivedDataBuffer.push_back(dataChunk[j]);
+	{
+		for (int j = 0; j < chunked_message_length; j++)
+			receivedDataBuffer.push_back(dataChunk[j]);
+	}
 	receivedDataBufferMtx.unlock(); 
+	
 	return false;
 }

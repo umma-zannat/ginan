@@ -41,20 +41,20 @@ struct flt_t
 /* trop sinex file */
 struct mgex_tropcoord                 /* trop station coordinates block */
 {
-	char    sitecode[4];        /* site code */
-	char    ptcode[2];          /* point code */
-	char    solid[4];           /* solution ID */
+	char    sitecode[5] = {};        /* site code */
+	char    ptcode[3] = {};          /* point code */
+	char    solid[5] = {};           /* solution ID */
 	char    obscode;            /* observation code */
 	double  x[3];               /* coordinates */
-	char    sys[6];             /* system */
-	char    remark[5];
+	char    sys[7] = {};             /* system */
+	char    remark[6] = {};
 	double  std[3];             /* (mm) */
 	int     counter;
 };
 
 struct mgex_tropsol                 /* trop description block */
 {
-	char    marker[4];          /* marker name */
+	char    marker[5] = {};          /* marker name */
 	double  ts[3];              /* solution time YDS */
 	double  x[14];
 	int     actak;
@@ -63,27 +63,27 @@ struct mgex_tropsol                 /* trop description block */
 
 struct mgex_trop                 /* trop information */
 {
-	char    id[5];
+	char    id[6] = {};
 	double  ver;
-	char    agency[3];
-	char    agencycode[3];
+	char    agency[4] = {};
+	char    agencycode[4] = {};
 	int     tbc[3];             /* time created */
 	int     tbs[3];             /* time started */
 	int     tbe[3];             /* time end */
 	char    obscode;            /* observation code */
-	char    solcon[4];
+	char    solcon[5] = {};
 	/* description block */
-	char    solfield[14][6];    /* solution */
+	char    solfield[14][6] = {};    /* solution */
 	int     inttrop;            /* trop solution sample rate */
 	int     intdata;            /* data sampling interval */
-	char    tropmap[22];        /* mapping function */
+	char    tropmap[23] = {};        /* mapping function */
 	double  el;                 /* elevation cut off */
 	int     bstart;             /* bias start */
 	int     bend;               /* bias end */
 	double  factor;             /* delete factor */
-	char    cfactor[22];        /* conversion factor */
+	char    cfactor[23] = {};        /* conversion factor */
 	mgex_tropcoord  tcoord[MAXIGSSTA];
-	mgex_tropsol    *tsol;
+	mgex_tropsol*	tsol = nullptr;
 };
 
 int lsqqc(

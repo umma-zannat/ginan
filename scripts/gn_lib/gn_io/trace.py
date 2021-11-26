@@ -8,19 +8,96 @@ from multiprocessing import Pool as _Pool
 import numpy as _np
 import pandas as _pd
 
-from ..gn_datetime import gpsweeksec2datetime as _gpsweeksec2datetime
+from ..gn_datetime import gpsweeksec2datetime as _gpsweeksec2datetime, _J2000_ORIGIN
+from ..gn_const import PL_TYPE,PRN_CATEGORY, STATE_TYPES_CATEGORY
 from .common import path2bytes
 
-_RE_TRACE = _re.compile(
-    rb'POS,(.+)\n\$CLK,\d+,\d+\.\d+,\d,\d(.+)\n\$TROP,\d+,\d+\.\d+,\d,\d(.+)\n')
+def _trace_extract(path_or_bytes,blk_name):
+    # 'States', 'Residuals'
+    blks_supported = ['States','Residuals']
+    assert blk_name in blks_supported, f'"{blk_name}" blk not supported. Select one of {blks_supported}'
+
+    trace_bytes = path2bytes(path_or_bytes) #path2bytes passes through bytes 
+
+    begin = end = 0
+    buf=[]
+
+    blk_begin = (f'+ {blk_name}\n').encode()
+    blk_end   = (f'- {blk_name}'  ).encode()
+
+    while True:
+        begin = trace_bytes.find(blk_begin,end)
+        if begin==-1:
+            break
+        end = trace_bytes.find(blk_end,begin)
+        buf.append(trace_bytes[begin+len(blk_begin):end])
+    return b''.join(buf)
+
+def _read_trace_states(path_or_bytes):
+    states = _trace_extract(path_or_bytes,blk_name='States')
+    df = _pd.read_csv(_BytesIO(states),delimiter='\t',usecols=[1,2,3,4,5,6,7,8],skipinitialspace=True,dtype={'SAT':PRN_CATEGORY,'TYPE':STATE_TYPES_CATEGORY},keep_default_na=False,
+                    comment='#',header=None,names = ['TIME','TYPE','SITE','SAT','NUM','EST','VAR','ADJ'],parse_dates=['TIME']) # type:ignore
+    df.TIME = (df.TIME.values - _J2000_ORIGIN).astype('timedelta64[s]').astype(int)
+
+    return df.set_index(['TIME','SITE','TYPE','SAT','NUM'])
+
+def _read_trace_residuals(path_or_bytes,it_max_only=True):
+    residuals = _trace_extract(path_or_bytes,blk_name='Residuals')
+    df = _pd.read_csv(_BytesIO(residuals),delimiter='\t',comment='#',header=None,usecols=[1,2,3,4,5,6,7,8],skipinitialspace=True,keep_default_na=False,
+            names = ['It','TIME','SITE','SAT','TYPE','PREFIT','POSTFIT','STD'],parse_dates=['TIME'],dtype={'It':int,'SAT':PRN_CATEGORY,'TYPE':PL_TYPE}) # type:ignore
+
+    df.TIME = (df.TIME.values - _J2000_ORIGIN).astype('timedelta64[s]').astype(int)
+    if not it_max_only:
+        return df.set_index(['TIME','SITE','TYPE','SAT'])
+    # to get max_ind values pandas >= 1.1 is required
+    it_max_ind=df[['TIME','It']].groupby(['TIME']).max().reset_index().values.tolist()
+    return df.set_index(['TIME','It']).loc[it_max_ind].reset_index().set_index(['TIME','SITE','TYPE','SAT'])
+
+def diff2msg(diff,tol):
+    _pd.set_option("display.max_colwidth", 10000)
+    count_total = (~_np.isnan(diff.values)).sum(axis=0)
+    mask2d_over_threshold = (_np.abs(diff.values) >=tol)
+    diff_count = mask2d_over_threshold.sum(axis=0)
+    mask = diff_count.astype(bool)
+    if mask.sum() == 0:
+        return None
+
+    diff_over = diff[mask2d_over_threshold]
+    msg =  (diff_count[mask].astype(str).astype(object) + '/' + count_total[mask].astype(str) + ' (' + (diff_count[mask]/count_total[mask] * 100).round(2).astype(str) +'%)'
+    + ' | Mean: ' + diff_over.loc(axis=1)[mask].mean(axis=0).round(4).astype(str).str.rjust(7) 
+    + '|STD:' + diff_over.std(axis=0).round(4).astype(str).str.rjust(7)
+    + '|MIN:' + diff_over.min(axis=0).round(4).astype(str).str.rjust(7)
+    + '|MAX:' + diff_over.max(axis=0).round(4).astype(str).str.rjust(7))
+    return _pd.Series(data = msg, index = diff.columns.values[mask])
+
+def _compare_gnss_states(states1,states2,tol=0.2):
+    sats1 = states1.index.get_level_values(3)
+    sats2 = states2.index.get_level_values(3)
+
+    extra_svs = list(set(sats1).symmetric_difference(sats2))
+    # states differencing requires pandas>=1.2.0
+    p_bias_diff = states1.EST[~sats1.isna()].droplevel([1,2,4]).unstack(1) - states2.EST[~sats2.isna()].droplevel([1,2,4]).unstack(1)
+    return extra_svs, diff2msg(p_bias_diff,tol)
+
+def _compare_postrop_states(states1,states2,tol=0.2):
+    pos_trop_diff = states1.EST.droplevel('SAT').loc[:,:,['REC_POS','TROP']].unstack(['SITE','TYPE','NUM']) - states2.EST.droplevel('SAT').loc[:,:,['REC_POS','TROP']].unstack(['SITE','TYPE','NUM'])
+    return diff2msg(pos_trop_diff,tol=tol)
+
+def _compare_recsysbias_states(states1,states2,tol=0.2):
+    recsysbias_diff = states1.EST.droplevel('SAT').loc[:,:,'REC_SYS_BIAS'].unstack(['SITE','NUM']) - states2.EST.droplevel('SAT').loc[:,:,'REC_SYS_BIAS'].unstack(['SITE','NUM'])
+    return diff2msg(recsysbias_diff,tol=tol)
+
+def _compare_postfit_residuals(residuals1,residuals2,tol = 0.2):
+    diff_count =  residuals1.droplevel('SITE').POSTFIT.unstack(['TYPE','SAT']) - residuals2.droplevel('SITE').POSTFIT.unstack(['TYPE','SAT'])
+    return diff2msg(diff_count,tol)
+
+
 _RE_TRACE_HEAD = _re.compile(
     rb'station\s*\:\s*(.{4})\n\w+\s*\:\s*(.+|)\n\w+\s*\:\s*(.+|)\n\w+\s*\:\s*(\d)\n\w+\s*\:\s*(.+)')
-_RE_TRACE_RES = _re.compile(
-    rb"\+\sResiduals\n\*.+((?:\n.+)+)\n\-\sRes.+\n+DOING.+\nSigma.+\n(?:Deweighting.+\n|)\n\$POS\,(\d{4})\,(\d+)")
 _RE_TRACE_LC = _re.compile(rb'PDE\sform\sLC.+((?:\n.+)+)')
 _RE_EL = _re.compile(rb'\*2 PDE-CS GPST\s+\w+\s+(\d+)\s+(\d+).0\s+(\w\d\d)\s+(\d+.\d+)')
 
-def _find_trace(output_path: str) -> ([], []):
+def _find_trace(output_path: str) -> tuple:
     '''Scans output path for TRACE files'''
     station_names = set()
     trace_paths = []
@@ -35,104 +112,14 @@ def _find_trace(output_path: str) -> ([], []):
     trace_paths = sorted(trace_paths)
     return station_names, trace_paths
 
-def _read_trace(trace_path, station_categories=None, drop_aux=True):
-    '''Reads $POS, $CLK and $TROP lines from trace file. Outputs J2000 indexed df
-    drop_aux=False will keep the original WEEK/Time_Of_Week values'''
-    trace_content = path2bytes(trace_path)  # will accept .trace.Z also
-    #print(trace_content)
-    station_name = _RE_TRACE_HEAD.findall(string=trace_content)[
-        0][0].decode(encoding='utf8').upper()
-    #print("station name")
-    #print(station_name)
-    trace_list = _RE_TRACE.findall(string=trace_content)
-    #print("Am I here")
-    #print(trace_list)
-    trace_df = _pd.DataFrame(trace_list).sum(axis=1).str.decode(encoding='utf8')\
-        .str.rsplit(pat=',', expand=True).astype(
-        {
-            # POS
-            0: _np.int16, 1: _np.float_, 2: _np.int8,
-            3: _np.float_, 4: _np.float_, 5: _np.float_,
-            6: _np.float_, 7: _np.float_, 8: _np.float_,
-            # CLK
-            9: _np.float_, 10: _np.float_, 11: _np.float_, 12: _np.float_,
-            # TROP
-            13: _np.float_, 14: _np.float_
-        })
-
-    datetime_j2000 = _gpsweeksec2datetime(
-        gps_week=trace_df[0], tow=trace_df[1], as_j2000=True)
-
-    station_name_array = _np.ndarray((trace_df.shape[0]), dtype='<U4')
-    station_name_array.fill(station_name)
-    station_index = _pd.CategoricalIndex(
-        data=station_name_array,
-        categories=station_categories if station_categories is not None else None)
-
-    trace_df.columns = _pd.MultiIndex.from_arrays([
-        ['AUX', 'AUX', 'AUX', 'EST', 'EST', 'EST', 'VAR', 'VAR',
-            'VAR', 'EST', 'EST', 'VAR', 'VAR', 'EST', 'VAR'],
-        ['WEEK', 'TOW', 'solStat', 'X', 'Y', 'Z', 'X', 'Y', 'Z', 'rClk', 'rClkG', 'rClk', 'rClkG', 'trop', 'trop']])
-
-    if drop_aux:
-        trace_df.drop(columns='AUX', level=0, inplace=True)
-    return trace_df.set_index([station_index, datetime_j2000])
-
-def _read_trace_res(trace_path, station_categories=None) -> _pd.DataFrame:
-    '''Reads residuals from trace file (last block in each epoch.
-    TODO: trace_level check, activate station categories switch, create gather func'''
-    trace_content = path2bytes(trace_path)
-    trace_res_list = _RE_TRACE_RES.findall(string=trace_content)
-    res_array = _np.asarray(trace_res_list)
-
-    count = _np.ndarray(res_array.shape[0], dtype=int)
-    for i in range(res_array.shape[0]):
-        count[i] = res_array[i][0].count(b'\n')
-
-    gps_week_raw = res_array[:, 1].astype('timedelta64[W]')
-    if _np.unique(gps_week_raw).shape[0] == 1:
-        gps_week = _np.ndarray(count.sum(), dtype='timedelta64[W]')
-        gps_week.fill(gps_week_raw[0])
-    else:
-        gps_week = _np.repeat(gps_week_raw, count)
-
-    tow = _np.repeat(res_array[:, 2].astype('timedelta64[s]'), count)
-    datetime_j2000 = _gpsweeksec2datetime(
-        gps_week=gps_week, tow=tow, as_j2000=True)
-
-    residuals = b''.join(res_array[:, 0].tolist())
-    df_res = _pd.read_csv(_BytesIO(residuals), delim_whitespace=True, header=None, usecols=[1, 2, 3, 4, 5, 6, 7])\
-        .astype({1: 'category', 2: 'category', 3: '<U1', 4: '<U2', 5: float, 6: float, 7: float})
-    df_res[3] = (df_res[3] + df_res[4]).astype('category')  # L 5 -> L5 etc
-
-    df_res.drop(columns=4, inplace=True)
-    df_res.columns = ['CODE', 'PRN', 'OBS', 'PREFIT', 'POSTFIT', 'VAR']
-    return df_res.set_index(['OBS', datetime_j2000])
-
-def gather_trace(output_path, n_threads=1, drop_aux=True):
-    '''Parses all available trace files in the output path and outputs
-     a single dataframe. Residuals are ignored here'''
-    station_names, trace_paths = _find_trace(output_path)
-    n_traces = len(trace_paths)
-    n_threads = n_traces if n_threads > n_traces else n_threads
-
-    if n_threads == 1:
-        trace_gather = []
-        for trace in trace_paths:
-            trace_gather.append(_read_trace(
-                trace_path=trace, station_categories=station_names))
-    else:
-        with _Pool(processes=n_threads) as _p:
-            trace_gather = _p.starmap(_read_trace, product(
-                trace_paths, [station_names], [drop_aux]))
-
-    return _pd.concat(trace_gather, axis=0)
-
-def _read_trace_LC(trace_path):
+def _read_trace_LC(path_or_bytes):
     '''Parses the LC combo block of the trace files producing
      a single dataframe. WORK-IN-PROGRESS'''    
     # regex search string
-    trace_content = path2bytes(trace_path)
+    if isinstance(path_or_bytes, str):
+        trace_content = path2bytes(path_or_bytes) # will accept .trace.Z also
+    else:
+        trace_content = path_or_bytes
     trace_LC_list = _RE_TRACE_LC.findall(string=trace_content)
     LC_bytes = b''.join(trace_LC_list)
     LC_bytes = LC_bytes.replace(b'=',b'') #getting rif of '='
@@ -165,9 +152,12 @@ def _read_trace_LC(trace_path):
     
     return df_LC.set_index(['time'])
 
-def _read_trace_el(trace_path):
+def _read_trace_el(path_or_bytes):
     "Get elevation angles for satellites from trace file"
-    trace_content = path2bytes(trace_path)
+    if isinstance(path_or_bytes, str):
+        trace_content = path2bytes(path_or_bytes) # will accept .trace.Z also
+    else:
+        trace_content = path_or_bytes
     trace_EL_list = _RE_EL.findall(string=trace_content)
     
     el_df = _pd.DataFrame(trace_EL_list).astype({0:_np.int16, 1:_np.int32, 2:bytes, 3:_np.float})

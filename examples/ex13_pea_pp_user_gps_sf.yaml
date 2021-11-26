@@ -14,10 +14,10 @@ input_files:
     clkfiles: [ COD0R03FIN_20191990000_01D_30S_CLK.CLK ] # satellite clock files in RNX CLK format
     ionfiles: [ codg1990.19i ]          # Ionospheric delay maps in IONEX format
     # dcbfiles: [  ]                    # DCB files for Ionosphere may be provided separately
-    
+
 station_data:
 
-    root_stations_directory: data/ #need to have it absolute till fixed
+    root_stations_directory: data/
 
     rnxfiles:
         # Select files to run by:
@@ -90,10 +90,10 @@ processing_options:
 
     # pivot_station:        "USN7"
     # pivot_satellite:      "G01"
-    
+
     ionosphere:
         corr_mode:      total_electron_content
-        
+
     code_priorities: [  L1C, L1P, L1Y, L1W, L1M, L1N, L1S, L1L, L1X,
                         L2W, L2P, L2Y, L2C, L2M, L2N, L2D, L2S, L2L, L2X,
                         L5I, L5Q, L5X]
@@ -107,7 +107,7 @@ user_filter_parameters:
     rts_directory:              ./
     rts_filename:               PPP-<CONFIG>-<STATION>.rts
 
-    inverter:                   LLT         #LLT LDLT INV (default is INV)
+    inverter:                   LDLT         #LLT LDLT INV (default is INV)
 
 default_filter_parameters:
 
@@ -127,7 +127,6 @@ default_filter_parameters:
             estimated:          true
             sigma:              [0]
             proc_noise:         [1000]
-            #proc_noise_model:   Gaussian
 
         clk_rate:
             estimated:          false
@@ -137,21 +136,18 @@ default_filter_parameters:
             sigma:              [60]
             proc_noise:         [0]
             #proc_noise_dt:      day
-            #proc_noise_model:   RandomWalk
 
         trop:
             estimated:          true
             sigma:              [0.1]
             proc_noise:         [0.0001] #0.1 mm/sqrt(s)
             proc_noise_dt:      second
-            #proc_noise_model:   RandomWalk
 
         trop_grads:
             estimated:          true
             sigma:              [1]
             proc_noise:         [0.01]
             proc_noise_dt:      second
-            #proc_noise_model:   RandomWalk
 
     satellites:
 
@@ -167,12 +163,10 @@ override_filter_parameters:
 
     stations:
 
-            #ALIC:
+        #ALIC:
             #pos:
             #    sigma:              [60]
-
                 #proc_noise:         [0]
-                ##proc_noise_model:   Gaussian
             #clk:
                 #sigma:              [0.01]
 
@@ -182,4 +176,4 @@ override_filter_parameters:
             #exclude: true
         #ANKR:
             #exclude: true
-                #network_estimated:  false
+                #estimated:  false

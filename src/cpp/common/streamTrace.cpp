@@ -15,9 +15,9 @@
 
 #include "observations.hpp"
 #include "navigation.hpp"
-#include "constants.h"
-#include "gTime.hpp"
+#include "constants.hpp"
 #include "common.hpp"
+#include "gTime.hpp"
 
 boost::iostreams::stream< boost::iostreams::null_sink > nullStream( ( boost::iostreams::null_sink() ) );
 

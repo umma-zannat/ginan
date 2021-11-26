@@ -55,6 +55,7 @@ Then download all of the example data using the python script provided:
     ginan/
     ├── README.md			! General README information
     ├── LICENSE.md		    ! Software License information
+    ├── ChangeLOG.md		    ! Release Chnage history
     ├── aws/		        ! Amazon Web Services config
     ├── bin/		        ! Binary executables directory*
     ├── CMakeLists.txt		! Cmake build file
@@ -73,11 +74,20 @@ Then download all of the example data using the python script provided:
     │   ├── ex18            ! PEA example 8
     │   --------------POD examples--------------
     │   ├── ex21            ! POD example 1
-    │   ├── ex22            ! POD example 2
+    │   ├── ex22            ! POD example 2 full GNSS pod fit example (5 constellations)
+    │   ├── ex22/gps        ! POD example 2 US GPS constellation only
+    │   ├── ex22/glo        ! POD example 2 Russian GLONASS constellation only
+    │   ├── ex22/gal        ! POD example 2 European GALILEO constellation only
+    │   ├── ex22/bds        ! POD example 2 Chinese BEIDOU constellation only
+    │   ├── ex22/qzss       ! POD example 2 Japanese QZSS constellation only
     │   ├── ex23            ! POD example 3
     │   ├── ex24            ! POD example 4
     │   ├── ex25            ! POD example 5
     │   └── ex26            ! POD example 6
+    │   --------------long test examples--------------
+    │   ├── ex31/pod_fit    ! POD fit (ex31 stage 1)
+    │   ├── ex31/pea        ! PEA re-estimate parameters
+    │   ├── ex31/pod_ic     ! POD ic integrate
     │
     ├── lib/		        ! Compiled objectlibrary directory*
     ├── scripts/		    ! Auxillary Python and Shell scripts and libraries
@@ -93,11 +103,25 @@ Then download all of the example data using the python script provided:
 
 *\*\*created by `download_examples.py` script*
 ***
-## Dependencies
 
-If you wish to use Ubuntu Linux, you can quickly create your environment by downloading the docker image:
+## Using Ginan with Docker
+
+With docker, you can quickly create your environment by downloading the docker image:
 
     $ docker pull gnssanalysis/ginan:v1.0-alpha
+
+Then you can run `bash` inside image as follows:
+
+    $ docker run -it -v /data:/data gnssanalysis/ginan:v1.0-alpha bash
+
+To verify you have the Ginan executables available, run in this bash session:
+
+    $ pea --help
+    $ pod --help
+
+More details on how to use the image is available in the "Docker" section of Ginan manual (s3://ginan-manual).
+
+## Dependencies
 
 Otherwise Ginan has several software dependencies:
 
@@ -108,7 +132,12 @@ Otherwise Ginan has several software dependencies:
 * Boost  > 1.70 (tested on 1.73)
 * Eigen3
 * netCDF4
-* Python3 (tested on Python 3.7)
+* Python3 (tested on Python 3.7
+
+Acknowledgements:
+We have used routines obtained from RTKLIB, released under a BSD-2 license, these routines have been preserved with minor modifications in the folder cpp/src/rtklib The original source code from RTKLib can be obtained from https://github.com/tomojitakasu/RTKLIB
+
+We have used routines obtained from Better Enums, released under the BSD-2 license, these routines have been preserved in the folder cpp/src/3rdparty The original source code from Better Enums can be obtained from http://github.com/aantron/better-enums.
 ***
 ## Installing dependencies with Ubuntu
 
@@ -120,6 +149,12 @@ Update the base operating system:
 Install base utilities `gcc`, `gfortran`, `git`, `openssl`, `openblas` etc:
 
     $ sudo apt install -y git gobjc gobjc++ gfortran libopenblas-dev openssl curl net-tools openssh-server cmake make libssl1.0-dev
+
+Since Ginan v1.2-alpha both gcc and g++ of version 8 are required, so make sure to update the gcc/g++ alternatives prior to compilation:
+
+    $ sudo apt install gcc-8 g++-8
+    $ sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 50      
+    $ sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 50
 ***
 ## Building additional dependencies 
 
@@ -238,7 +273,7 @@ Run cmake to find the build dependencies and create the make file. If you wish t
 
     $ cmake [-DENABLE_MONGODB=TRUE] [-DENABLE_OPTIMISATION=TRUE] ..
 
-To build every package simply run `make` or `make -j 2`, where 2 is a number of parallel threads you want to use for the compilation:
+To build every package simply run `make` or `make -j 2` , where 2 is a number of parallel threads you want to use for the compilation:
 
     $ make [-j 2]
 

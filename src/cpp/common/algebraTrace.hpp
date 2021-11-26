@@ -307,13 +307,6 @@ bool getFilterObjectFromFile(
 	return true;
 }
 
-void initFilterTrace(
-	KFState&	kfState,
-	string		traceFilename,
-	string		stationId	= "",
-	int			rts_lag		= -1);
-
-
 E_SerialObject getFilterTypeFromFile(
 	long int&	startPos,
 	string		filename);

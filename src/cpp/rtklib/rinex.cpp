@@ -10,6 +10,7 @@ using std::string;
 
 #include "streamTrace.hpp"
 #include "navigation.hpp"
+#include "constants.hpp"
 #include "station.hpp"
 #include "common.hpp"
 #include "gTime.hpp"
@@ -41,18 +42,18 @@ void setstr(char *dst, const char *src, int n)
 /* adjust time considering week handover -------------------------------------*/
 GTime adjweek(GTime t, GTime t0)
 {
-	double tt = timediff(t, t0);
-	if (tt < -302400)		return timeadd(t, +604800);
-	if (tt > +302400)		return timeadd(t, -604800);
+	double tt = t - t0;
+	if (tt < -302400)		return t + 604800.0;
+	if (tt > +302400)		return t - 604800.0;
 							return t;
 }
 
 /* adjust time considering week handover -------------------------------------*/
 GTime adjday(GTime t, GTime t0)
 {
-	double tt = timediff(t, t0);
-	if (tt < -43200.0)		return timeadd(t, +86400.0);
-	if (tt > +43200.0)		return timeadd(t, -86400.0);
+	double tt = t - t0;
+	if (tt < -43200.0)		return t + 86400.0;
+	if (tt > +43200.0)		return t - 86400.0;
 							return t;
 }
 
@@ -1008,7 +1009,7 @@ int decode_eph(
 		eph->ttr=adjweek(gpst2time(eph->week,data[27]),toc);
 
 		eph->code=(int)data[20];      /* GPS: codes on L2 ch */
-		eph->svh =(int)data[24];      /* sv health */
+		eph->svh =(E_Svh)data[24];      /* sv health */
 		eph->sva=uraindex(data[23]);  /* ura (m->index) */
 		eph->flag=(int)data[22];      /* GPS: L2 P data flag */
 
@@ -1030,7 +1031,7 @@ int decode_eph(
 									/* bit 2 set: F/NAV E5b-I */
 									/* bit 8 set: af0-af2 toc are for E5a.E1 */
 									/* bit 9 set: af0-af2 toc are for E5b.E1 */
-		eph->svh =(int)data[24];      /* sv health */
+		eph->svh =(E_Svh)data[24];      /* sv health */
 									/* bit     0: E1B DVS */
 									/* bit   1-2: E1B HS */
 									/* bit     3: E5a DVS */
@@ -1055,7 +1056,7 @@ int decode_eph(
 		eph->toe=adjweek(eph->toe,toc);
 		eph->ttr=adjweek(eph->ttr,toc);
 
-		eph->svh =(int)data[24];      /* satH1 */
+		eph->svh =(E_Svh)data[24];      /* satH1 */
 		eph->sva=uraindex(data[23]);  /* ura (m->index) */
 
 		eph->tgd[0]=   data[25];      /* TGD1 B1/B3 */
@@ -1122,7 +1123,7 @@ int decode_geph(double ver, SatSys Sat, GTime toc, double *data,
 	geph->vel[0]=data[4]*1E3; geph->vel[1]=data[8]*1E3; geph->vel[2]=data[12]*1E3;
 	geph->acc[0]=data[5]*1E3; geph->acc[1]=data[9]*1E3; geph->acc[2]=data[13]*1E3;
 
-	geph->svh=(int)data[ 6];
+	geph->svh=(E_Svh)data[ 6];
 	geph->frq=(int)data[10];
 	geph->age=(int)data[14];
 
@@ -1169,7 +1170,7 @@ int decode_seph(double ver, SatSys Sat, GTime toc, double *data,
 	seph->vel[0]=data[4]*1E3; seph->vel[1]=data[8]*1E3; seph->vel[2]=data[12]*1E3;
 	seph->acc[0]=data[5]*1E3; seph->acc[1]=data[9]*1E3; seph->acc[2]=data[13]*1E3;
 
-	seph->svh=(int)data[6];
+	seph->svh=(E_Svh)data[6];
 	seph->sva=uraindex(data[10]);
 
 	return 1;
@@ -1258,8 +1259,8 @@ int readrnxnav(
 	Eph		eph;
 	Geph	geph;
 	Seph	seph;
-	int stat;
-	int type;
+	int		stat;
+	int		type;
 
 //     BOOST_LOG_TRIVIAL(debug)
 // 	<< "readrnxnav: ver=" << ver << " sys=" << sys;
@@ -1272,9 +1273,9 @@ int readrnxnav(
 		{
 			switch (type)
 			{
-				case 1 : nav.gephMap[geph.Sat].push_back(geph);	break;
-				case 2 : nav.sephMap[seph.Sat].push_back(seph);	break;
-				default: nav.ephMap [eph.Sat] .push_back(eph);	break;
+				case 1 : nav.gephMap[geph.Sat][eph.toe] = geph;	break;
+				case 2 : nav.sephMap[seph.Sat][eph.toe] = seph;	break;
+				default: nav.ephMap [eph.Sat] [eph.toe] = eph;	break;
 			}
 		}
 	}
@@ -1323,7 +1324,7 @@ int readrnxclk(
 		char*	buff	= &line[0];
 
 		GTime time;
-		if (str2time(buff,tim.offset,tim.length,time))
+		if (str2time(buff, tim.offset, tim.length, time))
 		{
 //             trace(2,"rinex clk invalid epoch: %34.34s\n", buff);
 			continue;

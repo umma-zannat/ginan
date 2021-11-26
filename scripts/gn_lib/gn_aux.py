@@ -21,6 +21,11 @@ def update_mindex(dataframe, lvl_name,loc=0,axis=1):
         dataframe.index = mindex_df_updated
     return dataframe
 
+def get_common_index(a:_pd.DataFrame,b:_pd.DataFrame)->_pd.MultiIndex:
+    '''returns common MultiIndex values between two dataframes'''
+    common_index = _np.intersect1d(a.index.values,b.index.values,assume_unique=True)
+    return _pd.MultiIndex.from_tuples(common_index)
+
 def code_pt_comboindex(vec):
     '''returns combo index as CODE + PT'''
     tmp_index = vec.index

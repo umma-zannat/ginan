@@ -4,6 +4,7 @@
 #include "eigenIncluder.hpp"
 #include "observations.hpp"
 #include "streamTrace.hpp"
+#include "constants.hpp"
 #include "station.hpp"
 #include "algebra.hpp"
 #include "satSys.hpp"
@@ -20,8 +21,8 @@ struct ARState
 	int    mode = E_ARmode::OFF;	/* AR mode */
 	int    nset = 0;	/* candidate set size for lambda */
 	int    nitr = 3;	/* number of iterations for iter_rnd */
-	double prcele = D2R * 10.0;	/* min elevation for processing */
-	double arelev = D2R * 15.0;  /* min elevation for AR */
+	double prcele = D2R * 10;	/* min elevation for processing */
+	double arelev = D2R * 15;  /* min elevation for AR */
 	double sucthr = 0.9999;  /* success rate threshold */
 	double ratthr = 3;	/* ratio test threshold */
 
@@ -124,8 +125,8 @@ extern map<SatSys, Satlpivt>				satpiv;
 extern map<E_Sys, map<string, StatAmbg>>	StatAmbMap_list;
 extern KFState								KF_ARcopy;
 
-int networkAmbigResl( Trace& trace, StationList& stations, KFState& kfState);
-void Netwrk_ARoutput ( Trace& trace, StationList& stations, GTime time, bool ionout, double biaupdt, double arelev);
+int networkAmbigResl( Trace& trace, StationMap& stations, KFState& kfState);
+void Netwrk_ARoutput ( Trace& trace, StationMap& stations, GTime time, bool ionout, double biaupdt, double arelev);
 int enduserAmbigResl( Trace& trace, ObsList& obsList, KFState& kfState);
 int net_sect_out ( Trace& trace );
 void Netwrk_trace_out(Trace& trace, double arelev,string recv);

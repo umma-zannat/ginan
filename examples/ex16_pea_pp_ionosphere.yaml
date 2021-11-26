@@ -44,8 +44,6 @@ output_files:
     trace_level:                    3
     trace_directory:                ./
     trace_filename:                 <CONFIG>-<STATION><YYYY><DDD><HH>-<LOGTIME>.TRACE
-    trace_rotate_period:            6
-    trace_rotate_period_units:      hours
 
     output_residuals:               true
 
@@ -63,11 +61,11 @@ output_files:
     output_ionex:                   true
     ionex_directory:                ./
     ionex_filename:                 AUSG<DDD>0.<YY>I
-    
+
     output_ionstec:                 true
     ionstec_directory:              ./
     ionstec_filename:               <CONFIG>_<YYYY><DDD><HH>.stec
-    
+
     output_biasSINEX:               true
     biasSINEX_directory:            ./
     biasSINEX_filename:             AUS0ACSRAP_<YYYY><DDD><HH>00_01D_01D_REL.BIA
@@ -75,7 +73,7 @@ output_files:
     output_clocks:                  false
     clocks_directory:               ./
     clocks_filename:                <CONFIG><LOGTIME>.clk
-    
+
     output_sinex:                   true
 
 output_options:
@@ -93,6 +91,8 @@ processing_options:
     # end_epoch:                 2019-07-18 23:59:30
     max_epochs:                 720        #0 is infinite
     epoch_interval:             30          #seconds
+    wait_next_epoch:            20
+    wait_all_stations:          1
 
     process_modes:
         user:                   false
@@ -145,7 +145,7 @@ processing_options:
 network_filter_parameters:
 
     process_mode:               kalman      #lsq
-    inverter:                   llt         #LLT LDLT INV
+    inverter:                   ldlt         #LLT LDLT INV
 
     max_filter_iterations:      1
     max_prefit_removals:        3
@@ -377,18 +377,18 @@ ambiguity_resolution_options:
     Min_elev_for_AR:            15.0
     GPS_amb_resol:              true
     GAL_amb_resol:              false
-    
+
     WL_mode:                    iter_rnd           # AR mode for WL: off, round, iter_rnd, bootst, lambda, lambda_alt, lambda_al2, lambda_bie
     WL_succ_rate_thres:         0.9999
     WL_sol_ratio_thres:         3.0
     WL_procs_noise_sat:         0.00001
     WL_procs_noise_sta:         0.0001
-    
+
     NL_mode:                    iter_rnd      # AR mode for WL: off, round, iter_rnd, bootst, lambda, lambda_alt, lambda_al2, lambda_bie
     NL_succ_rate_thres:         0.9999
     NL_sol_ratio_thres:         3.0
     NL_proc_start:              600
-    
+
     #Set_size_for_lambda:        10
     #Max_round_iterat:           3
 

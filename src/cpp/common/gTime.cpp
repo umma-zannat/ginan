@@ -7,7 +7,7 @@
 
 using std::ostream;
 
-#include "constants.h"
+#include "constants.hpp"
 #include "gTime.hpp"
 
 ostream& operator <<(ostream& stream, const GTime& time)
@@ -27,9 +27,16 @@ double str2num(const char *s, int i, int n)
 	double value;
 	char str[256],*p=str;
 
-	if (i<0||(int)strlen(s)<i||(int)sizeof(str)-1<n) return 0.0;
-	for (s+=i;*s&&--n>=0;s++) *p++=*s=='d'||*s=='D'?'E':*s; *p='\0';
-	return sscanf(str,"%lf",&value)==1?value:0.0;
+	if	( i<0
+		||(int)strlen(s)<i
+		||(int)sizeof(str)-1<n) 
+		return 0.;
+	
+	for (s+=i;*s&&--n>=0;s++)
+		*p++ = *s == 'd' || *s == 'D' ? 'E' : *s;
+	
+	*p='\0';
+	return sscanf(str, "%lf", &value) == 1 ? value : 0;
 }
 
 /* string to time --------------------------------------------------------------
@@ -90,17 +97,27 @@ int str2time(
 *-----------------------------------------------------------------------------*/
 GTime epoch2time(const double *ep)
 {
-	const int doy[]={1,32,60,91,121,152,182,213,244,274,305,335};
-	GTime time={0};
-	int days,sec,year=(int)ep[0],mon=(int)ep[1],day=(int)ep[2];
+	const int doy[] = {1,32,60,91,121,152,182,213,244,274,305,335};
+	
+	GTime time = {};
+	int year	= (int) ep[0];
+	int mon		= (int) ep[1];
+	int day		= (int) ep[2];
 
-	if (year<1970||2099<year||mon<1||12<mon) return time;
+	if	(  year	< 1970
+		|| year	> 2099
+		|| mon	< 1
+		|| mon	> 12)
+	{
+		return time;
+	}
 
-	/* leap year if year%4==0 in 1901-2099 */
-	days=(year-1970)*365+(year-1969)/4+doy[mon-1]+day-2+(year%4==0&&mon>=3?1:0);
-	sec=(int)floor(ep[5]);
-	time.time=(time_t)days*86400+(int)ep[3]*3600+(int)ep[4]*60+sec;
-	time.sec=ep[5]-sec;
+	// leap year if year%4==0 in 1901-2099
+	int days	= (year-1970)*365+(year-1969)/4+doy[mon-1]+day-2+(year%4==0&&mon>=3?1:0);
+	int sec		= (int) floor(ep[5]);
+	time.time	= (time_t)days*86400+(int)ep[3]*3600+(int)ep[4]*60+sec;
+	time.sec	= ep[5] - sec;
+	
 	return time;
 }
 
@@ -114,7 +131,7 @@ GTime yds2time(const int* yds)
 		return {};
 
 	/* leap year if year%4==0 in 1901-2099 */
-	int days=(year-1970)*365+(year-1969)/4 + doy - 2;	//todo aaron the 2 needed?
+	int days=(year-1970)*365+(year-1969)/4 + doy - 2;
 	
 	GTime time = {};
 	time.time = (time_t)days*86400+sec;
@@ -227,7 +244,7 @@ GTime gpst2time(int week, double sec)
 /* time to gps time ------------------------------------------------------------
 * convert GTime struct to week and tow in gps time
 * args   : GTime t        I   GTime struct
-*          int    *week     IO  week number in gps time (NULL: no output)
+*          int    *week     IO  week number in gps time (nullptr: no output)
 * return : time of week in gps time (s)
 *-----------------------------------------------------------------------------*/
 double time2gpst(GTime t, int *week)
@@ -260,7 +277,7 @@ GTime gst2time(int week, double sec)
 /* time to galileo system time -------------------------------------------------
 * convert GTime struct to week and tow in galileo system time (gst)
 * args   : GTime t        I   GTime struct
-*          int    *week     IO  week number in gst (NULL: no output)
+*          int    *week     IO  week number in gst (nullptr: no output)
 * return : time of week in gst (s)
 *-----------------------------------------------------------------------------*/
 double time2gst(GTime t, int *week)
@@ -292,7 +309,7 @@ GTime bdt2time(int week, double sec)
 /* time to beidouo time (bdt) --------------------------------------------------
 * convert GTime struct to week and tow in beidou time (bdt)
 * args   : GTime t        I   GTime struct
-*          int    *week     IO  week number in bdt (NULL: no output)
+*          int    *week     IO  week number in bdt (nullptr: no output)
 * return : time of week in bdt (s)
 *-----------------------------------------------------------------------------*/
 double time2bdt(GTime t, int *week)
@@ -311,23 +328,14 @@ double time2bdt(GTime t, int *week)
 *          double sec       I   time to add (s)
 * return : GTime struct (t+sec)
 *-----------------------------------------------------------------------------*/
-GTime timeadd(GTime t, double sec)
-{
-	double tt;
+// GTime timeadd(GTime t, double sec)
+// {
+// 	double tt;
+// 
+// 	t.sec+=sec; tt=floor(t.sec); t.time+=(int)tt; t.sec-=tt;
+// 	return t;
+// }
 
-	t.sec+=sec; tt=floor(t.sec); t.time+=(int)tt; t.sec-=tt;
-	return t;
-}
-
-/* time difference -------------------------------------------------------------
-* difference between GTime structs
-* args   : GTime t1,t2    I   GTime structs
-* return : time difference (t1-t2) (s)
-*-----------------------------------------------------------------------------*/
-double timediff(GTime t1, GTime t2)
-{
-	return difftime(t1.time,t2.time)+t1.sec-t2.sec;
-}
 
 /* get current time in utc -----------------------------------------------------
 * get current time in utc
@@ -348,7 +356,7 @@ GTime timeget(void)
 	struct timeval tv;
 	struct tm *tt;
 
-	if	(!gettimeofday(&tv,NULL)
+	if	(!gettimeofday(&tv,nullptr)
 		&&(tt=gmtime(&tv.tv_sec)))
 	{
 		ep[0]=tt->tm_year+1900;
@@ -369,14 +377,15 @@ GTime timeget(void)
 * return : time expressed in utc
 * notes  : ignore slight time offset under 100 ns
 *-----------------------------------------------------------------------------*/
-GTime gpst2utc(GTime t)
+GTime gpst2utc(
+	GTime t)
 {
-	GTime tu;
-	int i;
-
-	for (i=0;leaps[i][0]>0;i++) {
-		tu=timeadd(t,leaps[i][6]);
-		if (timediff(tu,epoch2time(leaps[i]))>=0.0) return tu;
+	for (int i = 0; leaps[i][0] > 0; i++) 
+	{
+		GTime tu = t + leaps[i][6];
+		
+		if ((tu - epoch2time(leaps[i])) >= 0) 
+			return tu;
 	}
 	return t;
 }
@@ -389,10 +398,10 @@ GTime gpst2utc(GTime t)
 *-----------------------------------------------------------------------------*/
 GTime utc2gpst(GTime t)
 {
-	int i;
-
-	for (i=0;leaps[i][0]>0;i++) {
-		if (timediff(t,epoch2time(leaps[i]))>=0.0) return timeadd(t,-leaps[i][6]);
+	for (int i = 0; leaps[i][0] > 0; i++) 
+	{
+		if ((t - epoch2time(leaps[i])) >= 0) 		//todo aaron, one leap second has a for loop.. check
+			return t -leaps[i][6];
 	}
 	return t;
 }
@@ -407,7 +416,7 @@ GTime utc2gpst(GTime t)
 *-----------------------------------------------------------------------------*/
 GTime gpst2bdt(GTime t)
 {
-	return timeadd(t,-14.0);
+	return t - 14.0;
 }
 
 /* bdt to gpstime --------------------------------------------------------------
@@ -418,7 +427,7 @@ GTime gpst2bdt(GTime t)
 *-----------------------------------------------------------------------------*/
 GTime bdt2gpst(GTime t)
 {
-	return timeadd(t,14.0);
+	return t + 14.0;
 }
 
 /* time to day and sec -------------------------------------------------------*/
@@ -441,15 +450,15 @@ double time2sec(GTime time, GTime* day)
 double utc2gmst(GTime t, double ut1_utc)
 {
 	const double ep2000[]={2000,1,1,12,0,0};
-	GTime tut,tut0;
-	double ut,t1,t2,t3,gmst0,gmst;
 
-	tut=timeadd(t,ut1_utc);
-	ut=time2sec(tut,&tut0);
-	t1=timediff(tut0,epoch2time(ep2000))/86400.0/36525.0;
-	t2=t1*t1; t3=t2*t1;
-	gmst0=24110.54841+8640184.812866*t1+0.093104*t2-6.2E-6*t3;
-	gmst=gmst0+1.002737909350795*ut;
+	GTime tut		= t + ut1_utc;
+	GTime tut0;
+	double ut		= time2sec(tut,&tut0);
+	double t1		= (tut0 - epoch2time(ep2000))/86400.0/36525.0;
+	double t2		= t1*t1; 
+	double t3		= t2*t1;
+	double gmst0	= 24110.54841+8640184.812866*t1+0.093104*t2-6.2E-6*t3;
+	double gmst		= gmst0+1.002737909350795*ut;
 
 	return fmod(gmst,86400.0)*PI/43200.0; /* 0 <= gmst <= 2*PI */
 }
@@ -461,14 +470,25 @@ double utc2gmst(GTime t, double ut1_utc)
 *          int    n         I   number of decimals
 * return : none
 *-----------------------------------------------------------------------------*/
-void time2str(GTime t, char *s, int n)
+void time2str(
+	GTime	t,
+	char*	s, 
+	int		n)
 {
 	double ep[6];
 
-	if (n<0) n=0; else if (n>12) n=12;
-	if (1.0-t.sec<0.5/pow(10.0,n)) {t.time++; t.sec=0.0;};
-	time2epoch(t,ep);
-	sprintf(s,"%04.0f/%02.0f/%02.0f %02.0f:%02.0f:%0*.*f",ep[0],ep[1],ep[2],
+	if		(n < 0) 		n = 0;
+	else if (n > 12)		n = 12;
+	
+	if (1 - t.sec < 0.5 / pow(10, n))
+	{
+		t.time++; 
+		t.sec = 0;
+	};
+	
+	time2epoch(t, ep);
+	
+	sprintf(s,"%04.0f-%02.0f-%02.0f %02.0f:%02.0f:%0*.*f",ep[0],ep[1],ep[2],
 			ep[3],ep[4],n<=0?2:n+3,n<=0?0:n,ep[5]);
 }
 
@@ -482,8 +502,9 @@ double time2doy(GTime t)
 	double ep[6];
 
 	time2epoch(t,ep);
-	ep[1]=ep[2]=1.0; ep[3]=ep[4]=ep[5]=0.0;
-	return timediff(t,epoch2time(ep))/86400.0+1.0;
+	ep[1] = ep[2] = 1;
+	ep[3] = ep[4] = ep[5] = 0;
+	return (t - epoch2time(ep)) / 86400.0 + 1;
 }
 
 /* adjust gps week number ------------------------------------------------------
@@ -499,56 +520,6 @@ int adjgpsweek(int week)
 	return week+(w-week+512)/1024*1024;
 }
 
-/* get tick time ---------------------------------------------------------------
-* get current tick in ms
-* args   : none
-* return : current tick in ms
-*-----------------------------------------------------------------------------*/
-unsigned int tickget(void)
-{
-#ifdef WIN32
-	return (unsigned int)timeGetTime();
-#else
-#if (0)
-	struct timespec tp={0};
-#endif
-	struct timeval  tv={0};
-
-#ifdef CLOCK_MONOTONIC_RAW
-	/* linux kernel > 2.6.28 */
-#if (1)
-	gettimeofday(&tv,NULL);
-	return tv.tv_sec*1000u+tv.tv_usec/1000u;
-#endif
-#if (0)
-	if (!clock_gettime(CLOCK_MONOTONIC_RAW,&tp)) {
-		return tp.tv_sec*1000u+tp.tv_nsec/1000000u;
-	}
-#endif
-#else
-	gettimeofday(&tv,NULL);
-	return tv.tv_sec*1000u+tv.tv_usec/1000u;
-#endif
-#endif /* WIN32 */
-}
-
-/* sleep ms --------------------------------------------------------------------
-* sleep ms
-* args   : int   ms         I   miliseconds to sleep (<0:no sleep)
-* return : none
-*-----------------------------------------------------------------------------*/
-void sleepms(int ms)
-{
-#ifdef WIN32
-	if (ms<5) Sleep(1); else Sleep(ms);
-#else
-	struct timespec ts;
-	if (ms<=0) return;
-	ts.tv_sec=(time_t)(ms/1000);
-	ts.tv_nsec=(long)(ms%1000*1000000);
-	nanosleep(&ts,NULL);
-#endif
-}
 
 /* set precision ---------------------------------------------------------------
 *

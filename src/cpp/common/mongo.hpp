@@ -29,9 +29,10 @@ using bsoncxx::builder::stream::open_document;
 namespace sinks = boost::log::sinks;
 
 using std::string;
-
+#include "station.hpp"
 #include "observations.hpp"
 #include "algebra.hpp"
+#include "networkEstimator.hpp"
 
 struct Mongo
 {
@@ -57,18 +58,19 @@ void mongoMeasResiduals(
 	vector<ObsKey>		obsKeys,
 	VectorXd&			prefits,
 	VectorXd&			postfits,
-	VectorXd&			variance);
+	MatrixXd&			variance);
 
 void mongoMeasSatStat(
 	ObsList&			obsList);
 
 void mongoStates(
 	KFState&			kfState,
-	string				prefix = "");
+	string				suffix = "");
+
+void mongoMeasSatStat_all(
+	StationMap&			stationMap);
 
 void mongoooo();
-
-extern Mongo*	mongo_ptr;
 
 #endif
 

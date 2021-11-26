@@ -7,7 +7,6 @@
 */
 struct ACSFileStream
 {
-
 	struct FileState
 	{
 		long int&		filePos;

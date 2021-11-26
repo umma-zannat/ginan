@@ -15,8 +15,9 @@ import subprocess as _sp
 import pandas as _pd
 import numpy as _np
 import sys as _sys
+import logging
 
-from .gn_const import GPS_ORIGIN
+from .gn_datetime import gpsweekD, dt2gpswk, gpswkD2dt
 
 
 def gen_uncomp_filename(comp_filename):
@@ -30,7 +31,6 @@ def gen_uncomp_filename(comp_filename):
     else:
         uncomp_file = comp_filename
     return uncomp_file
-
 
 
 def gen_prod_filename(dt,pref,suff,f_type,wkly_file=False):
@@ -50,7 +50,6 @@ def gen_prod_filename(dt,pref,suff,f_type,wkly_file=False):
     else:
         f = f'{pref}{gpswkD}{suff}.{f_type}.Z'
     return f, gpswk
-
 
 
 def dates_type_convert(dates):
@@ -87,70 +86,6 @@ def dates_type_convert(dates):
 
 
 
-def gpsweekD(yr, doy, wkday_suff=False):
-    """
-    Convert year, day-of-year to GPS week format: WWWWD or WWWW
-    Based on code from Kristine Larson's gps.py
-    https://github.com/kristinemlarson/gnssIR_python/gps.py
-    
-    Input:
-    yr - year (int)
-    doy - day-of-year (int)
-
-    Output:
-    GPS Week in WWWWD format - weeks since 7 Jan 1980 + day of week number (str)
-    """
-
-    # Set up the date and time variables
-    yr = int(yr)
-    doy = int(doy)
-    dt = _datetime.strptime(f"{yr}-{doy:03d} 01","%Y-%j %H")
-    
-    wkday = dt.weekday() + 1
-
-    if wkday == 7:
-        wkday = 0
-    
-    mn, dy, hr = dt.month, dt.day, dt.hour
-
-    if mn <= 2:
-        yr = yr-1
-        mn = mn+12
-
-    JD = _np.floor(365.25*yr) + _np.floor(30.6001*(mn+1)) + dy + hr/24.0 + 1720981.5
-    GPS_wk = _np.int(_np.floor((JD-2444244.5)/7.0))
-    
-    if wkday_suff:
-        return str(GPS_wk)+str(wkday)
-    else:
-        return str(GPS_wk)
-
-
-
-def dt2gpswk(dt,wkday_suff=False,both=False):
-    '''
-    Convert the given datetime object to a GPS week (option to include day suffix)
-    '''
-    yr = dt.strftime('%Y')
-    doy = dt.strftime('%j')
-    if not both:
-        return gpsweekD(yr,doy,wkday_suff=wkday_suff)
-    else:
-        return gpsweekD(yr,doy,wkday_suff=False),gpsweekD(yr,doy,wkday_suff=True)
-
-
-
-def gpswkD2dt(gpswkD):
-    '''
-    Convert from GPS-Week-Day (WWWWDD) format to datetime object
-    '''
-    if type(gpswkD) != str:
-        gpswkD = str(gpswkD)
-    dt_64 = GPS_ORIGIN + _np.timedelta64(int(gpswkD[:-1]),'W') + _np.timedelta64(int(gpswkD[-1]),'D')
-    return dt_64.astype(_datetime)
-
-
-
 def check_file_present(comp_filename, dwndir):
     '''Check if file comp_filename already present in directory dwndir'''
     
@@ -161,7 +96,7 @@ def check_file_present(comp_filename, dwndir):
     uncomp_file = _Path(dwndir+uncomp_filename)
     
     if uncomp_file.is_file():
-        print(f'File {uncomp_file.name} already present in {dwndir}')
+        logging.debug(f'File {uncomp_file.name} already present in {dwndir}')
         present = True
     else:
         present = False
@@ -182,7 +117,7 @@ def check_n_download_url(url, dwndir, filename=False):
         filename = _Path(url).name
     
     if not check_file_present(filename, dwndir):
-        print(f'Downloading {_Path(url).name}')
+        logging.debug(f'Downloading {_Path(url).name}')
         out_f = _Path(dwndir)/filename
         _rqs.urlretrieve(url,out_f)
 
@@ -198,7 +133,7 @@ def check_n_download(comp_filename, dwndir, ftps, uncomp=True, remove_crx=False,
 
     if no_check or (not check_file_present(comp_filename, dwndir)):
 
-        print(f'Downloading {comp_filename}')
+        logging.debug(f'Downloading {comp_filename}')
 
         with open(comp_file, 'wb') as local_f:
             ftps.retrbinary(f'RETR {comp_filename}', local_f.write)
@@ -214,9 +149,9 @@ def check_n_download(comp_filename, dwndir, ftps, uncomp=True, remove_crx=False,
                     run_str = f'{_sys.path[0]}/crx2rnx'
                 _sp.run([run_str,f'{str(crx_file)}'])
 
-            print(f'Downloaded and uncompressed {comp_filename}')
+            logging.debug(f'Downloaded and uncompressed {comp_filename}')
         else:
-            print(f'Downloaded {comp_filename}')
+            logging.debug(f'Downloaded {comp_filename}')
 
         if remove_crx:
             if comp_filename.endswith('.crx.gz'):
@@ -240,7 +175,7 @@ def get_install_crx2rnx(override=False,verbose=False):
     '''
     if (not _Path(f'{_sys.path[0]}/crx2rnx').is_file()) or (override):
         if verbose:
-            print(f'Installing crx2rnx at {_sys.path[0]}')
+            logging.info(f'Installing crx2rnx at {_sys.path[0]}')
         tmp_dir = _Path('tmp')
         if not tmp_dir.is_dir():
             tmp_dir.mkdir()
@@ -256,7 +191,7 @@ def get_install_crx2rnx(override=False,verbose=False):
         _sp.run(['mv','crx2rnx',_sys.path[0]])
     else:
         if verbose:
-            print(f'crx2rnx already present in {_sys.path[0]}')
+            logging.info(f'crx2rnx already present in {_sys.path[0]}')
 
 
 
@@ -265,14 +200,14 @@ def connect_cddis(verbose=False):
     Output an FTP_TLS object connected to the cddis server root
     '''
     if verbose:
-        print('\nConnecting to CDDIS server...')
+        logging.info('\nConnecting to CDDIS server...')
     
     ftps = _FTP_TLS('gdc.cddis.eosdis.nasa.gov')
     ftps.login()
     ftps.prot_p()
     
     if verbose:
-        print('Connected.')
+        logging.info('Connected.')
     
     return ftps
 
@@ -304,9 +239,9 @@ def find_mr_file(dt, f_typ, ac, ftps):
     
     if mr_typ_files == []:
         while mr_typ_files == []:
-            print(f'GPS Week {c_gpswk} too recent')
-            print(f'No {ac} {f_typ} files found in GPS week {c_gpswk}')
-            print(f'Moving to GPS week {int(c_gpswk) - 1}')      
+            logging.info(f'GPS Week {c_gpswk} too recent')
+            logging.info(f'No {ac} {f_typ} files found in GPS week {c_gpswk}')
+            logging.info(f'Moving to GPS week {int(c_gpswk) - 1}')
             c_gpswk = str(int(c_gpswk) - 1)
             ftps.cwd(f'../{c_gpswk}')
             mr_files = ftps.nlst()
@@ -342,7 +277,7 @@ def download_most_recent(dest, f_type, ftps=None, ac='any', dwn_src='cddis', f_d
             ftps = connect_cddis()
             
             for f_typ in f_types:
-                print(f'\nSearching for most recent {ac} {f_typ}...\n')
+                logging.info(f'\nSearching for most recent {ac} {f_typ}...\n')
                 
                 dt = (_np.datetime64('today')-1).astype(_datetime)
                 mr_file, ftps, c_gpswk = find_mr_file(dt,f_typ,ac,ftps)
@@ -405,7 +340,7 @@ def download_prod(dates, dest, ac='igs', suff='', f_type='sp3', dwn_src='cddis',
     if not ftps:
         # Connect to chosen server
         if dwn_src=='cddis':
-            print('\nGathering product files...')
+            logging.info('\nGathering product files...')
             ftps = connect_cddis(verbose=True)
             p_gpswk = 0
     else:
@@ -597,7 +532,7 @@ def download_rinex3(dates, stations, dest, dwn_src='cddis', ftps=False, f_dict=F
     if not ftps:
         # Connect to chosen server
         if dwn_src=='cddis':
-            print('\nGathering RINEX files...')
+            logging.info('\nGathering RINEX files...')
             ftps = connect_cddis(verbose=True)
             p_date = 0
 
@@ -613,7 +548,7 @@ def download_rinex3(dates, stations, dest, dwn_src='cddis', ftps=False, f_dict=F
                             try:
                                 success = check_n_download(f, dwndir=dest, ftps=ftps, uncomp=True, remove_crx=True, no_check=True)
                             except:
-                                print(f'Download of {f} failed - file not found')
+                                logging.error(f'Download of {f} failed - file not found')
                                 success = False
                         else:
                             ftps.cwd('/')
@@ -621,7 +556,7 @@ def download_rinex3(dates, stations, dest, dwn_src='cddis', ftps=False, f_dict=F
                             try:
                                 success = check_n_download(f, dwndir=dest, ftps=ftps, uncomp=True, remove_crx=True, no_check=True)
                             except:
-                                print(f'Download of {f} failed - file not found')
+                                logging.error(f'Download of {f} failed - file not found')
                                 success = False
                             p_date = dt
                     else:

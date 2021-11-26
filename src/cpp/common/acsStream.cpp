@@ -1,17 +1,33 @@
 
-#include "navigation.hpp"
-#include "acsStream.hpp"
-#include "acsConfig.hpp"
-#include "enums.h"
-#include "rtcmEncoder.hpp"
-#include <map>
 #include <boost/utility/binary.hpp>
 #include <boost/filesystem.hpp>
-#include "acsRtcmStream.hpp"
 
-static int rtcmdeblvl = 3;
+#include <map>
+
+using std::multimap;
+using std::map;
+
+#include "acsRtcmStream.hpp"
+#include "rtcmEncoder.hpp"
+#include "navigation.hpp"
+#include "ephemeris.hpp"
+#include "constants.hpp"
+#include "acsStream.hpp"
+#include "acsConfig.hpp"
+#include "fileLog.hpp"
+#include "enums.h"
+
 
 GTime RtcmStream::rtcmDeltaTime = {};
+
+
+// Used for stream specific tracing.
+multimap<string, std::shared_ptr<NtripRtcmStream>>	ntripRtcmMultimap;
+multimap<string, ACSObsStreamPtr>					obsStreamMultimap;
+multimap<string, ACSNavStreamPtr>					navStreamMultimap;
+multimap<string, ACSPseudoObsStreamPtr>				pseudoObsStreamMultimap;
+map		<string, bool>								streamDOAMap;
+
 
 ObsList ObsStream::getObs()
 {
@@ -65,13 +81,29 @@ ObsList ObsStream::getObs()
 
 
 
+PseudoObsList PseudoObsStream::getObs()
+{
+	if (obsListList.size() > 0)
+	{
+		PseudoObsList& pseudoObsList = obsListList.front();
+
+		return pseudoObsList;
+	}
+	else
+	{
+		return PseudoObsList();
+	}
+}
 
 
 
 
 
-const int DefGLOChnl [24] =
-{ 1, -4, 5, 6, 1, -4, 5, 6, -2, -7, 0, -1, -2, -7, 0, -1, 4, -3, 3, 2, 4, -3, 3, 2 };
+
+
+
+
+const int DefGLOChnl [24] = { 1, -4, 5, 6, 1, -4, 5, 6, -2, -7, 0, -1, -2, -7, 0, -1, 4, -3, 3, 2, 4, -3, 3, 2 };
 
 // sys -> rtcm signal enum -> siginfo (sig enum,
 map<E_Sys, map<uint8_t, SignalInfo>> signal_id_mapping =
@@ -206,7 +238,7 @@ map<E_Sys, map<E_ObsCode, E_FType>> codeTypeMap =
 		{
 			{E_ObsCode::L1C,	G1	},
 			{E_ObsCode::L1P,	G1	},
-			
+
 			{E_ObsCode::L2C,	G2	},
 			{E_ObsCode::L2P,	G2	}
 		}
@@ -329,35 +361,34 @@ map<E_Sys, map<E_FType, double>> signal_phase_alignment =
 int RtcmStream::adjgpsweek(int week)
 {
 	int w;
-    GTime now;
-    if ( rtcm_UTC.time == 0 )
-        now = utc2gpst(timeget());
-    else
-        now = utc2gpst(rtcm_UTC);
-    
+	GTime now;
+	if (rtcm_UTC.time == 0)
+		now = utc2gpst(timeget());
+	else
+		now = utc2gpst(rtcm_UTC);
+
 	time2gpst(now,&w);
-	if (w<1560) w=1560; /* use 2009/12/1 if time is earlier than 2009/12/1 */
+	if (w < 1560)
+		w = 1560; /* use 2009/12/1 if time is earlier than 2009/12/1 */
 	return week+(w-week+512)/1024*1024;
 }
 
 void RtcmStream::setTime(GTime& time, double tow)
 {
-    GTime now;
-    if (rtcm_UTC != GTime::noTime())
+	GTime now;
+	if (rtcm_UTC != GTime::noTime())
 	{
 		//std::cout << "rtcm_UTC :" << std::put_time( std::gmtime( &rtcm_UTC.time ), "%F %X" )
 		//						  << " : " << rtcm_UTC.sec << std::endl;
 		now = utc2gpst(rtcm_UTC);
 	}
-    else
-    {
-        now = utc2gpst(timeget());
-    }
+	else
+	{
+		now = utc2gpst(timeget());
+	}
 
 	int week;
-	double tow_p = time2gpst(now, &week);		//todo aaron, cant use now all the time
-	if (acsConfig.ssrOpts.settime_week_override >= 0) // manually set GPS week when post-processing
-		week = acsConfig.ssrOpts.settime_week_override;
+	double tow_p = time2gpst(now, &week);
 
 	int sPerWeek = 60*60*24*7;
 	if      (tow < tow_p - sPerWeek/2)				tow += sPerWeek;
@@ -368,19 +399,19 @@ void RtcmStream::setTime(GTime& time, double tow)
 
 GTime RtcmStream::getGpst()
 {
-    GTime now;
-    if ( rtcm_UTC.time == 0 )
-        now = utc2gpst(timeget());
-    else
-        now = utc2gpst(rtcm_UTC);
-    return now;
+	GTime now;
+	if ( rtcm_UTC.time == 0 )
+		now = utc2gpst(timeget());
+	else
+		now = utc2gpst(rtcm_UTC);
+	return now;
 }
 
 
 int RtcmDecoder::adjgpsweek(int week)
 {
 	int w;
-    GTime now = utc2gpst(timeget());
+	GTime now = utc2gpst(timeget());
 
 	time2gpst(now,&w);
 	if (w<1560) w=1560; /* use 2009/12/1 if time is earlier than 2009/12/1 */
@@ -391,12 +422,10 @@ int RtcmDecoder::adjgpsweek(int week)
 
 void RtcmDecoder::setTime(GTime& time, double tow)
 {
-    GTime now = utc2gpst(timeget());
+	GTime now = utc2gpst(timeget());
 
 	int week;
 	double tow_p = time2gpst(now, &week);		//todo aaron, cant use now all the time
-	if(acsConfig.ssrOpts.settime_week_override >= 0) // manually set GPS week when post-processing
-		week = acsConfig.ssrOpts.settime_week_override;
 
 	int sPerWeek = 60*60*24*7;
 	if      (tow < tow_p - sPerWeek/2)				tow += sPerWeek;
@@ -407,36 +436,36 @@ void RtcmDecoder::setTime(GTime& time, double tow)
 
 GTime RtcmDecoder::getGpst()
 {
-    return utc2gpst(timeget());
+	return utc2gpst(timeget());
 }
 
 E_RTCMSubmessage CustomDecoder::decodeCustomId(uint8_t* data, unsigned int message_length)
 {
-    int i = 0;
-    int message_number		= getbituInc(data, i, 12);
-	
-    E_RTCMSubmessage customType = E_RTCMSubmessage::_from_integral(getbituInc(data, i, 8));
-	
+	int i = 0;
+	int message_number		= getbituInc(data, i, 12);
+
+	E_RTCMSubmessage customType = E_RTCMSubmessage::_from_integral(getbituInc(data, i, 8));
+
 	return customType;
 }
 
 GTime CustomDecoder::decodeCustomTimestamp(uint8_t* data, unsigned int message_length)
 {
-    int i = 0;
-    int message_number		= getbituInc(data, i, 12);
-	
-    E_RTCMSubmessage customType = E_RTCMSubmessage::_from_integral(getbituInc(data, i, 8));
-	
+	int i = 0;
+	int message_number		= getbituInc(data, i, 12);
+
+	E_RTCMSubmessage customType = E_RTCMSubmessage::_from_integral(getbituInc(data, i, 8));
+
 	GTime time;
-    unsigned int* var = (unsigned int*)	&time.time;
-    
-    var[0]			= getbituInc(data,i,32);
-    var[1]			= getbituInc(data,i,32);
-    
-    int milli_sec	= getbituInc(data,i,10);
-    
-    time.sec = (double)milli_sec/1000.0;
-    
+	unsigned int* var = (unsigned int*)	&time.time;
+
+	var[0]			= getbituInc(data,i,32);
+	var[1]			= getbituInc(data,i,32);
+
+	int milli_sec	= getbituInc(data,i,10);
+
+	time.sec = (double)milli_sec / 1000.0;
+
 	return time;
 }
 
@@ -462,24 +491,24 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 	int	epochTime1s			= getbituInc(data, i, 20);
 	int	ssrUpdateIntIndex	= getbituInc(data, i, 4);
 	int	multipleMessage		= getbituInc(data, i, 1);
-	
+
 
 	int ssrUpdateInterval	= updateInterval[ssrUpdateIntIndex];
 
 	double epochTime = epochTime1s + ssrUpdateInterval / 2.0;
 	//std::cout << "SSR message received: " << message_number << std::endl;
-	
+
 	GTime messTime;
 	setTime(messTime, epochTime);
 	traceLatency(messTime);
-	
+
 	E_Sys::_enumerated sys = E_Sys::NONE;
-	if 	( message_number == +RtcmMessageType::GPS_SSR_ORB_CORR
-		||message_number == +RtcmMessageType::GPS_SSR_CLK_CORR
-		||message_number == +RtcmMessageType::GPS_SSR_COMB_CORR
-		||message_number == +RtcmMessageType::GPS_SSR_CODE_BIAS
-		||message_number == +RtcmMessageType::GPS_SSR_PHASE_BIAS						
-		||message_number == +RtcmMessageType::GPS_SSR_URA)
+	if 		( message_number == +RtcmMessageType::GPS_SSR_ORB_CORR
+			||message_number == +RtcmMessageType::GPS_SSR_CLK_CORR
+			||message_number == +RtcmMessageType::GPS_SSR_COMB_CORR
+			||message_number == +RtcmMessageType::GPS_SSR_CODE_BIAS
+			||message_number == +RtcmMessageType::GPS_SSR_PHASE_BIAS
+			||message_number == +RtcmMessageType::GPS_SSR_URA)
 	{
 		sys = E_Sys::GPS;
 	}
@@ -500,7 +529,7 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 	int ni = 0;
 	int nj = 0;
 	int offp = 0;
-	switch (sys) 
+	switch (sys)
 	{
 		case E_Sys::GPS: np=6; ni= 8; nj= 0; offp=  0; break;
 		case E_Sys::GLO: np=5; ni= 8; nj= 0; offp=  0; break;
@@ -522,16 +551,16 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 	unsigned int	iod					= getbituInc(data, i, 4);
 	unsigned int	provider			= getbituInc(data, i, 16);
 	unsigned int	solution			= getbituInc(data, i, 4);
-	
+
 	unsigned int dispBiasConistInd;
 	unsigned int MWConistInd;
-	if  ( message_number == +RtcmMessageType::GPS_SSR_PHASE_BIAS 
+	if  ( message_number == +RtcmMessageType::GPS_SSR_PHASE_BIAS
 		||message_number == +RtcmMessageType::GAL_SSR_PHASE_BIAS )
 	{
 		dispBiasConistInd  = getbituInc(data, i, 1);
 		MWConistInd        = getbituInc(data, i, 1);
 	}
-	
+
 	unsigned int	numSats				= getbituInc(data, i, 6);
 
 	// SRR variables for encoding and decoding.
@@ -542,15 +571,15 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 	ssrMeta.referenceDatum		= referenceDatum;
 	ssrMeta.provider			= provider;
 	ssrMeta.solution			= solution;
-	
+
 	for (int sat = 0; sat < numSats; sat++)
 	{
 		unsigned int	satId			= getbituInc(data, i, np)+offp;
 
 		SatSys Sat(sys, satId);
-		
+
 		auto& ssr = nav.satNavMap[Sat].ssr;
-			
+
 		if 	( message_number == +RtcmMessageType::GPS_SSR_ORB_CORR
 			||message_number == +RtcmMessageType::GPS_SSR_COMB_CORR
 			||message_number == +RtcmMessageType::GAL_SSR_ORB_CORR
@@ -560,7 +589,8 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 			ssrEph.ssrMeta = ssrMeta;
 
 			setTime(ssrEph.t0, epochTime);
-			
+
+			ssrEph.udi			= ssrUpdateInterval;
 			ssrEph.iod 			= iod;
 			ssrEph.iode			= getbituInc(data, i, ni);
 			// ??ssrEph.iodcrc		= getbituInc(data, i, nj);
@@ -571,15 +601,14 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 			ssrEph.ddeph[1]		= getbitsInc(data, i, 19) * 0.004e-3;
 			ssrEph.ddeph[2]		= getbitsInc(data, i, 19) * 0.004e-3;
 
-								
-			//tracepdeex(rtcmdeblvl,std::cout, "\n#RTCM_DEC SSRORB %s %s %4d %10.3f %10.3f %10.3f ", Sat.id(),ssrEph.t0.to_string(2), ssrEph.iode,ssrEph.deph[0],ssrEph.deph[1],ssrEph.deph[2]);
-			if	( ssr.ssrEph_map.size() == 0
-				||ssrEph.iod		!= ssr.ssrEph_map.begin()->second.iod
-				||ssrEph.t0			!= ssr.ssrEph_map.begin()->second.t0)
+			//tracepdeex(0,std::cout, "\n#RTCM_DEC SSRORB %s %s %4d %10.3f %10.3f %10.3f %d ", Sat.id(),ssrEph.t0.to_string(2), ssrEph.iode,ssrEph.deph[0],ssrEph.deph[1],ssrEph.deph[2], iod);
+			if	( ssr.ssrEph_map.empty()
+				||ssrEph.iod	!= ssr.ssrEph_map.begin()->second.iod
+				||ssrEph.t0		!= ssr.ssrEph_map.begin()->second.t0)
 			{
 				ssr.ssrEph_map[ssrEph.t0] = ssrEph;
 			}
-			
+
 			traceSsrEph(Sat,ssrEph);
 		}
 
@@ -592,111 +621,117 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 			ssrClk.ssrMeta = ssrMeta;
 
 			setTime(ssrClk.t0, epochTime);
-			
+
+			ssrClk.udi			= ssrUpdateInterval;
 			ssrClk.iod 			= iod;
-			
+
 			// C = C_0 + C_1(t-t_0)+C_2(t-t_0)^2 where C is a correction in meters.
 			// C gets converted into a time correction for futher calculations.
 			ssrClk.dclk[0]		= getbitsInc(data, i, 22) * 0.1e-3;
 			ssrClk.dclk[1]		= getbitsInc(data, i, 21) * 0.001e-3;
 			ssrClk.dclk[2]		= getbitsInc(data, i, 27) * 0.00002e-3;
-			
-			//tracepdeex(rtcmdeblvl,std::cout, "\n#RTCM_DEC SSRCLK %s %s      %10.3f %10.3f %10.3f", Sat.id(),ssrClk.t0.to_string(2), ssrClk.dclk[0],ssrClk.dclk[1],ssrClk.dclk[2]);
-			if	( ssr.ssrClk_map.size() == 0
+
+			//tracepdeex(0,std::cout, "\n#RTCM_DEC SSRCLK %s %s      %10.3f %10.3f %10.3f %d", Sat.id(),ssrClk.t0.to_string(2), ssrClk.dclk[0],ssrClk.dclk[1],ssrClk.dclk[2], iod);
+			if	( ssr.ssrClk_map.empty()
+
 				||ssrClk.iod		!= ssr.ssrClk_map.begin()->second.iod
 				||ssrClk.t0			!= ssr.ssrClk_map.begin()->second.t0)
 			{
 				ssr.ssrClk_map[ssrClk.t0] = ssrClk;
 			}
-			
+
 			traceSsrClk(Sat,ssrClk);
 		}
 
 		if 	(message_number == +RtcmMessageType::GPS_SSR_URA)
 		{
-            //std::cout << "Received SSR URA Message.\n";
-            
+			//std::cout << "Received SSR URA Message.\n";
+
 			SSRUra ssrUra;
 
 			setTime(ssrUra.t0, epochTime);
 
+			ssrUra.udi 			= ssrUpdateInterval;
 			ssrUra.iod 			= iod;
 			ssrUra.ura			= getbituInc(data, i, 6);
-			
-			if	( ssr.ssrUra_map.size() == 0
+
+			if	( ssr.ssrUra_map.empty()
 				||ssrUra.iod		!= ssr.ssrUra_map.begin()->second.iod
 				||ssrUra.t0			!= ssr.ssrUra_map.begin()->second.t0)
 			{
 				// This is the total User Range Accuracy calculated from all the SSR.
-				// TODO: Check implementation, RTCM manual DF389.                     
+				// TODO: Check implementation, RTCM manual DF389.
 				ssr.ssrUra_map[ssrUra.t0] = ssrUra;
 			}
 		}
-		
+
 		if  ( message_number == +RtcmMessageType::GPS_SSR_CODE_BIAS
 			||message_number == +RtcmMessageType::GAL_SSR_CODE_BIAS)
 		{
 			SSRCodeBias ssrBiasCode;
-			
+
 			setTime(ssrBiasCode.t0, epochTime);
-			
+
+			ssrBiasCode.udi				= ssrUpdateInterval;
 			ssrBiasCode.iod				= iod;
 			ssrBiasCode.ssrMeta			= ssrMeta;
-			
+
 			unsigned int nbias			= getbituInc(data, i, 5);
-			
-			for (int k = 0; k < nbias && i + 19 <= message_length * 8; k++) 
+
+			for (int k = 0; k < nbias && i + 19 <= message_length * 8; k++)
 			{
 				int		rtcm_code		= getbituInc(data, i, 5);
 				double bias				= getbitsInc(data, i, 14) * 0.01;
-				
+
 				try
 				{
-					E_ObsCode mode;
-					if		(sys == E_Sys::GPS)		{	mode = mCodes_gps.right.at(rtcm_code);	}
-					else if (sys == E_Sys::GAL)		{	mode = mCodes_gal.right.at(rtcm_code);	}
+					E_ObsCode code;
+					if		(sys == E_Sys::GPS)		{	code = mCodes_gps.right.at(rtcm_code);	}
+					else if (sys == E_Sys::GAL)		{	code = mCodes_gal.right.at(rtcm_code);	}
 					else
 					{
 						BOOST_LOG_TRIVIAL(error) << "Error: unrecognised system in SSRDecoder::decode()";
+						continue;
 					}
-					ssrBiasCode.bias[mode] = bias;
-					
-					traceSsrCodeB(Sat, mode, ssrBiasCode);
+					ssrBiasCode.codeBias_map[code].bias = bias;	//todo aaron missing var
+
+					traceSsrCodeB(Sat, code, ssrBiasCode);
 				}
 				catch (std::exception& e)
 				{
 					BOOST_LOG_TRIVIAL(error) << "Error, Decoding SSR Message unknown RTCM code : " << rtcm_code;
 				}
 			}
-			
-			if	( ssr.ssrCodeBias_map.size() == 0
+
+			if	( ssr.ssrCodeBias_map.empty()
 				||ssrBiasCode.iod		!= ssr.ssrCodeBias_map.begin()->second.iod
 				||ssrBiasCode.t0		!= ssr.ssrCodeBias_map.begin()->second.t0)
 			{
 				ssr.ssrCodeBias_map[ssrBiasCode.t0] = ssrBiasCode;
 			}
 		}
-		
+
 		if  ( message_number == +RtcmMessageType::GPS_SSR_PHASE_BIAS
 			||message_number == +RtcmMessageType::GAL_SSR_PHASE_BIAS )
 		{
 			SSRPhasBias ssrBiasPhas;
 			SSRPhase ssrPhase;
-			
+
 			setTime(ssrBiasPhas.t0, epochTime);
-			
+
 			ssrBiasPhas.ssrMeta			= ssrMeta;
+			ssrBiasPhas.udi 			= ssrUpdateInterval;
 			ssrBiasPhas.iod 			= iod;
-			
+
 			ssrPhase.dispBiasConistInd	= dispBiasConistInd;
 			ssrPhase.MWConistInd		= dispBiasConistInd;
 			ssrPhase.nbias				= getbituInc(data, i, 5);
 			ssrPhase.yawAngle			= getbituInc(data, i, 9)/256;
 			ssrPhase.yawRate			= getbitsInc(data, i, 8)/8192;
-			
+
 			ssrBiasPhas.ssrPhase = ssrPhase;
-			
-			for (int k = 0; k < ssrPhase.nbias && i + 32 <= message_length * 8; k++) 
+
+			for (int k = 0; k < ssrPhase.nbias && i + 32 <= message_length * 8; k++)
 			{
 				SSRPhaseCh ssrPhaseCh;
 				unsigned int rtcm_code		= getbituInc(data, i, 5);
@@ -704,33 +739,33 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 				ssrPhaseCh.signalWidIntInd	= getbituInc(data, i, 2);
 				ssrPhaseCh.signalDisconCnt	= getbituInc(data, i, 4);
 				double PhaseBias			= getbitsInc(data, i, 20) * 0.0001;
-				
+
 				try
 				{
-					E_ObsCode mode;
+					E_ObsCode code;
 					if ( sys == E_Sys::GPS )
 					{
-						mode = mCodes_gps.right.at(rtcm_code);
+						code = mCodes_gps.right.at(rtcm_code);
 					}
 					else if ( sys == E_Sys::GAL )
 					{
-						mode = mCodes_gal.right.at(rtcm_code);
+						code = mCodes_gal.right.at(rtcm_code);
 					}
 					else
-						BOOST_LOG_TRIVIAL(error) << "Error: unrecognised system in SSRDecoder::decode()"; 
-					
-					ssrBiasPhas.bias		[mode] = PhaseBias; // offset meters due to satellite rotation.
-					ssrBiasPhas.ssrPhaseChs	[mode] = ssrPhaseCh;
-					
-					traceSsrPhasB(Sat, mode, ssrBiasPhas);
+						BOOST_LOG_TRIVIAL(error) << "Error: unrecognised system in SSRDecoder::decode()";
+
+					ssrBiasPhas.codeBias_map[code].bias	= PhaseBias; // offset meters due to satellite rotation.	//todo aaron missing var
+					ssrBiasPhas.ssrPhaseChs	[code]		= ssrPhaseCh;
+
+					traceSsrPhasB(Sat, code, ssrBiasPhas);
 				}
 				catch (std::exception& e)
 				{
 					BOOST_LOG_TRIVIAL(error) << "Error, Decoding SSR Message unknown RTCM code : " << rtcm_code;
 				}
 			}
-			
-			if	( ssr.ssrPhasBias_map.size() == 0
+
+			if	( ssr.ssrPhasBias_map.empty()
 				||ssrBiasPhas.iod		!= ssr.ssrPhasBias_map.begin()->second.iod
 				||ssrBiasPhas.t0		!= ssr.ssrPhasBias_map.begin()->second.t0)
 			{
@@ -741,7 +776,7 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 }
 
 
-		
+
 void EphemerisDecoder::decodeEphemeris(uint8_t* data, unsigned int message_length)
 {
 	Eph eph = {};
@@ -798,7 +833,7 @@ void EphemerisDecoder::decodeEphemeris(uint8_t* data, unsigned int message_lengt
 		eph.omg   		= getbitsInc(data, i, 32)*P2_31*SC2RAD;
 		eph.OMGd  		= getbitsInc(data, i, 24)*P2_43*SC2RAD;
 		eph.tgd[0]		= getbitsInc(data, i,  8)*P2_31;
-		eph.svh   		= getbituInc(data, i,  6);
+		eph.svh   		= (E_Svh)getbituInc(data, i,  6);
 		eph.flag  		= getbituInc(data, i,  1);
 		eph.fit   		= getbituInc(data, i,  1)?0.0:4.0; /* 0:4hr,1:>4hr */
 
@@ -807,12 +842,12 @@ void EphemerisDecoder::decodeEphemeris(uint8_t* data, unsigned int message_lengt
 			sys = E_Sys::SBS;
 			prn += 80;
 		}
-		
+
 		if (1)	//todo aaron, janky?
 		{
 			int week;
-            GTime now = getGpst();
-                
+			GTime now = getGpst();
+
 			double tow	= time2gpst(now, &week);
 			eph.ttr		= gpst2time(week, floor(tow));
 		}
@@ -837,18 +872,18 @@ void EphemerisDecoder::decodeEphemeris(uint8_t* data, unsigned int message_lengt
 			{
 				BOOST_LOG_TRIVIAL(error) << "rtcm3 1046 length error: len=%d\n" << message_length;
 				return;
-			}                    
+			}
 		}
 		else
 		{
-			BOOST_LOG_TRIVIAL(error) << "Error: unrecognised message for GAL in EphemerisDecoder::decode()";                    
+			BOOST_LOG_TRIVIAL(error) << "Error: unrecognised message for GAL in EphemerisDecoder::decode()";
 		}
-		
+
 		int prn			= getbituInc(data, i, 6);
 		eph.week		= adjgpsweek(getbituInc(data, i, 12));
 		eph.iode  		= getbituInc(data, i, 10); // Documented as IODnav
 		eph.sva   		= getbituInc(data, i,  8); // Documented SISA
-		
+
 		eph.idot  		= getbitsInc(data, i, 14)*P2_43*SC2RAD;
 		double toc     	= getbituInc(data, i, 14)*60.0;
 		eph.f2    		= getbitsInc(data, i,  6)*P2_59;
@@ -901,41 +936,40 @@ void EphemerisDecoder::decodeEphemeris(uint8_t* data, unsigned int message_lengt
 		}
 		eph.Sat		= SatSys(sys, prn);
 		eph.toe		= gpst2time(eph.week,eph.toes);
-		eph.toc		= gpst2time(eph.week,toc); 
-		
+		eph.toc		= gpst2time(eph.week,toc);
+
 		eph.A		= SQR(sqrtA);
 		if (message_number == RtcmMessageType::GAL_FNAV_EPHEMERIS )
 		{
-			eph.svh=(e5a_hs<<4)+(e5a_dvs<<3);
+			eph.svh= (E_Svh)(	 (e5a_hs<<4)
+						+(e5a_dvs<<3));
 			eph.code=(1<<1)+(1<<8); // data source = F/NAV+E5a
 			eph.iodc=eph.iode;
 		}
 		else if (message_number == RtcmMessageType::GAL_INAV_EPHEMERIS)
 		{
-			eph.svh=(e5b_hs<<7)+(e5b_dvs<<6)+(e1_hs<<1)+(e1_dvs<<0);
+			eph.svh= (E_Svh)(	 (e5b_hs	<<7)
+								+(e5b_dvs	<<6)
+								+(e1_hs		<<1)
+								+(e1_dvs	<<0));
 			eph.code=(1<<0)+(1<<2)+(1<<9); // data source = I/NAV+E1+E5b
 			eph.iodc=eph.iode;
-		}           
+		}
 	}
 	else
 	{
 		BOOST_LOG_TRIVIAL(error) << "Error: unrecognised sys in EphemerisDecoder::decode()";
 	}
-	
-	//check for iode, add if not found.
-	for (auto& eph_ : nav.ephMap[eph.Sat])
-	{
-		if	( eph_.iode == eph.iode
-			&&fabs(timediff(eph.toe,eph_.toe))<6*60*60) //current iode is guaranteed to be different from other iode's transmitted in the last 6 hours, but then it begins to repeat
-		{
-			return;
-		}
-	}		
+
 	//tracepdeex(rtcmdeblvl,std::cout, "\n#RTCM_DEC BRCEPH %s %s %4d %16.9e %13.6e %10.3e, %d ", eph.Sat.id(),eph.toe.to_string(2), eph.iode, eph.f0,eph.f1,eph.f2, message_number);
 	//std::cout << "Adding ephemeris for " << eph.Sat.id() << std::endl;
-	nav.ephMap[eph.Sat].push_back(eph);
 	
-	traceBroEph(eph,sys);
+	if (nav.ephMap[eph.Sat].find(eph.toe) == nav.ephMap[eph.Sat].end())
+	{
+		nav.ephMap[eph.Sat][eph.toe] = eph;
+		
+		traceBroEph(eph, sys);
+	}
 }
 
 
@@ -976,8 +1010,10 @@ E_ObsCode MSM7Decoder::signal_to_code(E_Sys sys, uint8_t signal)
 
 
 
-ObsList MSM7Decoder::decodeMSM7(uint8_t* data, unsigned int message_length,
-											 map<SatSys,map<E_ObsCode,int>> MSM7_lock_time)
+ObsList MSM7Decoder::decodeMSM7(
+	uint8_t* data, 
+	unsigned int message_length,
+	map<SatSys,map<E_ObsCode,int>> MSM7_lock_time)
 {
 	ObsList obsList;
 	int i = 0;
@@ -997,40 +1033,40 @@ ObsList MSM7Decoder::decodeMSM7(uint8_t* data, unsigned int message_length,
 	bool extrainfo=false;
 	if(msmtyp==5 || msmtyp==7) extrainfo=true;
 	int nbcd=15, nbph=22, nblk=4, nbcn=6;
-	double sccd=P2_24, scph=P2_29, scsn=1.0; 
+	double sccd=P2_24, scph=P2_29, scsn=1.0;
 	if(msmtyp==6 || msmtyp==7){
 		nbcd=20; sccd=P2_29;
 		nbph=24; scph=P2_31;
 		nblk=10;
 		nbcn=10; scsn=0.0625;
 	}
-	
+
 	int sysind = message_number/10; // integer division is intentional
 	E_Sys rtcmsys=E_Sys::NONE;
 	double tow = epoch_time_ * 0.001;
-	switch(sysind)
+	switch (sysind)
 	{
-		case 107:	rtcmsys = E_Sys::GPS; break;
-		case 108:	rtcmsys = E_Sys::GLO; break;
-		case 109:	rtcmsys = E_Sys::GAL; break;
-		case 111:	rtcmsys = E_Sys::QZS; break;
-		case 112:	rtcmsys = E_Sys::CMP; tow+=14.0; break;
+		case 107:	rtcmsys = E_Sys::GPS;				break;
+		case 108:	rtcmsys = E_Sys::GLO;				break;
+		case 109:	rtcmsys = E_Sys::GAL;				break;
+		case 111:	rtcmsys = E_Sys::QZS;				break;
+		case 112:	rtcmsys = E_Sys::CMP; tow += 14;	break;
 	}
-	
+
 	GTime tobs;
 	if(rtcmsys == +E_Sys::GLO)
 	{
 		int dowi=(epoch_time_  >> 27);
 		int todi=(epoch_time_ & 0x7FFFFFF);
-		tow = 86400.0*dowi + 0.001*todi - 10800.0;
+		tow = 86400*dowi + 0.001*todi - 10800;
 		GTime tglo;
 		setTime(tglo, tow);
 		tobs=utc2gpst(tglo);
-	} 
+	}
 	else setTime(tobs, tow);
-	
+
 	traceLatency(tobs);
-	
+
 	//create observations for satellites according to the mask
 	for (int sat = 0; sat < 64; sat++)
 	{
@@ -1042,8 +1078,8 @@ ObsList MSM7Decoder::decodeMSM7(uint8_t* data, unsigned int message_length,
 			obs.Sat.prn = sat + 1;
 			obs.time=tobs;
 			//std::cout << "decodeMSM7, obs.time :" << std::put_time( std::gmtime( &obs.time.time ), "%F %X" )
-			//					  << " : " << obs.time.sec << std::endl;			
-			
+			//					  << " : " << obs.time.sec << std::endl;
+
 			obsList.push_back(obs);
 		}
 	}
@@ -1096,7 +1132,7 @@ ObsList MSM7Decoder::decodeMSM7(uint8_t* data, unsigned int message_length,
 			continue;
 		}
 		else SatelliteDatainvalid[obs.Sat]=false;
-		
+
 		for (auto& [ft, sigList]	: obs.SigsLists)
 		for (auto& sig				: sigList)
 		{
@@ -1124,13 +1160,14 @@ ObsList MSM7Decoder::decodeMSM7(uint8_t* data, unsigned int message_length,
 	{
 		for (auto& obs : obsList)
 		{
-			short int prn=obs.Sat.prn;
-			if(prn>24 || prn<1)
+			short int prn = obs.Sat.prn;
+			
+			if (prn > 24 || prn<1)
 			{
-				SatelliteDatainvalid[obs.Sat]=true;
-				GLOFreqShift[obs.Sat][G1] = 0.0;
-				GLOFreqShift[obs.Sat][G2] = 0.0;
-				
+				SatelliteDatainvalid[obs.Sat] = true;
+				GLOFreqShift[obs.Sat][G1] = 0;
+				GLOFreqShift[obs.Sat][G2] = 0;
+
 			}
 			else
 			{
@@ -1172,10 +1209,10 @@ ObsList MSM7Decoder::decodeMSM7(uint8_t* data, unsigned int message_length,
 		int fine_pseudorange		= getbitsInc(data, i,	nbcd);
 		if (fine_pseudorange == 0x80000)
 		{
-			SatelliteDatainvalid[cellSatellitemap[indx]]=true;
+			SatelliteDatainvalid[cellSatellitemap[indx]] = true;
 			continue;
 		}
-		
+
 		RawSig& sig = *signalPointer;
 		sig.P += fine_pseudorange * sccd;
 	}
@@ -1185,10 +1222,10 @@ ObsList MSM7Decoder::decodeMSM7(uint8_t* data, unsigned int message_length,
 		int fine_phase_range		= getbitsInc(data, i,	nbph);
 		if (fine_phase_range == 0x800000)
 		{
-			SatelliteDatainvalid[cellSatellitemap[indx]]=true;
+			SatelliteDatainvalid[cellSatellitemap[indx]] = true;
 			continue;
 		}
-		
+
 		RawSig& sig = *signalPointer;
 		sig.L += fine_phase_range * scph;
 	}
@@ -1196,18 +1233,22 @@ ObsList MSM7Decoder::decodeMSM7(uint8_t* data, unsigned int message_length,
 	for (auto& [indx, signalPointer] : signalPointermap)
 	{
 		int lock_time_indicator	= getbituInc(data, i,	nblk);
-		
+
 		RawSig& sig = *signalPointer;
 		sig.LLI=0;
-		
+
 		SatSys sat = cellSatellitemap [indx];
-		if	( MSM7_lock_time.find(sat)!=MSM7_lock_time.end()
-			&&MSM7_lock_time[sat].find(sig.code)!=MSM7_lock_time[sat].end())
+		
+		if	( MSM7_lock_time		.find(sat)		!= MSM7_lock_time		.end()
+			&&MSM7_lock_time[sat]	.find(sig.code)	!= MSM7_lock_time[sat]	.end())
 		{
 			int past_time = MSM7_lock_time[sat][sig.code];
-			if(lock_time_indicator<past_time) sig.LLI=1;
+			
+			if (lock_time_indicator < past_time)
+				sig.LLI = 1;
 		}
-		MSM7_lock_time[sat][sig.code]=lock_time_indicator;
+		
+		MSM7_lock_time[sat][sig.code] = lock_time_indicator;
 	}
 
 	for (auto& [indx, signalPointer] : signalPointermap)
@@ -1226,13 +1267,16 @@ ObsList MSM7Decoder::decodeMSM7(uint8_t* data, unsigned int message_length,
 		sig.snr = carrier_noise_ratio * scsn;
 	}
 
-	if(extrainfo)
+	if (extrainfo)
 	for (auto& [indx, signalPointer] : signalPointermap)
 	{
 		int fine_doppler		= getbitsInc(data, i,	15);
+		
 		if (fine_doppler == 0x4000)
 			continue;
+			
 		RawSig& sig = *signalPointer;
+		
 		sig.D += fine_doppler			* 0.0001;
 	}
 
@@ -1244,10 +1288,10 @@ ObsList MSM7Decoder::decodeMSM7(uint8_t* data, unsigned int message_length,
 	{
 		double freqcy = signal_phase_alignment[rtcmsys][ft];
 		if(rtcmsys == +E_Sys::GLO) freqcy += GLOFreqShift[obs.Sat][ft];
-		
+
 		sig.P *= CLIGHT	/ 1000;
 		sig.L *= freqcy	/ 1000;
-		
+
 		//tracepdeex(rtcmdeblvl,std::cout, "\n#RTCM_DEC MSMOBS %s %s %d %s %.4f %.4f", obs.time.to_string(2), obs.Sat.id(), ft, sig.code._to_string(),sig.P, sig.L );
 	}
 
@@ -1287,20 +1331,20 @@ void RtcmStream::traceLatency(GTime tobs)
 
 void RtcmStream::createRtcmFile()
 {
-    GTime curTime;
-    time(&curTime.time);
-    long int roundTime = curTime.time;
-    roundTime /= acsConfig.rtcm_rotate_period;
-    roundTime *= acsConfig.rtcm_rotate_period;
-    curTime.time = roundTime;
-    
-    string logtime = curTime.to_string(0);
-    std::replace( logtime.begin(), logtime.end(), '/', '-');              
-    
-    string path_rtcm = rtcm_filename;
-    replaceString(path_rtcm, "<LOGTIME>", logtime);
-    
-    std::ofstream ofs( path_rtcm,std::ofstream::out | std::ofstream::ate);
+	GTime curTime;
+	time(&curTime.time);
+	long int roundTime = curTime.time;
+	roundTime /= acsConfig.rtcm_rotate_period;
+	roundTime *= acsConfig.rtcm_rotate_period;
+	curTime.time = roundTime;
+
+	string logtime = curTime.to_string(0);
+	std::replace( logtime.begin(), logtime.end(), '/', '-');
+
+	string path_rtcm = rtcm_filename;
+	replaceString(path_rtcm, "<LOGTIME>", logtime);
+
+	std::ofstream ofs( path_rtcm,std::ofstream::out | std::ofstream::ate);
 }
 
 
@@ -1314,7 +1358,7 @@ void RtcmStream::parseRTCM(std::istream& inputStream)
 		{
 			// Skip to the start of the frame - marked by preamble character 0xD3
 			pos = inputStream.tellg();
-			
+
 			char c;
 			inputStream.read(&c,1);
 
@@ -1326,18 +1370,18 @@ void RtcmStream::parseRTCM(std::istream& inputStream)
 				}
 			}
 			else
-			{ 				
+			{
 				return;
 			}
 			byteCnt++;
 		}
-		
+
 		if (numPreambleFound == 0)
 			byteCnt = 0;
-		
+
 		numPreambleFound++;
 		numNonMessBytes += byteCnt;
-		
+
 		if (byteCnt != 0)
 		{
 			std::stringstream message;
@@ -1356,11 +1400,11 @@ void RtcmStream::parseRTCM(std::istream& inputStream)
 			inputStream.seekg(pos);
 			return;
 		}
-		
+
 		auto message_length = RtcmDecoder::message_length(buf);
 
 		// Read the frame data (include the header)
-		unsigned char data[message_length + 3]; 
+		unsigned char data[message_length + 3];
 		data[0] = RTCM_PREAMBLE;
 		data[1] = buf[0];
 		data[2] = buf[1];
@@ -1372,10 +1416,10 @@ void RtcmStream::parseRTCM(std::istream& inputStream)
 			inputStream.seekg(pos);
 			return;
 		}
-		
+
 		// Read the frame CRC
 		unsigned int crcRead = 0;
-		inputStream.read((char*)&crcRead, 3);		
+		inputStream.read((char*)&crcRead, 3);
 		if (inputStream.fail())
 		{
 			inputStream.clear();
@@ -1385,9 +1429,9 @@ void RtcmStream::parseRTCM(std::istream& inputStream)
 
 		unsigned int crcCalc = crc24q(data, sizeof(data));
 		int nmeass = 0;
-		if (message_length > 8) 
+		if (message_length > 8)
 		nmeass = getbitu(message, 0,	12);
-		
+
 		if	( (((char*)&crcCalc)[0] != ((char*)&crcRead)[2])
 			||(((char*)&crcCalc)[1] != ((char*)&crcRead)[1])
 			||(((char*)&crcCalc)[2] != ((char*)&crcRead)[0]))
@@ -1402,104 +1446,102 @@ void RtcmStream::parseRTCM(std::istream& inputStream)
 			inputStream.seekg(pos2);
 			continue;
 		}
-		
-		
+
+
 		if (acsConfig.record_rtcm)
-        {
-            // Set the filenames based on system time, when replaying recorded streams
-            // the tsync time may be different.
-            
-            // Get time_t seconds since 00:00, 1/1/1970.
-            GTime curTime;
-            time(&curTime.time);
-            long int roundTime = curTime.time;
-            roundTime /= acsConfig.rtcm_rotate_period;
-            roundTime *= acsConfig.rtcm_rotate_period;
-            curTime.time = roundTime;
-            
-            string logtime = curTime.to_string(0);
-            std::replace( logtime.begin(), logtime.end(), '/', '-');              
-            
- 			string path_rtcm = rtcm_filename;
+		{
+			// Set the filenames based on system time, when replaying recorded streams
+			// the tsync time may be different.
+
+			// Get time_t seconds since 00:00, 1/1/1970.
+			GTime curTime;
+			time(&curTime.time);
+			long int roundTime = curTime.time;
+			roundTime /= acsConfig.rtcm_rotate_period;
+			roundTime *= acsConfig.rtcm_rotate_period;
+			curTime.time = roundTime;
+
+			string logtime = curTime.to_string(0);
+			std::replace( logtime.begin(), logtime.end(), '/', '-');
+
+			string path_rtcm = rtcm_filename;
 			replaceString(path_rtcm, "<LOGTIME>", logtime);
-           
-            std::ofstream ofs(path_rtcm, std::ofstream::app);
-            
-            //Write the custom time stamp message.
-            RtcmEncoder::CustomEndcoder encoder;
-            encoder.encodeTimeStampRTCM();
-            encoder.encodeWriteMessages(ofs);            
-            
-            //copy the message to the output file too
-            ofs.write((char *)data,		message_length+3);
-            ofs.write((char *)&crcRead,	3);
-        }
-		
-		
+
+			std::ofstream ofs(path_rtcm, std::ofstream::app);
+
+			//Write the custom time stamp message.
+			RtcmEncoder::CustomEndcoder encoder;
+			encoder.encodeTimeStampRTCM();
+			encoder.encodeWriteMessages(ofs);
+
+			//copy the message to the output file too
+			ofs.write((char *)data,		message_length+3);
+			ofs.write((char *)&crcRead,	3);
+		}
+
+
 		numFramesPassCRC++;
-		
+
 
 		//tracepdeex(rtcmdeblvl+1,std::cout, "STR : RTCM Message %4d\n", nmeass);
-		
-		
+
+
 		auto message_type = RtcmDecoder::message_type((unsigned char*) message);
-        
-        
-        if (message_type == +RtcmMessageType::CUSTOM)
-        {
-            numFramesDecoded++;
-            
-            E_RTCMSubmessage submessage = decodeCustomId((uint8_t*) message, message_length);
-            
+
+
+		if (message_type == +RtcmMessageType::CUSTOM)
+		{
+			numFramesDecoded++;
+
+			E_RTCMSubmessage submessage = decodeCustomId((uint8_t*) message, message_length);
+
 			switch (submessage)
 			{
 				case (E_RTCMSubmessage::TIMESTAMP):
 				{
-		            GTime timestamp = decodeCustomTimestamp((uint8_t*) message, message_length);
-		            
-		            rtcm_UTC = timestamp;
-		   
+					GTime timestamp = decodeCustomTimestamp((uint8_t*) message, message_length);
+
+					rtcm_UTC = timestamp;
+
 					if (acsConfig.simulate_real_time)
 					{
 						//get the current time and compare it with the timestamp in the message
-						
+
 						boost::posix_time::ptime now_ptime = boost::posix_time::microsec_clock::universal_time();
-					    
-					    // Number of seconds since 1/1/1970, long is 64 bits and all may be used.
-    					long int seconds = (now_ptime - boost::posix_time::from_time_t(0)).total_seconds();
-					    
-					    //Number of fractional seconds, The largest this can be is 1000 which is 10 bits unsigned. 
-					    boost::posix_time::ptime now_mod_seconds	= boost::posix_time::from_time_t(seconds);
-					    auto subseconds	= now_ptime - now_mod_seconds;
-					    int milli_sec = subseconds.total_milliseconds();
-					    
-					    GTime now_gtime;
-					    now_gtime.time	= seconds;
-					    now_gtime.sec	= milli_sec / 1000.0;
-					    
-					    //find the delay between creation of the timestamp, and now
-					    auto thisDeltaTime = now_gtime - timestamp;
-					    
-					    //initialise the global rtcm delay if needed
-					    if (rtcmDeltaTime == GTime::noTime())
-					    {
-					    	rtcmDeltaTime = thisDeltaTime;
-					    }
-					    
-					    //if the delay is shorter than the global, go back and wait until it is longer
-					    if (thisDeltaTime < rtcmDeltaTime)
-					    {
+
+						// Number of seconds since 1/1/1970, long is 64 bits and all may be used.
+						long int seconds = (now_ptime - boost::posix_time::from_time_t(0)).total_seconds();
+
+						//Number of fractional seconds, The largest this can be is 1000 which is 10 bits unsigned.
+						boost::posix_time::ptime now_mod_seconds	= boost::posix_time::from_time_t(seconds);
+						auto subseconds	= now_ptime - now_mod_seconds;
+						int milli_sec = subseconds.total_milliseconds();
+
+						GTime now_gtime;
+						now_gtime.time	= seconds;
+						now_gtime.sec	= milli_sec / 1000.0;
+
+						//find the delay between creation of the timestamp, and now
+						auto thisDeltaTime = now_gtime - timestamp;
+
+						//initialise the global rtcm delay if needed
+						if (rtcmDeltaTime == GTime::noTime())
+						{
+							rtcmDeltaTime = thisDeltaTime;
+						}
+
+						//if the delay is shorter than the global, go back and wait until it is longer
+						if (thisDeltaTime < rtcmDeltaTime)
+						{
 							inputStream.seekg(pos);
 							return;
-					    }
+						}
 					}
-		            
 					break;
 				}
 			}
-        }
-        
-        
+		}
+
 		if 		( message_type == +RtcmMessageType::GPS_EPHEMERIS
 				||message_type == +RtcmMessageType::GAL_FNAV_EPHEMERIS
 				/*||message_type == +RtcmMessageType::GAL_INAV_EPHEMERIS*/)
@@ -1545,12 +1587,12 @@ void RtcmStream::parseRTCM(std::istream& inputStream)
 		{
 			numFramesDecoded++;
 			ObsList obsList = decodeMSM7((uint8_t*) message,message_length,MSM7_lock_time);
-			
+
 			int i=54;
 			int multimessage = getbituInc(message, i,	1);
-			
+
 			//tracepdeex(rtcmdeblvl,std::cout, "\n%s %4d %s %2d %1d", station.name, message_type._to_integral(), obsList.front().time.to_string(0), obsList.size(), multimessage);
-			
+
 			if (multimessage == 0)
 			{
 				SuperList.insert(SuperList.end(),obsList.begin(),obsList.end());
@@ -1561,8 +1603,8 @@ void RtcmStream::parseRTCM(std::istream& inputStream)
 				return;
 			}
 			else if	(  SuperList.size()	> 0
-					&& obsList.size()	> 0	
-					&& fabs(timediff(SuperList.front().time, obsList.front().time)) > 0.5)
+					&& obsList.size()	> 0
+					&& fabs(SuperList.front().time - obsList.front().time) > 0.5)
 			{
 				obsListList.push_back(SuperList);
 				SuperList.clear();
@@ -1572,31 +1614,31 @@ void RtcmStream::parseRTCM(std::istream& inputStream)
 			{
 				SuperList.insert(SuperList.end(), obsList.begin(), obsList.end());
 			}
-				
-			if (SuperList.size() > 1000) 
+
+			if (SuperList.size() > 1000)
 			{
 				SuperList.clear();
 			}
 		}
-	} 
+	}
 }
 
 /** Initialises SSROut struct. To be called at the start of every epoch
 */
 void initSsrOut()
 {
-	double tgap = acsConfig.epoch_interval;
+	double tgap		= acsConfig.epoch_interval;
 	int udi			= acsConfig.ssrOpts.update_interval;
 	int udiIndex	= SSRDecoder::getUdiIndex(udi);
 	int tgapInt		= (int)round(tgap);
-	
+
 	if (udi < acsConfig.epoch_interval)		BOOST_LOG_TRIVIAL(error) << "Error: Config ssrOpts.update_interval < acsConfig.epoch_interval.";
 	if (udiIndex == -1)						BOOST_LOG_TRIVIAL(error) << "Error: Config ssrOpts.update_interval is not valid (" << acsConfig.ssrOpts.update_interval << ").";
 	if (abs(tgap - tgapInt) > 0.000001)		BOOST_LOG_TRIVIAL(error) << "Error: tgap is not an int.";
 	if (udi % tgapInt != 0)					BOOST_LOG_TRIVIAL(error) << "Error: Config ssrOpts.update_interval (" << acsConfig.ssrOpts.update_interval << ") is not a multiple of processing_options.epoch_interval (" << tgap << ").";
 
 	int udiNumEpochs = udi / tgap;
-	for (auto &[key, entry] : nav.satNavMap)
+	for (auto& [key, entry] : nav.satNavMap)
 	{
 		// Reset sat count to zero
 		entry.ssrOut.numObs = 0;
@@ -1619,10 +1661,11 @@ void initSsrOut()
 */
 double	calcAve(vector<double> vec)
 {
-	if (vec.size() == 0)
+	if (vec.empty())
 	{
 		return 0;
 	}
+	
 	double accum = 0;
 	for (auto val : vec)
 	{
@@ -1637,8 +1680,9 @@ double	calcAve(vector<double> vec)
 */
 void	calcSsrCorrections(
 	Trace&				trace,			///< Trace to output to
+	KFState&			kfState,		///< Filter object to extract state elements from
 	std::set<SatSys>&	sats,			///< List of satellites visible in this epoch
-	GTime 			tsync)			///< Time of current epoch
+	GTime 				time)			///< Time of current epoch
 {
 	// Calculate orbits + clocks at tsync & tsync+udi
 	for (auto& sat : sats)
@@ -1647,22 +1691,19 @@ void	calcSsrCorrections(
 		Obs obs;
 		obs.Sat = sat;
 		obs.satNav_ptr = &nav.satNavMap[obs.Sat]; // for satpos_ssr()
-		
-		GTime time = tsync;
-		GTime teph = tsync;
+
+		GTime teph = time;
 		bool pass;
 
 		char id[5];
 		obs.Sat.getId(id);
 		// Excerpt from satposs():
 		/* grep satellite antenna information */
-		PcoMapType* pcoMap_ptr = NULL;
+		PcoMapType* pcoMap_ptr = nullptr;
 		{
-			double ep[6];
-			time2epoch(time, ep);
-			pcvacs_t* pcsat = findAntenna(id, ep, nav);
+			PhaseCenterData* satPCD = findAntenna(id, time, nav);
 
-			if (pcsat == NULL)
+			if (satPCD == nullptr)
 			{
 				if (obs.Sat < MINPRNSBS)
 				{
@@ -1672,24 +1713,22 @@ void	calcSsrCorrections(
 			}
 			else
 			{
-				pcoMap_ptr = &pcsat->pcoMap;
+				pcoMap_ptr = &satPCD->pcoMap;
 			}
 		}
 
-		// Calculate broadcast & precise orb & clock at tsync
-		pass = satpos(trace, time, teph, obs, E_Ephemeris::BROADCAST, nav, pcoMap_ptr);
-		
 		SSROut& ssrOut = nav.satNavMap[sat].ssrOut; // for readability
-		
-		double relativisticAdj;
+
+		// Calculate broadcast & precise orb & clock at tsync
+		pass = satpos(trace, time, teph, obs, E_Ephemeris::BROADCAST, 					E_OffsetType::APC, nav, pcoMap_ptr);
 		if (pass == true)
 		{
-			Eph* eph = seleph(teph, sat, -1, nav);
-			double tk = timediff(time, eph->toc);
+			Eph* eph = seleph<Eph>(teph, sat, -1, nav);
+			double tk = time - eph->toc;
 			ssrOut.ssrClk.broadcast	= (eph->f0 + eph->f1 * tk + eph->f2 * tk * tk) * CLIGHT;
-			
+
 			//ssrOut.ssrClk.broadcast		= obs.dtSat[0] * CLIGHT; // units: m
-			//relativisticAdj				= 2 * obs.rSat.dot(obs.satVel) / CLIGHT;
+			//double relativisticAdj		= relativity1(obs.rSat,	obs.satVel)	* CLIGHT;
 			//ssrOut.ssrClk.broadcast	   += relativisticAdj; // 'undo' relativistic adjustment performed in satpos(BROADCAST)
 			ssrOut.ssrClk.isBroadcastSet	= true;
 			ssrOut.ssrEph.broadcast			= obs.rSat;
@@ -1697,29 +1736,34 @@ void	calcSsrCorrections(
 			ssrOut.ssrEph.isBroadcastSet	= true;
 			ssrOut.ssrEph.iode				= obs.iode;
 		}
-		
-		pass = satpos(trace, time, teph, obs, acsConfig.ssrOpts.ssr_ephemeris, 	nav, pcoMap_ptr);
-		if (pass == true)
+
+		pass = satpos(trace, time, teph, obs, acsConfig.ssrOpts.ssr_ephemeris_source,	E_OffsetType::APC, nav, pcoMap_ptr);
+		if (pass)
 		{
 			ssrOut.ssrEph.precise			= obs.rSat;
 			ssrOut.ssrEph.isPreciseSet		= true;
-			// (Note - precise clock is set in outputSatelliteClocks())
 		}
+		
+		pass = kfState.getKFValue({.type = KF::SAT_CLOCK, .Sat = sat}, ssrOut.ssrClk.precise);	//todo aaron, no source here...?
+		if (pass)
+		{
+			ssrOut.ssrClk.isPreciseSet		= true;
+		}		
 
 		// Calculate broadcast & precise orb's at tsync+udi
 		time = tsync + ssrOut.ssrEph.udi;
-		
-		pass = satpos(trace, time, teph, obs, E_Ephemeris::BROADCAST, nav, pcoMap_ptr);
-		if (pass == true)
+
+		pass = satpos(trace, time, teph, obs, E_Ephemeris::BROADCAST,					E_OffsetType::APC, nav, pcoMap_ptr);
+		if (pass)
 		{
 			ssrOut.ssrEph.nextBroadcast		= obs.rSat;
 			ssrOut.ssrEph.nextBroadcastVel	= obs.satVel;
 			ssrOut.ssrEph.isNextBroadcastSet= true;
-			
+
 			assert(ssrOut.ssrEph.iode == obs.iode);
 		}
-		
-		pass = satpos(trace, time, teph, obs, acsConfig.ssrOpts.ssr_ephemeris, 	nav, pcoMap_ptr);
+
+		pass = satpos(trace, time, teph, obs, acsConfig.ssrOpts.ssr_ephemeris_source,	E_OffsetType::APC, nav, pcoMap_ptr);
 		if (pass == true)
 		{
 			ssrOut.ssrEph.nextPrecise		= obs.rSat;
@@ -1729,7 +1773,7 @@ void	calcSsrCorrections(
 
 	// Form master metadata struct for all SSR messages
 	SSRMeta masterSsrMeta = {};
-	masterSsrMeta.epochTime1s		= time2gpst(tsync, nullptr);
+	masterSsrMeta.epochTime1s		= time2gpst(tsync);
 	masterSsrMeta.ssrUpdateIntIndex	= -1;// to be set individually
 	masterSsrMeta.multipleMessage	= 0; //note: change when broadcasting multi-gnss
 	masterSsrMeta.referenceDatum	= 0; // 0: global (ITRF); 1: local
@@ -1745,7 +1789,7 @@ void	calcSsrCorrections(
 		{
 			// Prepare SSR clock corrections
 			SSRClkOut& ssrClk = ssrOut.ssrClk;
-			
+
 			if	( ssrClk.isPreciseSet
 				&&ssrClk.isBroadcastSet
 				&&ssrOut.numObs > 0)
@@ -1755,9 +1799,9 @@ void	calcSsrCorrections(
 				ssrClk.dclk[2]					= 0;	// set to zero (not used)
 
 				int udiIndex					= SSRDecoder::getUdiIndex((int)round(ssrClk.udi));
-				if (udiIndex == -1)	
+				if (udiIndex == -1)
 					BOOST_LOG_TRIVIAL(error) << "Error: ssrClk.udi is not valid (" << ssrClk.udi << ").";
-				
+
 				ssrClk.t0						= tsync + ssrClk.udi / 2.0;
 				ssrClk.iod						= masterIod;
 				ssrClk.ssrMeta					= masterSsrMeta;
@@ -1778,17 +1822,17 @@ void	calcSsrCorrections(
 			{
 				Vector3d	diffEcef			= ssrEph.broadcast		- ssrEph.precise;
 				Vector3d	nextDiffEcef		= ssrEph.nextBroadcast	- ssrEph.nextPrecise;
-				Vector3d	diffRac				= ecef2rac(diffEcef, 		ssrEph.broadcast, 		ssrEph.broadcastVel);
-				Vector3d	nextDiffRac			= ecef2rac(nextDiffEcef, 	ssrEph.nextBroadcast, 	ssrEph.nextBroadcastVel);
-				Vector3d	aveDiffRac			= (diffRac + nextDiffRac) / 2.0;
+				Vector3d	diffRac				= ecef2rac(ssrEph.broadcast, 		ssrEph.broadcastVel)		* diffEcef;
+				Vector3d	nextDiffRac			= ecef2rac(ssrEph.nextBroadcast, 	ssrEph.nextBroadcastVel)	* nextDiffEcef;
+				Vector3d	aveDiffRac			= (diffRac + nextDiffRac) / 2;
 				Vector3d	dDiffRac			= (nextDiffRac - diffRac) / ssrEph.udi;
 				Vector3d::Map(ssrEph.deph, aveDiffRac.rows())	= aveDiffRac; // Copy from Vector3d to C array
 				Vector3d::Map(ssrEph.ddeph,dDiffRac.rows())		= dDiffRac;
 
 				int udiIndex					= SSRDecoder::getUdiIndex((int)round(ssrEph.udi));
-				if (udiIndex == -1)	
+				if (udiIndex == -1)
 					BOOST_LOG_TRIVIAL(error) << "Error: ssrEph.udi is not valid (" << ssrEph.udi << ").";
-				
+
 				ssrEph.t0						= tsync + ssrEph.udi / 2.0;
 				ssrEph.iod						= masterIod;
 				ssrEph.ssrMeta					= masterSsrMeta;
@@ -1804,17 +1848,17 @@ void	calcSsrCorrections(
 			if (ssrCodeBias.isSet)
 			{
 				ssrCodeBias.isSet = false;
-				
+
 				int udiIndex						= SSRDecoder::getUdiIndex((int)round(ssrCodeBias.udi));
-				if (udiIndex == -1)	
+				if (udiIndex == -1)
 					BOOST_LOG_TRIVIAL(error) << "Error: ssrCodeBias.udi is not valid (" << ssrCodeBias.udi << ").";
-				
+
 				ssrCodeBias.t0							= tsync + ssrCodeBias.udi / 2.0;
 				ssrCodeBias.iod							= masterIod;
 				ssrCodeBias.ssrMeta						= masterSsrMeta;
 				ssrCodeBias.ssrMeta.ssrUpdateIntIndex	= udiIndex;
 				ssrCodeBias.canExport					= true;
-				
+
 // 				assert(ssrCodeBias.udi_code == ssrBias.udi_phas); // note - if these need to be different, modify SSRBias to have two ssrMeta's - one for phase & one for code
 			}
 
@@ -1824,36 +1868,35 @@ void	calcSsrCorrections(
 			if (ssrPhasBias.isSet)
 			{
 				ssrPhasBias.isSet = false;
-				
+
 				int udiIndex						= SSRDecoder::getUdiIndex((int)round(ssrPhasBias.udi));
 				if (udiIndex == -1)
 					BOOST_LOG_TRIVIAL(error) << "Error: ssrPhasBias.udi is not valid (" << ssrPhasBias.udi << ").";
-				
+
 				ssrPhasBias.t0							= tsync + ssrPhasBias.udi / 2.0;
 				ssrPhasBias.iod							= masterIod;
-				
+
 				ssrPhasBias.ssrMeta						= masterSsrMeta;
 				ssrPhasBias.ssrMeta.ssrUpdateIntIndex	= udiIndex;
 				ssrPhasBias.ssrPhase.dispBiasConistInd	= 0;
 				ssrPhasBias.ssrPhase.MWConistInd		= 0;
-				
-				int nbias 		 						= ssrPhasBias.bias.size();
-				
+
+				int nbias 		 						= ssrPhasBias.codeBias_map.size();
+
 				ssrPhasBias.ssrPhase.nbias				= nbias;
 				ssrPhasBias.ssrPhase.yawAngle			= 0;
 				ssrPhasBias.ssrPhase.yawRate			= 0;
 				ssrPhasBias.canExport					 = true;
-				
+
 // 				assert(ssrBias.udi_code == ssrBias.udi_phas); // note - if these need to be different, modify SSRBias to have two ssrMeta's - one for phase & one for code
-				assert(nbias == ssrPhasBias.var.size());
-				
-				for (auto& [pkey, value] : ssrPhasBias.bias)
+
+				for (auto& [pkey, value] : ssrPhasBias.codeBias_map)
 				{
 					ssrPhasBias.ssrPhaseChs[pkey].signalIntInd		= 0; // to implement later - set when bias moves beyond upper/lower limit of value
 					ssrPhasBias.ssrPhaseChs[pkey].signalWidIntInd	= 0; // ^see note above
 					ssrPhasBias.ssrPhaseChs[pkey].signalDisconCnt	= 0;
-					
-					if (abs(value) > 52.4287) // 52.4287 from ssr_2_phase_bias_v06
+
+					if (abs(value.bias) > 52.4287) // 52.4287 from ssr_2_phase_bias_v06
 					{
 						ssrPhasBias.canExport = false;			// ^ In the interim, don't transmit phase bias when out of bounds
 					}
@@ -1891,87 +1934,16 @@ void	rtcmEncodeToFile(int epochNum)
 	rtcmSsrEnc.encodeWriteMessages(ofRtcmSsr);
 }
 
-/** Decodes file containing RTCM messages to nav.satNavMap[].ssr
-*/
-void	rtcmDecodeFromFile(int epochNum)
-{
-	string filename = getRtcmFilename(epochNum);
-	std::ifstream ifRtcmSsr(filename, std::ios::in | std::ios::binary);
-	if (!ifRtcmSsr)
-	{
-		BOOST_LOG_TRIVIAL(error)
-		<< "Could not open file for importing SSR corrections at " << filename;
-		return;
-	}
-	RtcmStream absStream;
-	absStream.parseRTCM(ifRtcmSsr);
-}
-
-/** Creates a file containing the current epoch number
- * Keeps network mode & end-user modes in sync if running network mode
- * & end-user mode in parallel on the same machine and exporting/reading
- * from RTCM files instead of an NTRIP Caster.
- * Used in conjunction with waitForSyncFile()
-*/
-void	exportSyncFile(int epochNum)
-{
-	string filename = acsConfig.ssrOpts.rtcm_directory + "sync.tmp";
-	std::ofstream fout(filename);
-	if (!fout)
-	{
-		BOOST_LOG_TRIVIAL(error)
-		<< "Could not open sync file at " << filename;
-		return;
-	}
-	fout << epochNum << std::endl;
-}
-
-/** Waits for a specified file to contain the current epoch number.
- * Used in conjunction with exportSyncFile()
-*/
-void	waitForSyncFile(int epochNum)
-{
-	string filename = acsConfig.ssrOpts.rtcm_directory + "sync.tmp";
-	using namespace std::literals::chrono_literals;
-	bool wait = true;
-	int printCounter = 0;
-	while (wait)
-	{
-		std::ifstream fin(filename);
-		if (fin.is_open())
-		{
-			int numIn = 0;
-			fin >> numIn;
-			if (numIn >= epochNum)
-			{
-				wait = false;
-			}
-		}
-
-		if (wait)
-		{
-			std::this_thread::sleep_for(0.1s);
-			if (printCounter > 100)
-			{
-				BOOST_LOG_TRIVIAL(warning)
-				<< "Waiting for rtcm sync file: " << filename;
-				printCounter = 0;
-			}
-			++printCounter;
-		}
-	}
-}
-
 
 /** Writes nav.satNavMap[].ssrOut to a human-readable file
 */
 void	writeSsrOutToFile(
-	int					epochNum, 
+	int					epochNum,
 	std::set<SatSys>	sats)
 {
 	string filename = "ssrOut.dbg";
 	std::ofstream out(filename, std::ios::app);
-	
+
 	if (!out)
 	{
 		BOOST_LOG_TRIVIAL(error)
@@ -1979,7 +1951,7 @@ void	writeSsrOutToFile(
 		return;
 	}
 	out.precision(17);
-	
+
 	// Header
 	out << "epochNum" 			<< "\t";
 	out << "satId" 				<< "\t";
@@ -2027,7 +1999,7 @@ void	writeSsrOutToFile(
 	for (auto& sat : sats)
 	{
 		auto& entry = nav.satNavMap[sat];
-		
+
 		out << epochNum << "\t";
 		out << sat.id() << "\t";
 		out << entry.ssrOut.ssrEph.canExport<< "\t";
@@ -2058,11 +2030,9 @@ void	writeSsrOutToFile(
 		out << entry.ssrOut.ssrPhasBias.udi			<< "\t";
 		out << entry.ssrOut.ssrCodeBias.iod			<< "\t";
 		out << entry.ssrOut.ssrPhasBias.iod			<< "\t";
-		for (auto& [key, val] : entry.ssrOut.ssrCodeBias.bias)	out << val<< "\t";
-		for (auto& [key, val] : entry.ssrOut.ssrCodeBias.var)	out << val<< "\t";
-		for (auto& [key, val] : entry.ssrOut.ssrPhasBias.bias)	out << val<< "\t";
-		for (auto& [key, val] : entry.ssrOut.ssrPhasBias.var)	out << val<< "\t";
-		
+		for (auto& [key, val] : entry.ssrOut.ssrCodeBias.codeBias_map)	out << val.bias << "\t" << val.var << "\t";
+		for (auto& [key, val] : entry.ssrOut.ssrPhasBias.codeBias_map)	out << val.bias << "\t" << val.var << "\t";
+
 		for (auto& [key, ssrPhaseCh] : entry.ssrOut.ssrPhasBias.ssrPhaseChs)
 		{
 			out << ssrPhaseCh.signalIntInd		<< "\t";
@@ -2076,50 +2046,51 @@ void	writeSsrOutToFile(
 
 void NtripRtcmStream::connectionError(const boost::system::error_code& err, std::string operation)
 {
-	std::stringstream networkJson;
-	networkJson << connectionErrorJson;
-	if( connectionErrorJson.length() != 0 )
-		networkJson << ",";
-		
+	if (acsConfig.output_log == false)
+		return;
+
+	std::ofstream logStream(acsConfig.log_filename, std::ofstream::app);
+
 	auto time = std::chrono::system_clock::to_time_t(system_clock::now());
-	
-	networkJson << "{";
-	//networkJson << "\"Stream\": \"" << url.path.substr(1,url.path.length()) << "\",";
-	networkJson << "\"Time\" : \"" << std::put_time( std::localtime( &time ), "%F %X" ) << "\",";
-	networkJson << "\"BoostSysErrCode\": " << err.value() << ",";
-	networkJson << "\"BoostSysErrMess\": \"" << err.message() << "\",";
-	networkJson << "\"SocketOperation\": \"" << operation << "\"";
-	networkJson << "}";
-	
-	connectionErrorJson = networkJson.str();
-	
+
+	logStream << "{";
+	logStream << "\"label\": \"connectionError\",";
+	logStream << "\"Stream\": \"" << url.path.substr(1,url.path.length()) << "\",";
+	logStream << "\"Time\" : \"" << std::put_time( std::localtime( &time ), "%F %X" ) << "\",";
+	logStream << "\"BoostSysErrCode\": " << err.value() << ",";
+	logStream << "\"BoostSysErrMess\": \"" << err.message() << "\",";
+	logStream << "\"SocketOperation\": \"" << operation << "\"";
+	logStream << "}\n";
 }
 
 void NtripRtcmStream::serverResponse(unsigned int status_code, std::string http_version)
 {
-	std::stringstream networkJson;
-	networkJson << serverResponseJson;
-	if( serverResponseJson.length() != 0 )
-		networkJson << ",";
-	
+	if (acsConfig.output_log == false)
+		return;
+
+	std::ofstream logStream(FileLog::path_log, std::ofstream::app);
+
 	auto time = std::chrono::system_clock::to_time_t(system_clock::now());
-	
-	networkJson << "{";
-	//networkJson << "\"Stream\": \"" << url.path.substr(1,url.path.length()) << "\",";
-	networkJson << "\"Time\" : \"" << std::put_time( std::localtime( &time ), "%F %X" ) << "\",";
-	networkJson << "\"ServerStatus\": " << status_code << ",";
-	networkJson << "\"VersionHTTP\": \"" << http_version << "\"";
-	networkJson << "}";
-	
-	serverResponseJson = networkJson.str();
+
+	logStream << "{";
+	logStream << "\"label\": \"serverResponse\",";
+	logStream << "\"Stream\": \"" << url.path.substr(1,url.path.length()) << "\",";
+	logStream << "\"Time\" : \"" << std::put_time( std::localtime( &time ), "%F %X" ) << "\",";
+	logStream << "\"ServerStatus\": " << status_code << ",";
+	logStream << "\"VersionHTTP\": \"" << http_version << "\"";
+	logStream << "}" << std::endl;
 }
 
 
 
-std::vector<std::string> NtripRtcmStream::getJsonNetworkStatistics(GTime now)
+void NtripRtcmStream::getJsonNetworkStatistics(GTime now)
 {
-	std::vector<std::string> dataJSON;
-	
+	if (acsConfig.output_log == false)
+		return;
+
+	std::ofstream logStream(FileLog::path_log, std::ofstream::app);
+
+
 	// Copy statistics into total run based statics.
 	if (runData.startTime.time == 0)
 	{
@@ -2130,73 +2101,73 @@ std::vector<std::string> NtripRtcmStream::getJsonNetworkStatistics(GTime now)
 		runData		.startTime = start;
 		hourlyData	.startTime = start;
 		epochData	.startTime = start;
-		
+
 		runData.endTime.time = 0;
 		runData.endTime.sec = 0;
-		
+
 		runData.streamName = url.path.substr(1,url.path.length());
 		hourlyData.streamName = runData.streamName;
 		epochData.streamName = runData.streamName;
-		
+
 		// Set the first hours data to zero.
 		GTime tEnd = now;
 		tEnd.time = now.time + 1*60*60;
-		hourlyData.clearStatistics(now,tEnd);		
-		hourlyData.getJsonNetworkStatistics(now);		
+		hourlyData.clearStatistics(now,tEnd);
+		hourlyData.getJsonNetworkStatistics(now,"hourlyData");
 	}
 	else
 	{
 		epochData.startTime = epochData.endTime;
 	}
-	
+
 	epochData.endTime = now;
-    epochData.numPreambleFound		= numPreambleFound;		numPreambleFound	= 0;	//todo aaron, change these to another struct
-    epochData.numFramesFailedCRC	= numFramesFailedCRC;	numFramesFailedCRC	= 0;
-    epochData.numFramesPassCRC		= numFramesPassCRC;		numFramesPassCRC	= 0;
-    epochData.numFramesDecoded		= numFramesDecoded;		numFramesDecoded	= 0;
-    epochData.numNonMessBytes		= numNonMessBytes;		numNonMessBytes		= 0;
+	epochData.numPreambleFound		= numPreambleFound;		numPreambleFound	= 0;	//todo aaron, change these to another struct
+	epochData.numFramesFailedCRC	= numFramesFailedCRC;	numFramesFailedCRC	= 0;
+	epochData.numFramesPassCRC		= numFramesPassCRC;		numFramesPassCRC	= 0;
+	epochData.numFramesDecoded		= numFramesDecoded;		numFramesDecoded	= 0;
+	epochData.numNonMessBytes		= numNonMessBytes;		numNonMessBytes		= 0;
 	epochData.totalLatency			= totalLatency;			totalLatency		= 0;
 	epochData.numMessagesLatency	= numMessagesLatency;	numMessagesLatency	= 0;
-    epochData.disconnectionCount	= disconnectionCount;	disconnectionCount	= 0;
-	
+	epochData.disconnectionCount	= disconnectionCount;	disconnectionCount	= 0;
+
 	// When the connection has cycled within outside an epoch.
 	epochData.connectedDuration = connectedDuration - epochConnectedDuration;
 	epochConnectedDuration = connectedDuration;
-	
+
 	epochData.disconnectedDuration = disconnectedDuration - epochDisconnectedDuration;
 	epochDisconnectedDuration = disconnectedDuration;
-	
+
 	// When the connection cycle is within the epoch transition.
 	if (isConnected)
 	{
 		boost::posix_time::ptime pNow	= boost::posix_time::from_time_t(now.time)
-										+ boost::posix_time::milliseconds((int)now.sec*1000);	
-								
+										+ boost::posix_time::milliseconds((int)now.sec*1000);
+
 		boost::posix_time::ptime pLast	= boost::posix_time::from_time_t(epochData.startTime.time)
 										+ boost::posix_time::milliseconds((int)epochData.startTime.sec*1000);
-								
+
 		boost::posix_time::time_duration epochDur	= pNow - pLast;
 		boost::posix_time::time_duration conDur		= pNow - connectedTime;
-		
+
 		if (conDur < epochDur)
 		{
 			epochData.connectedDuration		+= conDur;
 			epochData.disconnectedDuration	+= epochDur - conDur;
 			epochConnectedDuration			+= conDur;
 			epochDisconnectedDuration		+= epochDur - conDur;
-		}			
+		}
 	}
 	else
 	{
 		boost::posix_time::ptime pNow	= boost::posix_time::from_time_t(now.time)
 										+ boost::posix_time::milliseconds((int)now.sec*1000);
-								
+
 		boost::posix_time::ptime pLast	= boost::posix_time::from_time_t(epochData.startTime.time)
-										+ boost::posix_time::milliseconds((int)epochData.startTime.sec*1000);								
-								
+										+ boost::posix_time::milliseconds((int)epochData.startTime.sec*1000);
+
 		boost::posix_time::time_duration epochDur	= pNow - pLast;
 		boost::posix_time::time_duration disConDur	= pNow - disconnectedTime;
-		
+
 		if (disConDur < epochDur)
 		{
 			epochData.disconnectedDuration	+= disConDur;
@@ -2205,232 +2176,32 @@ std::vector<std::string> NtripRtcmStream::getJsonNetworkStatistics(GTime now)
 			epochConnectedDuration			+= epochDur - disConDur;
 		}
 	}
-		
+
 	epochData.numberChunks			= numberValidChunks + numberErroredChunks;
 	numberValidChunks				= 0;
-    epochData.numberErroredChunks	= numberErroredChunks;
+	epochData.numberErroredChunks	= numberErroredChunks;
 	numberErroredChunks				= 0;
 
 	if (hourlyData.endTime < now)
 	{
-		hourlyData.getJsonNetworkStatistics(now);
+		hourlyData.getJsonNetworkStatistics(now,"hourlyData");
 		GTime tEnd = now;
 		tEnd.time = now.time + 1*60*60;
 		hourlyData.clearStatistics(now,tEnd);
 	}
-	
+
 	hourlyData	.accumulateStatisticsFrom(epochData);
 	runData		.accumulateStatisticsFrom(epochData);
-	
+
 	std::string strJson;
-	strJson = epochData.getJsonNetworkStatistics(now);		dataJSON.push_back(strJson);
-	strJson = hourlyData.previousJSON;						dataJSON.push_back(strJson);	
-	strJson = runData.getJsonNetworkStatistics(now);		dataJSON.push_back(strJson);
-	
-	std::stringstream networkJson;
-	networkJson << "{";
-	networkJson << "\"Stream\": \"" << url.path.substr(1,url.path.length()) << "\",";
-	networkJson << "\"ConnErrors\": [" << connectionErrorJson << "],";
-	networkJson << "\"ServerResponse\": [" << serverResponseJson << "]";
-	networkJson << "}";
-	connectionErrorJson = "";
-	serverResponseJson = "";	
-	dataJSON.push_back(networkJson.str());
-
-	return dataJSON;
+	strJson = epochData.getJsonNetworkStatistics(now,"epochData");		logStream << strJson << std::endl;
+	strJson = hourlyData.previousJSON;									logStream << strJson << std::endl;
+	strJson = runData.getJsonNetworkStatistics(now,"runData");			logStream << strJson << std::endl;
 }
 
-void networkData::accumulateStatisticsFrom(networkData dataToAdd)
+
+
+void NtripRtcmStream::traceMakeNetworkOverview(Trace& trace, NetworkData& netData)
 {
-    numPreambleFound		+= dataToAdd.numPreambleFound;
-    numFramesFailedCRC		+= dataToAdd.numFramesFailedCRC;
-    numFramesPassCRC		+= dataToAdd.numFramesPassCRC;
-    numFramesDecoded		+= dataToAdd.numFramesDecoded;
-    numNonMessBytes			+= dataToAdd.numNonMessBytes;
-	totalLatency			+= dataToAdd.totalLatency;
-	numMessagesLatency		+= dataToAdd.numMessagesLatency;	
-
-    disconnectionCount		+= dataToAdd.disconnectionCount;
-    connectedDuration		+= dataToAdd.connectedDuration;
-    disconnectedDuration	+= dataToAdd.disconnectedDuration;
-	
-    numberErroredChunks		+= dataToAdd.numberErroredChunks; 
-	numberChunks			+= dataToAdd.numberChunks;	
-}
-
-void networkData::clearStatistics(GTime tStart, GTime tEnd)
-{
-	startTime	= tStart;
-	endTime		= tEnd;
-    numPreambleFound	= 0;
-    numFramesFailedCRC	= 0;
-    numFramesPassCRC	= 0;
-    numFramesDecoded	= 0;
-    numNonMessBytes		= 0;
-	totalLatency		= 0;
-	numMessagesLatency	= 0;	
-    disconnectionCount	= 0;
-    
-    connectedDuration		= boost::posix_time::hours(0);
-    disconnectedDuration	= boost::posix_time::hours(0);
-	
-    numberErroredChunks	= 0; 
-	numberChunks		= 0;		
-}
-
-std::string networkData::getJsonNetworkStatistics(GTime now)
-{
-	//if( previousJSON.length() != 0 && endTime.time > now.time )
-	//	return previousJSON;
-
-	
-    std::stringstream networkJson;
-    networkJson << "{";
-    networkJson << "\"Stream\": \"" << streamName << "\",";
-    networkJson << "\"Epoch\": \"" << std::put_time( std::localtime( &now.time ), "%F %X" ) << "\",";
-	networkJson << "\"Start\": \"" << std::put_time( std::localtime( &startTime.time ), "%F %X" ) << "\",";
-	networkJson << "\"Finish\": \"" << std::put_time( std::localtime( &endTime.time ), "%F %X" ) << "\",";	
-    networkJson << "\"Network\": \"" <<  acsConfig.analysis_agency << "\",";
-    networkJson << "\"Downloading\": \"true\",";
-    
-    auto timeNow = boost::posix_time::from_time_t(system_clock::to_time_t(system_clock::now()));
-    boost::posix_time::time_duration totalTime = timeNow - boost::posix_time::from_time_t(startTime.time);
- 
-	
-	double connRatio;
-	if (disconnectionCount == 0 
-		&& numberChunks > 0) 
-	{
-		connRatio = 1;
-	}
-	else
-	{
-		if (totalTime.total_milliseconds() == 0)
-			connRatio = 0;
-		else
-			connRatio = (double)connectedDuration.total_milliseconds() / (double) totalTime.total_milliseconds();
-	}
- 	
-	
-    double meanReconn = 0;
-    if (disconnectionCount != 0)
-        meanReconn = (double)disconnectedDuration.total_milliseconds()/(60.0*1000.0*disconnectionCount);
-
-    networkJson << "\"Disconnects\": " << disconnectionCount << ",";
-    networkJson << "\"MeanDowntime\": " << meanReconn << ",";
-    networkJson << "\"ConnectedRatio\": " << connRatio << ",";
-
-    double chunkRatio = 0;
-    
-    if (numberChunks != 0)
-        chunkRatio = (double)numberErroredChunks/(double)(numberChunks);
-
-    networkJson << "\"Chunks\": "			<< numberChunks			<< ",";
-    networkJson << "\"ChunkErrors\": "		<< numberErroredChunks	<< ",";
-    networkJson << "\"ChunkErrorRatio\": "	<< chunkRatio			<< ",";
-
-    networkJson << "\"RtcmExtraBytes\": "	<< numNonMessBytes		<< ",";
-    networkJson << "\"RtcmFailCrc\": "		<< numFramesFailedCRC	<< ",";
-    networkJson << "\"RtcmPassedCrc\": "	<< numFramesPassCRC		<< ",";
-    networkJson << "\"RtcmDecoded\": "		<< numFramesDecoded		<< ",";
-    networkJson << "\"RtcmPreamble\": "		<< numPreambleFound		<< ",";
-    
-    double FailedToPreambleRatio = 0;
-    if ( numPreambleFound != 0 )
-        FailedToPreambleRatio = (double) numFramesFailedCRC / (double) numPreambleFound;
-    networkJson << "\"RtcmFailedCrcToPreambleRatio\": " << FailedToPreambleRatio << ",";
-	
-	if (numMessagesLatency != 0)
-	{
-		double meanLatency = totalLatency / numMessagesLatency;
-		networkJson << "\"meanLatency\": " << meanLatency;
-	}
-	else
-	{
-		networkJson << "\"meanLatency\": " << 0.0;
-	}
-	
-    networkJson << "}";
-    previousJSON = networkJson.str();
-    return networkJson.str();
-}
-
-void NtripRtcmStream::traceMakeNetworkOverview(Trace& trace)
-{
-	bool printToTerminal = false;
-	
-	
-	std::stringstream message;
-	message << url.path;
-	if	( !isConnected
-		&& disconnectionCount == 0
-		&& (numberValidChunks+disconnectionCount) == 0 )
-	{
-		message << ", Network, Has Not Connected.";
-		message << std::endl;
-		message << std::endl;            
-	}
-	else
-	{
-		
-		message << ", Network, Number Disconnects : " << disconnectionCount;
-		double connRatio = 1;
-		if( disconnectionCount != 0 )
-		{
-			auto timeNow = boost::posix_time::from_time_t(system_clock::to_time_t(system_clock::now()));
-			boost::posix_time::time_duration totalTime = timeNow - startTime;
-			double connRatio = (double)connectedDuration.total_milliseconds() /(double)totalTime.total_milliseconds();
-			double meanReconn = (double)disconnectedDuration.total_milliseconds()/(60.0*1000.0*disconnectionCount);
-			
-			message << ", Mean Re-connection Time (min) : " << meanReconn;
-			message << ", Ratio Connectioned Time : " << connRatio;
-		}
-		if( connRatio < 0.99 )
-			printToTerminal = true;
-		
-		message << std::endl;
-		message << url.path;
-		message << ", Number Chunks : " << numberValidChunks+numberErroredChunks;
-		message << ", Number Errored Chunks : " << numberErroredChunks;
-		
-		double chunkRatio = 0;
-		if ( numberErroredChunks+numberValidChunks != 0 )
-		{
-			chunkRatio = (double)numberErroredChunks/(double)(numberErroredChunks+numberValidChunks);
-			message << ", Ratio Error Chunks : " << chunkRatio;
-		}
-		if( chunkRatio > 0.01 )
-			printToTerminal = true;
-		
-		message << std::endl;
-		message << url.path;        
-		message << ", RTCM Total extra bytes : " << numNonMessBytes;
-		message << ", RTCM Fail CRC : " << numFramesFailedCRC;
-		message << ", RTCM Passed CRC : " << numFramesPassCRC;
-		message << ", RTCM Decoded : " << numFramesDecoded;
-		message << ", RTCM Preamble : " << numPreambleFound;
-		
-		double crcRatio = 0;
-		if ( numPreambleFound != 0 )
-		{
-			crcRatio = (double)numFramesFailedCRC/(double)numPreambleFound;
-			message << ", RTCM Ratio, Fail/Preamble : " << crcRatio;
-		}
-		if( crcRatio > 0.01 )
-			printToTerminal = true;
-		
-		message << std::endl;
-		message << std::endl;
-	}
-	
-	// The variable reduces the amount of printing to the terminal to only
-	// streams with high error.
-	if	( printToTerminal
-		&& print_stream_statistics)
-		BOOST_LOG_TRIVIAL(debug) << message.str();
-	
-	
-	std::string messLine;
-	while(std::getline(message, messLine)) 
-		tracepde(3,trace,messLine+"\n"); 
+	netData.printTraceNetworkStatistics(trace);
 }

@@ -3,13 +3,12 @@
 
 #include <memory>
 
-#include "constants.h"
+#include "eigenIncluder.hpp"
+#include "writeRinex.hpp"
 #include "gTime.hpp"
 #include "snx.hpp"
 #include "ppp.hpp"
 #include "vmf3.h"
-
-#include "eigenIncluder.hpp"
 
 struct RinexStation
 {
@@ -45,6 +44,10 @@ struct StationLogs
 	map<string, int>	satCount;
 };
 
+
+
+
+
 /** Object to maintain receiver station data
 */
 struct Station : IonoStation, StationLogs
@@ -55,6 +58,7 @@ struct Station : IonoStation, StationLogs
 	vmf3_t				vmf3	= {.m = 1};
 
 	ObsList				obsList;					///< Observations available for this station at this epoch
+	PseudoObsList		pseudoObsList;				///< PseudoObservations available for this station at this epoch
 	string				id;							///< Unique name for this station (4 characters)
 
 	double				mjd0[3]			= {}; 		// mjd time for vmf3
@@ -62,20 +66,24 @@ struct Station : IonoStation, StationLogs
 
 	string				traceFilename;
 	
+	RinexOutput			rinexOutput = {};
 	
 	bool		primaryApriori = false;
 	GTime		aprioriTime	= {};
 	Vector3d	aprioriPos	= Vector3d::Zero();		///< station position (ecef) (m)
 	Vector3d	aprioriVar	= Vector3d::Zero();
+	bool		ready = false;
 };
 
-using StationList = list<Station*>;			///< List of station pointers
+using StationMap	= map<string, Station>;		///< Map of all stations
 
 struct Network
 {
 	string traceFilename;
 	string clockFilename;
+	string orbitsFilename;
 	string rtsClockFilename;
+	string biasSINEXFilename;
 	string id				= "NET";
 	KFState kfState			= {};
 };

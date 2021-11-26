@@ -145,7 +145,6 @@ int interat_round(Trace& trace, ARState* ambc)
 int Ztrans_reduction(Trace& trace, ARState* ambc)
 {
 	int siz = ambc->aflt.size();
-	int info = 0;
 	int nhigh = 0;
 	MatrixXd modul = MatrixXd::Identity(siz, siz);
 
@@ -354,7 +353,8 @@ int lambda_search(Trace& trace, ARState* ambc, int opt)
 				ncand = zfixList.size();
 				double maxd = newdist * ambc->ratthr;
 
-				if (maxd < maxdist) maxdist = maxd;
+				if (maxd < maxdist) 
+					maxdist = maxd;
 
 				if (ambc->nset>0 && (ncand >= ambc->nset))
 				{
@@ -365,12 +365,15 @@ int lambda_search(Trace& trace, ARState* ambc, int opt)
 
 						for ( auto& [dis, zcand] : zfixList )
 						{
-							if (ambc->nset>0 && (ntot++ < ambc->nset)) 
+							if (ambc->nset>0 && (ntot++ < ambc->nset))
+							{
 								if 		(dis > maxd ) 		maxd = dis;
 								else if (dis < maxd) 		maxd = dis;
+							}
 						}
 
-						if (maxd < maxdist) maxdist = maxd;
+						if (maxd < maxdist) 
+							maxdist = maxd;
 					}
 
 					for (auto it = zfixList.begin(); it != zfixList.end(); )

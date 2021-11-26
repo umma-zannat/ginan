@@ -9,11 +9,10 @@ input_files:
     atxfiles: [ igs14_2045_plus.atx ]  # Antenna models for receivers and satellites in ANTEX format
     snxfiles: [ "igs*.snx"          ]  # SINEX file for meta data and initial position
     blqfiles: [ OLOAD_GO.BLQ        ]  # ocean loading is applied
-    navfiles: [ brdm1990.19p        ]  # broadcast navigation file
+    #navfiles: [ brdm1990.19p        ]  # broadcast navigation file
     sp3files: [ igs20624.sp3        ]  # satellite orbit files in SP3 format
     clkfiles: [ igs20624.clk_30s    ]  # Clk files
 
-    
 station_data:
 
     root_stations_directory: data/
@@ -39,6 +38,17 @@ output_files:
 
     output_sinex:                   true
     sinex_directory:                ./
+    
+    output_clocks:                  false
+    clocks_directory:               ./
+    clocks_filename:                <CONFIG><LOGTIME>.clk
+
+    output_mongo_measurements:      true
+    output_mongo_states:            true
+    output_mongo_metadata:          false
+    delete_mongo_history:           true
+    mongo_uri:                      mongodb://127.0.0.1:27017
+    mongo_suffix:                   laminar 
 
 output_options:
 
@@ -51,16 +61,17 @@ output_options:
 
 processing_options:
 
-    start_epoch:                2019-07-18 00:00:00
+    #start_epoch:                2019-07-18 23:44:30
     #end_epoch:                  2019-07-18 23:59:30
     epoch_interval:             30          #seconds
     #max_epochs:                 200        #0 is infinite
+    wait_next_epoch:            20
 
     process_modes:
         user:                   true
         network:                false
         minimum_constraints:    false
-        rts:                    false
+        #rts:                    true
         ionosphere:             false
 
     process_sys:
@@ -81,7 +92,7 @@ processing_options:
     antexacs:           true
 
     cycle_slip:
-        thres_slip: 0.05
+        thres_slip:     0.05
 
     max_inno:   0
     max_gdop:   30
@@ -108,7 +119,7 @@ user_filter_parameters:
     rts_directory:              ./
     rts_filename:               PPP-<CONFIG>-<STATION>.rts
 
-    inverter:                   LLT         #LLT LDLT INV
+    inverter:                   LDLT         #LLT LDLT INV
 
 default_filter_parameters:
 

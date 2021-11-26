@@ -31,9 +31,11 @@ module pod_yaml
    type (type_dictionary), pointer :: root_dict, pod_data_dict, pod_options_dict, eqm_options_dict, veq_options_dict
    type (type_dictionary), pointer :: srp_dict, srp_parameters_dict, integ_dict, time_scale_dict, srp_mode_dict
    type (type_dictionary), pointer :: gravity_dict, gravity_model_dict, planets_dict, tides_dict, rel_dict, non_grav_dict
-   type (type_dictionary), pointer :: overrides_dict, pulse_dict
+   type (type_dictionary), pointer :: overrides_dict, pulse_dict, constellations_dict
    logical yml_ext_orbit_enabled, yml_estimate_params, yml_write_sp3_velocities, yml_write_partial_velocities
    logical yml_veq_integration, yml_pulses
+   logical yml_gps_constellation, yml_gal_constellation, yml_glo_constellation, yml_bds_constellation, yml_qzss_constellation
+   logical, allocatable, dimension (:) :: yml_satellites
    integer*4 yml_estimator_procedure, yml_orbit_arc_length
    integer*2 yml_pod_mode
    integer*2 yml_ic_input_format
@@ -239,6 +241,7 @@ subroutine get_yaml(yaml_filepath)
    nullify(integ_dict)
    nullify(time_scale_dict)
    nullify(pulse_dict)
+   nullify(constellations_dict)
 
    my_error_p => my_error
    yml_pod_mode = NO_MODE
@@ -251,6 +254,12 @@ subroutine get_yaml(yaml_filepath)
    sys_override_count = 0
    block_override_count = 0
    prn_override_count = 0
+
+   yml_gps_constellation = .true.
+   yml_gal_constellation = .true.
+   yml_glo_constellation = .true.
+   yml_bds_constellation = .true.
+   yml_qzss_constellation = .true.
 
    write(*,*) 'YAML version:   ',yaml_commit_id,' (',yaml_branch_name,' branch)'
 
@@ -363,6 +372,14 @@ subroutine get_yaml(yaml_filepath)
       yml_estimator_procedure = pod_options_dict%get_integer("estimator_procedure", -1, my_error_p)
       yml_veq_integration = pod_options_dict%get_logical("veq_integration", .false., my_error_p)
 
+      constellations_dict = pod_options_dict%get_dictionary("constellations", .true., my_error_p)
+      ! not an error to not have one. Remain with default of all constellations on
+      if (associated(constellations_dict)) then
+          call get_constellations(constellations_dict, my_error, yml_gps_constellation, &
+                   yml_gal_constellation, yml_glo_constellation, yml_bds_constellation, &
+                   yml_qzss_constellation)
+      end if
+      
       time_scale_dict = pod_options_dict%get_dictionary("time_scale", .true., my_error_p)
 
       if (.not.associated(time_scale_dict)) then
@@ -385,6 +402,7 @@ subroutine get_yaml(yaml_filepath)
       end if
       yml_pulse_parameter_count = get_yaml_pulses(pulse_dict, my_error, yml_pulses, yml_pulse_ref_frame,&
           yml_pulse_offset, yml_pulse_interval, yml_pulse_epoch_number, yml_pulse_parameters)
+      !print *, "yml_pulse_parameter_count =", yml_pulse_parameter_count
 
    end if
 
@@ -618,6 +636,21 @@ subroutine get_yaml(yaml_filepath)
 
 end subroutine get_yaml
 
+subroutine get_constellations(dict, error, gps, gal, glo, bds, qzss)
+   type (type_dictionary) :: dict
+   type (type_error) :: error
+   type (type_error), pointer :: e
+   logical gps, gal, glo, bds, qzss
+   nullify(e)
+
+   gps = dict%get_logical("GPS", .false., e)
+   gal = dict%get_logical("GALILEO", .false., e)
+   glo = dict%get_logical("GLONASS", .false., e)
+   bds = dict%get_logical("BEIDOU", .false., e)
+   qzss = dict%get_logical("QZSS", .false., e)
+
+end subroutine get_constellations
+
 function get_yaml_pulses(dict, error, yml_pulses, yml_pulse_ref_frame,& 
           yml_pulse_offset, yml_pulse_interval, yml_pulse_epoch_number, yml_pulse_parameters)
    type (type_dictionary) :: dict
@@ -652,15 +685,15 @@ function get_yaml_pulses(dict, error, yml_pulses, yml_pulse_ref_frame,&
    if (.not. associated(ref_dict)) then
        error = e
        error%message = "cannot find reference_frame label in pulses config"
-       STOP
+       STOP error%message
    endif
-   yml_pulse_ref_frame = get_reference_system (ref_dict, e)
+   yml_pulse_ref_frame = get_reference_system (ref_dict, error)
 
-   parms_dict = dict%get_dictionary("parameters", .true., e)
+   parms_dict = dict%get_dictionary("directions", .true., e)
    if (.not. associated(parms_dict)) then
        error = e
-       error%message = "cannot find parameters label in pulses config"
-       STOP
+       error%message = "cannot find directions label in pulses config"
+       STOP error%message
    endif
    yml_pulse_parameters = get_pulse_parms(parms_dict, yml_pulse_ref_frame, error)
 
@@ -674,6 +707,7 @@ function get_yaml_pulses(dict, error, yml_pulses, yml_pulse_ref_frame,&
    if (associated(e)) then
        error = e
        error%message = "error reading pulses config"
+       STOP error%message
    end if
 
    return
@@ -689,12 +723,20 @@ function get_pulse_parms(dict, ref_frame, error)
 
    get_pulse_parms = 0
 
-   direction_x = dict%get_logical("direction_x", .false., e)
-   direction_y = dict%get_logical("direction_y", .false., e)
-   direction_z = dict%get_logical("direction_z", .false., e)
-   direction_r = dict%get_logical("direction_r", .false., e)
-   direction_t = dict%get_logical("direction_t", .false., e)
-   direction_n = dict%get_logical("direction_n", .false., e)
+   !if (ref_frame == ORBITAL) then
+   !     print *, "pulse ORBITAL ref frame"
+   !else if (ref_frame == ICRF) then
+   !     print *, "pulse ICRF ref frame"
+   !else 
+   !     STOP "no pulse ref frame"
+   !end if
+
+   direction_x = dict%get_logical("x_direction", .false., e)
+   direction_y = dict%get_logical("y_direction", .false., e)
+   direction_z = dict%get_logical("z_direction", .false., e)
+   direction_r = dict%get_logical("r_direction", .false., e)
+   direction_t = dict%get_logical("t_direction", .false., e)
+   direction_n = dict%get_logical("n_direction", .false., e)
 
    if (direction_x) get_pulse_parms = get_pulse_parms + pow (2, DIR_X - one)
    if (direction_y) get_pulse_parms = get_pulse_parms + pow (2, DIR_Y - one)

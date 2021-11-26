@@ -1,28 +1,33 @@
 '''Ephemeris functions'''
+import os as _os
 import re as _re
-from io import BytesIO as _BytesIO
 
 import numpy as _np
 import pandas as _pd
 
+from ..gn_aux import get_common_index as _get_common_index
 from ..gn_aux import unique_cols as _unique_cols
 from ..gn_datetime import datetime2gpsweeksec as _datetime2gpsweeksec
 from ..gn_datetime import datetime2j2000 as _datetime2j2000
 from ..gn_datetime import datetime2mjd as _datetime2mjd
 from ..gn_datetime import j20002rnxdt as _j20002rnxdt
-from .common import path2bytes
+from ..gn_transform import ecef2eci as _ecef2eci
+from ..gn_transform import eci2rac_rot as _eci2rac_rot
+from ..gn_transform import get_helmert7 as _get_helmert7
+from ..gn_transform import transform7 as _transform7
 from .clk import read_clk as _read_clk
+from .common import path2bytes
 
 _RE_SP3 = _re.compile(rb'^\*(.+)\n((?:[^\*]+)+)',_re.MULTILINE)
 
 # 1st line parser. ^ is start of document, search
 _RE_SP3_HEAD = _re.compile(rb'''^\#(\w)(\w)([\d \.]{28})[ ]+
-                                    (\d+)[ ]+(\w+)[ ]+(\w+)[ ]+
+                                    (\d+)[ ]+([\w\+]+)[ ]+(\w+)[ ]+
                                     (\w+)[ ]+(\w+)''',_re.VERBOSE)
 #SV names. multiline, findall
 _RE_SP3_HEAD_SV = _re.compile(rb'^\+[ ]+(?:[\d]+|)[ ]+((?:[A-Z]\d{2})+)\W',_re.MULTILINE)
 # orbits accuracy codes
-_RE_SP3_ACC = _re.compile(rb'^\+{2}[ ]+((?:[ ]{2}\d{1})+)\W',_re.MULTILINE)
+_RE_SP3_ACC = _re.compile(rb'^\+{2}[ ]+(.{51})\W',_re.MULTILINE)
 # File descriptor and clock
 _RE_SP3_HEAD_FDESCR = _re.compile(rb'\%c[ ](\w{1})[ ]+cc[ ](\w{3})')
 
@@ -110,6 +115,7 @@ def read_sp3(sp3_path):
 
     sp3_df.set_index([dt_index,'SAT'],inplace=True)
     sp3_df.index.names = ([None,None])
+    sp3_df.attrs['path'] = sp3_path
     return sp3_df
 
 def parse_sp3_header(header):
@@ -127,7 +133,7 @@ def parse_sp3_header(header):
     return _pd.concat([sp3_heading,sv_tbl],keys=['HEAD','SV_INFO'],axis=0)
 
 
-def sp3_vel(sp3_df):
+def sp3_vel(sp3_df,deg=35):
     '''takes sp3_df, interpolates the positions for -1s and +1s and outputs velocities'''
     est = sp3_df.unstack(1).EST[['X','Y','Z']]
     x = est.index.values
@@ -136,7 +142,7 @@ def sp3_vel(sp3_df):
     off,scl = mapparm([x.min(), x.max()],[-1,1])
 
     x_new = off + scl*(x)
-    coeff = _np.polyfit(x=x_new,y=y,deg=35)
+    coeff = _np.polyfit(x=x_new,y=y,deg=deg)
 
     x_prev = off + scl*(x-1)
     x_next = off + scl*(x+1)
@@ -155,7 +161,7 @@ def sp3_vel(sp3_df):
     vel_i.columns = [['VELi']*3] + [vel_i.columns.values.tolist()]
     return vel_i
 
-def sp3_vel_ch(sp3_df, len_tails = 3):
+def sp3_vel_ch(sp3_df, len_tails = 3, deg=60):
     '''takes sp3_df, interpolates the positions for -1s and +1s and outputs velocities'''
     est = sp3_df.unstack(1).EST[['X','Y','Z']]
 
@@ -174,7 +180,7 @@ def sp3_vel_ch(sp3_df, len_tails = 3):
 
     off,scl = mapparm([x.min(), x.max()],[-1,1])
     x_new = off + scl*(x)
-    coeff = _np.polynomial.chebyshev.chebfit(x=x_new,y=y,deg=60)
+    coeff = _np.polynomial.chebyshev.chebfit(x=x_new,y=y,deg=deg)
 
     x_prev = off + scl*(x-.001)
     x_next = off + scl*(x+.001)
@@ -216,13 +222,14 @@ def gen_sp3_header(sp3_df):
     sats = sv_tbl.index.to_list() 
     n_sats = sv_tbl.shape[0]
 
-    sats_header = _np.asarray(sats + ['  0']*(17*5 - n_sats),dtype=object).reshape(5,-1).sum(axis=1) + '\n'
+    sats_rows = (n_sats//17)+1 if n_sats>(17*5) else 5 #should be 5 but MGEX need more lines (e.g. CODE sp3)
+    sats_header = _np.asarray(sats + ['  0']*(17*sats_rows - n_sats),dtype=object).reshape(sats_rows,-1).sum(axis=1) + '\n'
 
     sats_header[0] = '+ {:4}   '.format(n_sats) + sats_header[0]
     sats_header[1:] = '+        ' + sats_header[1:]
 
 
-    sv_orb_head = _np.asarray(sv_tbl.astype(str).str.rjust(3).to_list() + ['  0']*(17*5 - n_sats),dtype=object).reshape(5,-1).sum(axis=1) + '\n'
+    sv_orb_head = _np.asarray(sv_tbl.astype(str).str.rjust(3).to_list() + ['  0']*(17*sats_rows - n_sats),dtype=object).reshape(sats_rows,-1).sum(axis=1) + '\n'
 
     sv_orb_head[0] =  '++       '+ sv_orb_head[0]
     sv_orb_head[1:] = '++       '+ sv_orb_head[1:]
@@ -292,3 +299,45 @@ def merge_sp3(sp3_paths,clk_paths=None):
         merged_sp3.EST.CLK = _pd.concat(clk_dfs).EST.AS * 1000000
         
     return merged_sp3
+
+def sp3_hlm_trans(a:_pd.DataFrame,b:_pd.DataFrame)->tuple((_pd.DataFrame,tuple((_np.ndarray,_pd.DataFrame)))):
+    '''Rotates sp3_b into sp3_a. Returns a tuple of updated sp3_b and HLM array with applied computed parameters and residuals'''
+    hlm = _get_helmert7(pt1=a.EST[['X','Y','Z']].values,
+                        pt2=b.EST[['X','Y','Z']].values)
+
+    hlm = (hlm[0],_pd.DataFrame(hlm[1],columns=[['RES']*3,['X','Y','Z']],index = a.index))
+
+    b.iloc[:,:3] = _transform7(xyz_in=b.EST[['X','Y','Z']].values,helmert_list=hlm[0][0])
+    return b, hlm
+
+def diff_sp3_rac(sp3_a,sp3_b,hlm_mode=None):
+    hlm_modes = [None, 'ECF', 'ECI']
+    if hlm_mode not in hlm_modes:
+        raise ValueError(f"Invalid hlm_mode. Expected one of: {hlm_modes}")
+
+    hlm = None #init hlm var
+    common_index = _get_common_index(sp3_a, sp3_b)
+
+    if hlm_mode == 'ECF':
+        sp3_b, hlm = sp3_hlm_trans(sp3_a.loc[common_index],sp3_b.loc[common_index])
+
+    sp3_a_eci = _ecef2eci(sp3_a)
+    sp3_a_eci_vel = _pd.concat([sp3_a_eci,sp3_vel(sp3_df=sp3_a_eci,deg=36)],axis=1)
+    sp3_b_eci = _ecef2eci(sp3_b)
+
+    if hlm_mode == 'ECI':
+        sp3_b_eci, hlm = sp3_hlm_trans(sp3_a_eci.loc[common_index],sp3_b_eci.loc[common_index])
+
+    diff_eci = sp3_a_eci.loc[common_index].EST - sp3_b_eci.loc[common_index].EST
+    nd_rac = diff_eci[['X','Y','Z']].values[:,_np.newaxis] @ _eci2rac_rot(sp3_a_eci_vel.loc[common_index])
+
+    df_rac = _pd.DataFrame(nd_rac.reshape(-1,3),
+                  index = _pd.MultiIndex.from_tuples(common_index),
+                  columns=[['EST_RAC']*3,['Radial','Along-track','Cross-track']])
+
+    df_rac.attrs['sp3_a'] = _os.path.basename(sp3_a.attrs['path'])
+    df_rac.attrs['sp3_b'] = _os.path.basename(sp3_b.attrs['path'])
+    df_rac.attrs['hlm'] = hlm
+    df_rac.attrs['hlm_mode'] = hlm_mode
+
+    return df_rac

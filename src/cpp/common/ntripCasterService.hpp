@@ -6,29 +6,39 @@
 #include <thread> 
 #include <chrono> 
 
+#include <map>
+#include <string>
+#include <vector>
+
+using std::string;
+using std::vector;
+using std::multimap;
+
 
 #include "ntripSourceTable.hpp"
 #include "peaCommitVersion.h"
 #include "acsStream.hpp"
 #include "acsConfig.hpp"
+#include "fileLog.hpp"
 
 extern GTime tsync;
 extern int epoch;
 extern ACSConfig acsConfig;
 
-extern void recordNetworkStatistics(std::multimap<std::string, std::shared_ptr<NtripRtcmStream>> downloadStreamMap );
+void recordNetworkStatistics(multimap<string, std::shared_ptr<NtripRtcmStream>> downloadStreamMap);
 
 
 struct NtripCasterService
 {
-public:
-	std::vector<SourceTableEntry> sourceTableData;
-	std::multimap<std::string, std::shared_ptr<NtripRtcmStream>> downloadStreamMap;
-	std::multimap<std::string,std::string> traceFiles;
-	std::string caster_stream_root;
+	vector<SourceTableEntry>							sourceTableData;
+	multimap<string, std::shared_ptr<NtripRtcmStream>>	downloadStreamMap;
+	multimap<string, string>							traceFiles;
+	string												caster_stream_root;
 	
 	void startPerformanceMonitoring();
 	void makeTraceFiles();
 };
+
+void casterTest();
 
 #endif

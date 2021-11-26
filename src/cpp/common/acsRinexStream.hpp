@@ -2,6 +2,10 @@
 #ifndef __RINEX_STREAM__HPP
 #define __RINEX_STREAM__HPP
 
+
+#include "acsObsStream.hpp"
+#include "acsNavStream.hpp"
+
 #include "rinex.hpp"
 
 /** Interface for rinex streams

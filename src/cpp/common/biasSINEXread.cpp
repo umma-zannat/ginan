@@ -3,6 +3,7 @@
 
 #include "GNSSambres.hpp"
 #include "biasSINEX.hpp"
+#include "constants.hpp"
 #include "enums.h"
 
 #define SSR_CBIA_VALID 3600.0
@@ -34,15 +35,14 @@ E_ObsCode str2code(
 	E_MeasType&	measType,
 	double&		lam)
 {
-	const char* buff = input.c_str();
 	char cods[] = "Lxx";
-	cods[1] = buff[1];
-	cods[2] = buff[2];
+	cods[1] = input[1];
+	cods[2] = input[2];
 
 	E_ObsCode code = E_ObsCode::NONE;
 
-	if 		(buff[0] == 'L') 	measType = PHAS;
-	else if (buff[0] == 'C') 	measType = CODE;
+	if 		(input[0] == 'L') 	measType = PHAS;
+	else if (input[0] == 'C') 	measType = CODE;
 	else
 	{
 		measType = CODE;
@@ -77,7 +77,7 @@ GTime sinex_time_text(
 	{
 		ep[0] = year;
 		time = epoch2time(ep);
-		time = timeadd(time, 86400 * (doy - 1) + tod);
+		time = time + 86400 * (doy - 1) + tod;
 	}
 
 	return time;
@@ -345,7 +345,7 @@ bool getOSBBias(
 	//get the map of OSB biases for this ID and obsCode
 	//OSB biases will only have one obsCode
 
-// 	auto& biasMap = SINEXBiases[measType][id][obsCode][E_ObsCode::NONE];	//todo use a try{at().at.at()}
+// 	auto& biasMap = SINEXBiases[measType][id][obsCode][E_ObsCode::NONE];
 	try
 	{
 		auto& biasMap = SINEXBiases[measType].at(id).at(obsCode).at(E_ObsCode::NONE);
@@ -361,7 +361,7 @@ bool getOSBBias(
 		auto& [startTime, bias] = *biasIt;
 
 		if	( bias.tfin.time == 0
-			||timediff(bias.tfin, time) <= 0)
+			||bias.tfin >= time)
 		{
 			//end time is satisfactory
 			output = bias;
@@ -382,7 +382,7 @@ void setRestrictiveStartTime(
 	GTime& current,
 	GTime& potential)
 {
-	if (timediff(current, potential) > 0)
+	if (current > potential)
 	{
 		current = potential;
 	}
@@ -393,7 +393,7 @@ void setRestrictiveEndTime(
 	GTime& potential)
 {
 	if	( current.time == 0
-		||timediff(current, potential) < 0)
+		||current < potential)
 	{
 		current = potential;
 	}
@@ -549,11 +549,13 @@ void inpt_hard_bias(
 
 			if	(  opt.COD_biases
 				&& ssrbias.t0.time > 0
-				&& fabs(timediff(time, ssrbias.t0)) < SSR_CBIA_VALID
-				&& ssrbias.bias.find(obsCode) != ssrbias.bias.end())
+				&& fabs(time - ssrbias.t0) < SSR_CBIA_VALID
+				&& ssrbias.codeBias_map.find(obsCode) != ssrbias.codeBias_map.end())
 			{
-				bias[CODE] += -ssrbias.bias	[obsCode];
-				var [CODE] +=  ssrbias.var	[obsCode];
+				auto& ssrBiasEntry = ssrbias.codeBias_map[obsCode];
+				
+				bias[CODE] += -ssrBiasEntry.bias;
+				var [CODE] +=  ssrBiasEntry.var;
 			}
 		}
 
@@ -564,11 +566,13 @@ void inpt_hard_bias(
 
 			if	(  opt.PHS_biases
 				&& ssrbias.t0.time > 0
-				&& fabs(timediff(time, ssrbias.t0)) < SSR_PBIA_VALID
-				&& ssrbias.bias.find(obsCode) != ssrbias.bias.end())
+				&& fabs(time - ssrbias.t0) < SSR_PBIA_VALID
+				&& ssrbias.codeBias_map.find(obsCode) != ssrbias.codeBias_map.end())
 			{
-				bias[PHAS] += -ssrbias.bias	[obsCode];
-				var [PHAS] +=  ssrbias.var	[obsCode];
+				auto& ssrBiasEntry = ssrbias.codeBias_map[obsCode];
+				
+				bias[PHAS] += -ssrBiasEntry.bias;
+				var [PHAS] +=  ssrBiasEntry.var;
 			}
 		}
 	}

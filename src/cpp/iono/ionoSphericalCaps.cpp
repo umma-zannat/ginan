@@ -183,20 +183,20 @@ returns 1 if the IPP is within the area of coverage
 -----------------------------------------------------
 Author: Ken Harima @ RMIT 01 August 2020
 -----------------------------------------------------*/
-extern int Ipp_check_sphcap(GTime time, double* Ion_pp)
+int Ipp_check_sphcap(GTime time, double* Ion_pp)
 {
-
 	double pos[3], rpp[3], rrot[3];
 	pos[0] = Ion_pp[0];
 	pos[1] = Ion_pp[1];
 	pos[2] = acsConfig.ionFilterOpts.layer_heights[0];
 	pos2ecef(pos, rpp);
-	matmul("NN", 3, 1, 3, 1.0, scap_rotmtx, rpp, 0.0, rrot);
+	matmul("NN", 3, 1, 3, 1, scap_rotmtx, rpp, 0, rrot);
 	ecef2pos(rrot, pos);
 
 	Ion_pp[0] = PI / 2 - pos[0];			/* colatitude for spherical harmonic caps */
 
-	if (Ion_pp[0] > scap_maxlat) return 0;
+	if (Ion_pp[0] > scap_maxlat) 
+		return 0;
 
 	Ion_pp[1] = pos[1];
 	return 1;
@@ -212,9 +212,10 @@ ion_coef_sphcap: Evaluates spherical cap harmonics basis functions
 		angIPP				- Angular gain for Ionosphere Piercing Point
 	bool slant		I		false: output coefficient for Vtec, true: output coefficient for delay
 ----------------------------------------------------------------------------*/
-extern double ion_coef_sphcap(int ind, Obs& obs, bool slant)
+double ion_coef_sphcap(int ind, Obs& obs, bool slant)
 {
-	if (ind >= Scp_Basis_list.size()) return 0.0;
+	if (ind >= Scp_Basis_list.size()) 
+		return 0;
 
 	Scp_Basis& basis = Scp_Basis_list[ind];
 
@@ -222,8 +223,8 @@ extern double ion_coef_sphcap(int ind, Obs& obs, bool slant)
 
 	double out;
 
-	if (basis.parity) out = legr * sin(basis.order * obs.lonIPP[basis.hind]);
-	else out = legr * cos(basis.order * obs.lonIPP[basis.hind]);
+	if (basis.parity)	out = legr * sin(basis.order * obs.lonIPP[basis.hind]);
+	else				out = legr * cos(basis.order * obs.lonIPP[basis.hind]);
 
 	if (slant)
 	{
@@ -241,7 +242,7 @@ ion_vtec_sphcap: Estimate Ionosphere VTEC using Spherical Cap Harmonic models
 	vari				O		variance of VTEC
 returns: VETC at piercing point
 ----------------------------------------------------------------------------*/
-extern double ion_vtec_sphcap(
+double ion_vtec_sphcap(
     GTime time,
     double* Ion_pp,
     int layer,
@@ -250,8 +251,8 @@ extern double ion_vtec_sphcap(
 {
 	if (!Ipp_check_sphcap(time, Ion_pp))
 	{
-		vari = 0.0;
-		return 0.0;
+		vari = 0;
+		return 0;
 	}
 
 	vari = 0;
@@ -259,13 +260,14 @@ extern double ion_vtec_sphcap(
 	Obs tmpobs;
 	tmpobs.latIPP[layer] = Ion_pp[0];
 	tmpobs.lonIPP[layer] = Ion_pp[1];
-	tmpobs.angIPP[layer] = 1.0;
+	tmpobs.angIPP[layer] = 1;
 
 	for (int ind = 0; ind < acsConfig.ionFilterOpts.NBasis; ind++)
 	{
 		Scp_Basis& basis = Scp_Basis_list[ind];
 
-		if (basis.hind != layer) continue;
+		if (basis.hind != layer)
+			continue;
 
 		double coef = ion_coef_sphcap(ind, tmpobs, false);
 
@@ -273,7 +275,8 @@ extern double ion_vtec_sphcap(
 		keyC.type	= KF::IONOSPHERIC;
 		keyC.num	= ind;
 
-		double staval = 0, stastd = 0;
+		double staval = 0;
+		double stastd = 0;
 		kfState.getKFValue(keyC, staval, &stastd);
 
 		iono += 	coef * staval;
@@ -294,7 +297,7 @@ configure_iono_model_sphcap: Initializes Spherical caps Ionosphere model
 	-  acsConfig.ionoOpts.func_order:	  Legendre function order
 	-  acsConfig.ionoOpts.layer_heights: Ionosphere layer Heights
 ----------------------------------------------------------------------------*/
-extern int configure_iono_model_sphcap(void)
+int configure_iono_model_sphcap(void)
 {
 	double latc = acsConfig.ionFilterOpts.lat_center * D2R;
 	double lonc = acsConfig.ionFilterOpts.lon_center * D2R;

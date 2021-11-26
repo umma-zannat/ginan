@@ -20,28 +20,27 @@
 #include "eigenIncluder.hpp"
 #include "streamTrace.hpp"
 #include "navigation.hpp"
-#include "constants.h"
+#include "constants.hpp"
 #include "algebra.hpp"
 #include "common.hpp"
 #include "enums.h"
 
 
-/* test excluded satellite -----------------------------------------------------
-* test excluded satellite
-* args   : int    sat       I   satellite number
-*          int    svh       I   sv health flag
-*          prcopt_t *opt    I   processing options (NULL: not used)
-* return : status (1:excluded,0:not excluded)
-*-----------------------------------------------------------------------------*/
-extern int satexclude(SatSys& Sat, int svh)
+/* test to exclude satellite
+*/
+int satexclude(
+	SatSys&	Sat, 		///< Satellite
+	E_Svh	svh)		///< SV Health
 {
-	if (svh < 0)
+	int svh_i = svh;
+	
+	if (svh_i < 0)
 		return 1; /* ephemeris unavailable */
 
 	if (Sat.sys == +E_Sys::QZS)
-		svh&=0xFE; /* mask QZSS LEX health */
+		svh_i &= 0xFE; /* mask QZSS LEX health */
 
-	if (svh > 0)
+	if (svh_i > 0)
 	{
 //         trace(3,"unhealthy satellite: sat=%3d svh=%02X\n", Sat, svh);
 		return 1;
@@ -49,17 +48,14 @@ extern int satexclude(SatSys& Sat, int svh)
 	return 0;
 }
 
-/* YMDHMS to Julian Day --------------------------------------------------------
-*
-* args     :       const double time[6]   I       civil date time [YMDHMS]
-*
+/** YMDHMS to Julian Day   
 * return   :       julian day
-*
-* reference:       [3]
-*----------------------------------------------------------------------------*/
-double ymdhms2jd(const double time[6])
+*/
+double ymdhms2jd(
+	const double time[6])	///< civil date time [YMDHMS]
 {
-	double i,j;
+	double i;
+	double j;
 
 	double yr	= time[0];
 	double mon	= time[1];
@@ -91,14 +87,17 @@ double ymdhms2jd(const double time[6])
 * return : crc-24Q parity
 * notes  : see reference [2] A.4.3.3 Parity
 *-----------------------------------------------------------------------------*/
-unsigned int crc24q(const unsigned char *buff, int len)
+unsigned int crc24q(
+	const unsigned char *buff, 
+	int len)
 {
-	unsigned int crc=0;
-	int i;
+//	trace(4,"%s: len=%d\n",__FUNCTION__, len);
+	
+	unsigned int crc = 0;
 
-//     trace(4,"crc24q: len=%d\n",len);
-
-	for (i=0;i<len;i++) crc=((crc<<8)&0xFFFFFF)^tbl_CRC24Q[(crc>>16)^buff[i]];
+	for (int i=0;i<len;i++) 
+		crc = ((crc<<8) & 0xFFFFFF) ^ tbl_CRC24Q[(crc >> 16) ^ buff[i]];
+	
 	return crc;
 }
 
@@ -191,16 +190,16 @@ int getbitsInc(
 
 void pos2ecef(const double *pos, double *r)
 {
-	double sinp=sin(pos[0]);
-	double cosp=cos(pos[0]);
-	double sinl=sin(pos[1]);
-	double cosl=cos(pos[1]);
-	double e2=FE_WGS84*(2.0-FE_WGS84);
-	double v=RE_WGS84/sqrt(1.0-e2*sinp*sinp);
+	double sinp	= sin(pos[0]);
+	double cosp	= cos(pos[0]);
+	double sinl	= sin(pos[1]);
+	double cosl	= cos(pos[1]);
+	double e2	= FE_WGS84 * (2 - FE_WGS84);
+	double v	= RE_WGS84 / sqrt(1 - e2 * sinp * sinp);
 
-	r[0]=(v+pos[2])*cosp*cosl;
-	r[1]=(v+pos[2])*cosp*sinl;
-	r[2]=(v*(1.0-e2)+pos[2])*sinp;
+	r[0] = (v+pos[2])			* cosp * cosl;
+	r[1] = (v+pos[2])			* cosp * sinl;
+	r[2] = (v*(1-e2)+pos[2])	* sinp;
 }
 
 /* transform ecef to geodetic postion ------------------------------------------
@@ -210,46 +209,52 @@ void pos2ecef(const double *pos, double *r)
 * return : none
 * notes  : WGS84, ellipsoidal height
 *-----------------------------------------------------------------------------*/
-extern void ecef2pos(const double *r, double *pos)
+void ecef2pos(
+	const double *r, 
+	double *pos)
 {
-	double e2=FE_WGS84*(2.0-FE_WGS84);
-	double r2=dot(r,r,2);
+	double e2	= FE_WGS84 * (2 - FE_WGS84);
+	double r2	= dot(r,r,2);
+	double v	= RE_WGS84;
 	double z;
 	double zk;
-	double v=RE_WGS84;
 	double sinp;
 
-	for (z=r[2],zk=0.0;fabs(z-zk)>=1E-4;)
+	for (z = r[2], zk = 0; fabs(z-zk) >= 1E-4; )
 	{
-		zk=z;
-		sinp=z/sqrt(r2+z*z);
-		v=RE_WGS84/sqrt(1.0-e2*sinp*sinp);
-		z=r[2]+v*e2*sinp;
+		zk		= z;
+		sinp	= z / sqrt(r2 + SQR(z));
+		v		= RE_WGS84 / sqrt(1 - e2 * SQR(sinp));
+		z		= r[2] + v * e2 * sinp;
 	}
-	pos[0]=r2>1E-12?atan(z/sqrt(r2)):(r[2]>0.0?PI/2.0:-PI/2.0);
-	pos[1]=r2>1E-12?atan2(r[1],r[0]):0.0;
-	pos[2]=sqrt(r2+z*z)-v;
+	pos[0] = r2 > 1E-12 ? atan(z/sqrt(r2)) : (r[2] > 0 ? PI/2: -PI/2);
+	pos[1] = r2 > 1E-12 ? atan2(r[1],r[0]) : 0;
+	pos[2] = sqrt(r2 + SQR(z)) - v;
 }
-extern void ecef2pos(Vector3d& r, double *pos)
+
+void ecef2pos(
+	Vector3d& r, 
+	double *pos)
 {
-	double e2=FE_WGS84*(2.0-FE_WGS84);
-	double r2=SQR(r(0))+SQR(r(1));
+	double e2	= FE_WGS84 * (2-FE_WGS84);
+	double r2	= SQR(r(0)) +SQR(r(1));
+	double v	= RE_WGS84;
 	double z;
 	double zk;
-	double v=RE_WGS84;
 	double sinp;
 
-	for (z=r(2),zk=0.0;fabs(z-zk)>=1E-4;)
+	for (z = r[2], zk = 0; fabs(z-zk) >= 1E-4; )
 	{
-		zk=z;
-		sinp=z/sqrt(r2+z*z);
-		v=RE_WGS84/sqrt(1.0-e2*sinp*sinp);
-		z=r(2)+v*e2*sinp;
+		zk		= z;
+		sinp	= z / sqrt(r2 + SQR(z));
+		v		= RE_WGS84 / sqrt(1 - e2 * SQR(sinp));
+		z		= r[2] + v * e2 * sinp;
 	}
-	pos[0]=r2>1E-12?atan(z/sqrt(r2)):(r(2)>0.0?PI/2.0:-PI/2.0);
-	pos[1]=r2>1E-12?atan2(r[1],r[0]):0.0;
-	pos[2]=sqrt(r2+z*z)-v;
+	pos[0] = r2 > 1E-12 ? atan(z/sqrt(r2)) : (r[2] > 0 ? PI/2: -PI/2);
+	pos[1] = r2 > 1E-12 ? atan2(r[1],r[0]) : 0;
+	pos[2] = sqrt(r2 + SQR(z)) - v;
 }
+
 /* ecef to local coordinate transfromation matrix ------------------------------
 * compute ecef to local coordinate transfromation matrix
 * args   : double *pos      I   geodetic position {lat,lon} (rad)
@@ -257,7 +262,9 @@ extern void ecef2pos(Vector3d& r, double *pos)
 * return : none
 * notes  : matirix stored by column-major order (fortran convention)
 *-----------------------------------------------------------------------------*/
-extern void xyz2enu(const double *pos, double *E)
+void xyz2enu(
+	const double *pos,
+	double *E)
 {
 	double sinp = sin(pos[0]);
 	double cosp = cos(pos[0]);
@@ -268,6 +275,7 @@ extern void xyz2enu(const double *pos, double *E)
 	E[1] = -sinp * cosl;	E[4] = -sinp * sinl;	E[7] = +cosp;
 	E[2] = +cosp * cosl;	E[5] = +cosp * sinl;	E[8] = +sinp;
 }
+
 /* transform ecef vector to local tangental coordinate -------------------------
 * transform ecef vector to local tangental coordinate
 * args   : double *pos      I   geodetic position {lat,lon} (rad)
@@ -275,13 +283,17 @@ extern void xyz2enu(const double *pos, double *E)
 *          double *e        O   vector in local tangental coordinate {e,n,u}
 * return : none
 *-----------------------------------------------------------------------------*/
-extern void ecef2enu(const double *pos, const double *r, double *e)
+void ecef2enu(
+	const double *pos,
+	const double *r, 
+	double *e)
 {
 	double E[9];
 
 	xyz2enu(pos,E);
 	matmul("NN",3,1,3,1.0,E,r,0.0,e);
 }
+
 /* transform local vector to ecef coordinate -----------------------------------
 * transform local tangental coordinate vector to ecef
 * args   : double *pos      I   geodetic position {lat,lon} (rad)
@@ -289,34 +301,48 @@ extern void ecef2enu(const double *pos, const double *r, double *e)
 *          double *r        O   vector in ecef coordinate {x,y,z}
 * return : none
 *-----------------------------------------------------------------------------*/
-extern void enu2ecef(const double *pos, const double *e, double *r)
+void enu2ecef(const double *pos, const double *e, double *r)
 {
 	double E[9];
 
 	xyz2enu(pos,E);
 	matmul("TN",3,1,3,1.0,E,e,0.0,r);
 }
+
 /* coordinate rotation matrix ------------------------------------------------*/
-#define Rx(t,X) do { \
-	(X)[0]=1.0; (X)[1]=(X)[2]=(X)[3]=(X)[6]=0.0; \
-	(X)[4]=(X)[8]=cos(t); (X)[7]=sin(t); (X)[5]=-(X)[7]; \
+#define Rx(t,X) do {				\
+	double sint = sin(t);			\
+	(X)[0]=1;						\
+	(X)[1]=(X)[2]=(X)[3]=(X)[6]=0; 	\
+	(X)[4]=(X)[8]=cos(t);			\
+	(X)[7]=+sin(t); 				\
+	(X)[5]=-sint; 					\
 } while (0)
 
-#define Ry(t,X) do { \
-	(X)[4]=1.0; (X)[1]=(X)[3]=(X)[5]=(X)[7]=0.0; \
-	(X)[0]=(X)[8]=cos(t); (X)[2]=sin(t); (X)[6]=-(X)[2]; \
+#define Ry(t,X) do {				\
+	double sint = sin(t);			\
+	(X)[4]=1;						\
+	(X)[1]=(X)[3]=(X)[5]=(X)[7]=0;	\
+	(X)[0]=(X)[8]=cos(t); 			\
+	(X)[2]=+sint;					\
+	(X)[6]=-sint;					\
 } while (0)
 
-#define Rz(t,X) do { \
-	(X)[8]=1.0; (X)[2]=(X)[5]=(X)[6]=(X)[7]=0.0; \
-	(X)[0]=(X)[4]=cos(t); (X)[3]=sin(t); (X)[1]=-(X)[3]; \
+#define Rz(t,X) do {				\
+	double sint = sin(t);			\
+	(X)[8]=1;						\
+	(X)[2]=(X)[5]=(X)[6]=(X)[7]=0;	\
+	(X)[0]=(X)[4]=cos(t);			\
+	(X)[3]=+sint;					\
+	(X)[1]=-sint;					\
 } while (0)
 
 /* astronomical arguments: f={l,l',F,D,OMG} (rad) ----------------------------*/
 void ast_args(double t, double *f)
 {
 	const double fc[][5]=
-	{	/* coefficients for iau 1980 nutation */
+	{	
+		/* coefficients for iau 1980 nutation */
 		{ 134.96340251, 1717915923.2178,  31.8792,  0.051635, -0.00024470},
 		{ 357.52910918,  129596581.0481,  -0.5532,  0.000136, -0.00001149},
 		{  93.27209062, 1739527262.8478, -12.7512, -0.001037,  0.00000417},
@@ -324,22 +350,29 @@ void ast_args(double t, double *f)
 		{ 125.04455501,   -6962890.2665,   7.4722,  0.007702, -0.00005939}
 	};
 	double tt[4];
-	int i,j;
-
+	
+	int i;
 	for (tt[0] = t, i = 1; i < 4; i++)
 		tt[i] = tt[i-1] * t;
-	for (i = 0; i < 5; i++)
+	
+	for (int i = 0; i < 5; i++)
 	{
 		f[i] = fc[i][0] * 3600;
-		for (j=0;j<4;j++)
+		
+		for (int j = 0; j < 4; j++)
 			f[i] += fc[i][j+1] * tt[j];
+		
 		f[i] = fmod(f[i] * AS2R, 2 * PI);
 	}
 }
 /* iau 1980 nutation ---------------------------------------------------------*/
-void nut_iau1980(double t, const double *f, double *dpsi, double *deps)
+void nut_iau1980(
+	double			t, 
+	const double*	f, 
+	double&			dpsi,
+	double&			deps)
 {
-	const double nut[106][10]=
+	const double nut[106][10] =
 	{
 		{   0,   0,   0,   0,   1, -6798.4, -171996, -174.2, 92025,   8.9},
 		{   0,   0,   2,  -2,   2,   182.6,  -13187,   -1.6,  5736,  -3.1},
@@ -448,101 +481,92 @@ void nut_iau1980(double t, const double *f, double *dpsi, double *deps)
 		{  -1,  -1,   0,   2,   1,    35.0,       1,    0.0,     0,   0.0},
 		{   0,   1,   0,   1,   0,    27.3,       1,    0.0,     0,   0.0}
 	};
-	double ang;
-	int i,j;
+	
+	dpsi = 0;
+	deps = 0;
 
-	*dpsi = 0;
-	*deps = 0;
-
-	for (i = 0; i < 106; i++)
+	for (int i = 0; i < 106; i++)
 	{
-		ang=0.0;
-		for (j=0;j<5;j++)
-			ang+=nut[i][j]*f[j];
-		*dpsi += (nut[i][6] + nut[i][7] * t) * sin(ang);
-		*deps += (nut[i][8] + nut[i][9] * t) * cos(ang);
+		double ang = 0;
+		for (int j = 0; j < 5; j++)
+			ang += nut[i][j] * f[j];
+		
+		dpsi += (nut[i][6] + nut[i][7] * t) * sin(ang);
+		deps += (nut[i][8] + nut[i][9] * t) * cos(ang);
 	}
-	*dpsi *= 1E-4 * AS2R; /* 0.1 mas -> rad */
-	*deps *= 1E-4 * AS2R;
+	
+	dpsi *= 1E-4 * AS2R; /* 0.1 mas -> rad */
+	deps *= 1E-4 * AS2R;
 }
-/* eci to ecef transformation matrix -------------------------------------------
-* compute eci to ecef transformation matrix
-* args   : gtime_t tutc     I   time in utc
-*          double *erpv     I   erp values {xp,yp,ut1_utc,lod} (rad,rad,s,s/d)
-*          double *U        O   eci to ecef transformation matrix (3 x 3)
-*          double *gmst     IO  greenwich mean sidereal time (rad)
-*                               (NULL: no output)
-* return : none
-* note   : see ref [3] chap 5
-*          not thread-safe
-*-----------------------------------------------------------------------------*/
-void eci2ecef(GTime tutc, const double *erpv, double *U, double *gmst)
+
+/** eci to ecef transformation matrix
+*/
+void eci2ecef(
+	const GTime		tutc,	///< time in utc
+	const double*	erpv,	///< erp values {xp,yp,ut1_utc,lod} (rad,rad,s,s/d)
+	Matrix3d&		U,		///< eci to ecef transformation matrix (3 x 3)
+	double*			gmst)	///< greenwich mean sidereal time (rad)
 {
-	const double ep2000[]={2000,1,1,12,0,0};
-	GTime tutc_;
-	double U_[9],gmst_;
-	GTime tgps;
-	double eps,ze,th,z,t,t2,t3,dpsi,deps,gast,f[5];
-	double R1[9],R2[9],R3[9],R[9],W[9],N[9],P[9],NP[9];
-	int i;
+	const double ep2000[] = {2000, 1, 1, 12, 0, 0};
 
-//     trace(4,"eci2ecef: tutc=%s\n", tutc.to_string(0).c_str());
-
-	if (0&&fabs(timediff(tutc,tutc_))<0.01)
-	{ /* read cache */
-		for (i=0;i<9;i++) U[i]=U_[i];
-		if (gmst) *gmst=gmst_;
-		return;
-	}
-	tutc_=tutc;
+//	trace(4,"%s: tutc=%s\n", __FUNCTION__, tutc.to_string(0).c_str());
 
 	/* terrestrial time */
-	tgps=utc2gpst(tutc_);
-	t=(timediff(tgps,epoch2time(ep2000))+19.0+32.184)/86400.0/36525.0;
-	t2=t*t; t3=t2*t;
+	GTime	tutc_	= tutc;
+	GTime	tgps	= utc2gpst(tutc_);
+	double	t		= (tgps - epoch2time(ep2000) + 19 + 32.184) / 86400 / 36525;	//measured in centuries
+	double	t2 = t	* t; 
+	double	t3 = t2	* t;
 
 	/* astronomical arguments */
-	ast_args(t,f);
+	double f[5];
+	ast_args(t, f);
 
 	/* iau 1976 precession */
-	ze=(2306.2181*t+0.30188*t2+0.017998*t3)*AS2R;
-	th=(2004.3109*t-0.42665*t2-0.041833*t3)*AS2R;
-	z =(2306.2181*t+1.09468*t2+0.018203*t3)*AS2R;
-	eps=(84381.448-46.8150*t-0.00059*t2+0.001813*t3)*AS2R;
-	Rz(-z,R1); Ry(th,R2); Rz(-ze,R3);
-	matmul("NN",3,3,3,1.0,R1,R2,0.0,R);
-	matmul("NN",3,3,3,1.0,R, R3,0.0,P); /* P=Rz(-z)*Ry(th)*Rz(-ze) */
+	double ze	= (				+ 2306.2181	* t + 0.30188 * t2 + 0.017998 * t3) * AS2R;
+	double th	= (				+ 2004.3109	* t - 0.42665 * t2 - 0.041833 * t3) * AS2R;
+	double z	= (				+ 2306.2181	* t + 1.09468 * t2 + 0.018203 * t3) * AS2R;
+	double eps	= (84381.448	-   46.8150	* t	- 0.00059 * t2 + 0.001813 * t3) * AS2R;
+	
+	Matrix3d R1;
+	Matrix3d R2;
+	Matrix3d R3;
+	
+	Rz(-z,	R1.data());
+	Ry(th,	R2.data());
+	Rz(-ze,	R3.data());
+	
+	Matrix3d P = R1 * R2 * R3;		// P = Rz(-z) * Ry(th) * Rz(-ze)
 
 	/* iau 1980 nutation */
-	nut_iau1980(t,f,&dpsi,&deps);
-	Rx(-eps-deps,R1); Rz(-dpsi,R2); Rx(eps,R3);
-	matmul("NN",3,3,3,1.0,R1,R2,0.0,R);
-	matmul("NN",3,3,3,1.0,R ,R3,0.0,N); /* N=Rx(-eps)*Rz(-dspi)*Rx(eps) */
+	double dpsi;
+	double deps;
+	nut_iau1980(t, f, dpsi, deps);
+	
+	Rx(-eps-deps,	R1.data());
+	Rz(-dpsi,		R2.data());
+	Rx(eps,			R3.data());
+	
+	Matrix3d N = R1 * R2 * R3;		// N = Rx(-eps) * Rz(-dspi) * Rx(eps)
 
 	/* greenwich aparent sidereal time (rad) */
-	gmst_=utc2gmst(tutc_,erpv[2]);
-	gast=gmst_+dpsi*cos(eps);
-	gast+=(0.00264*sin(f[4])+0.000063*sin(2.0*f[4]))*AS2R;
+	double gmst_	= utc2gmst(tutc_, erpv[2]);
+	double gast		= gmst_ + dpsi * cos(eps)
+					+ (0.00264 * sin(f[4]) + 0.000063 * sin(2 * f[4])) * AS2R;
 
 	/* eci to ecef transformation matrix */
-	Ry(-erpv[0],R1); Rx(-erpv[1],R2); Rz(gast,R3);
-	matmul("NN",3,3,3,1.0,R1,R2,0.0,W );
-	matmul("NN",3,3,3,1.0,W ,R3,0.0,R ); /* W=Ry(-xp)*Rx(-yp) */
-	matmul("NN",3,3,3,1.0,N ,P ,0.0,NP);
-	matmul("NN",3,3,3,1.0,R ,NP,0.0,U_); /* U=W*Rz(gast)*N*P */
-
-	for (i=0;i<9;i++) U[i]=U_[i];
-	if (gmst) *gmst=gmst_;
-
-//     trace(5,"gmst=%.12f gast=%.12f\n",gmst_,gast);
-//     trace(5,"P=\n"); tracemat(5,P,3,3,15,12);
-//     trace(5,"N=\n"); tracemat(5,N,3,3,15,12);
-//     trace(5,"W=\n"); tracemat(5,W,3,3,15,12);
-//     trace(5,"U=\n"); tracemat(5,U,3,3,15,12);
+	Ry(-erpv[0],	R1.data());
+	Rx(-erpv[1],	R2.data()); 
+	Rz(gast,		R3.data());
+	
+	U = R1 * R2 * R3 * N * P;				// U = Ry(-xp) * Rx(-yp) * Rz(gast) * N * P 
+	
+	if (gmst) 
+		*gmst = gmst_;
 }
 
 /* read blq record -----------------------------------------------------------*/
-int readblqrecord(FILE *fp, double *odisp)
+int readblqrecord(FILE *fp, double *otlDisplacement)
 {
 	double v[11];
 	char buff[256];
@@ -552,11 +576,13 @@ int readblqrecord(FILE *fp, double *odisp)
 	{
 		if (!strncmp(buff,"$$",2))
 			continue;
-		if (sscanf(buff,"%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
-				v,v+1,v+2,v+3,v+4,v+5,v+6,v+7,v+8,v+9,v+10)<11)
+		
+		if (sscanf(buff,"%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf", v,v+1,v+2,v+3,v+4,v+5,v+6,v+7,v+8,v+9,v+10)<11)
 			continue;
+		
 		for (i=0;i<11;i++)
-			odisp[n+i*6]=v[i];
+			otlDisplacement[n+i*6]=v[i];
+		
 		if (++n==6)
 			return 1;
 	}
@@ -570,7 +596,10 @@ int readblqrecord(FILE *fp, double *odisp)
 *          double *odisp      O   ocean tide loading parameters
 * return : status (1:ok,0:file open error)
 *-----------------------------------------------------------------------------*/
-int readblq(string file, const char *sta, double *odisp)
+int readblq(
+	string file,
+	const char *sta, 
+	double *otlDisplacement)
 {
 	FILE *fp;
 	char buff[256],staname[32]="",name[32],*p;
@@ -592,13 +621,15 @@ int readblq(string file, const char *sta, double *odisp)
 
 		if (sscanf(buff+2,"%16s",name)<1)
 			continue;
+		
 		for (p=name;(*p=(char)toupper((int)(*p)));p++)
 			;
+		
 		if (strcmp(name,staname))
 			continue;
 
 		/* read blq record */
-		if (readblqrecord(fp,odisp))
+		if (readblqrecord(fp,otlDisplacement))
 		{
 			fclose(fp);
 			return 1;
@@ -622,38 +653,45 @@ int readerp(string file, erp_t *erp)
 	double v[14]={0};
 	char buff[256];
 
-//     trace(3,"readerp: file=%s\n",file);
+//	trace(3,"%s: file=%s\n",__FUNCTION__, file);
 
-	if (!(fp=fopen(file.c_str(), "r"))) {
+	if (!(fp=fopen(file.c_str(), "r"))) 
+	{
 //         trace(2,"erp file open error: file=%s\n",file);
 		return 0;
 	}
+	
 	while (fgets(buff,sizeof(buff),fp))
 	{
 		if (sscanf(buff,"%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
-				v,v+1,v+2,v+3,v+4,v+5,v+6,v+7,v+8,v+9,v+10,v+11,v+12,v+13)<5)
+				v,v+1,v+2,v+3,v+4,v+5,v+6,v+7,v+8,v+9,v+10,v+11,v+12,v+13) < 5)
 		{
 			continue;
 		}
-		if (erp->n>=erp->nmax)
+		if (erp->n >= erp->nmax)
 		{
-			erp->nmax=erp->nmax<=0?128:erp->nmax*2;
-			erp_data=(erpd_t *)realloc(erp->data,sizeof(erpd_t)*erp->nmax);
+			erp->nmax = erp->nmax <=0 ? 128 : erp->nmax * 2;
+			
+			erp_data = (erpd_t *)realloc(erp->data, sizeof(erpd_t) * erp->nmax);
 			if (!erp_data)
 			{
-				free(erp->data); erp->data=NULL; erp->n=erp->nmax=0;
+				free(erp->data); 
+				erp->data	= nullptr;
+				erp->n		= 0;
+				erp->nmax	= 0;
 				fclose(fp);
 				return 0;
 			}
-			erp->data=erp_data;
+			erp->data = erp_data;
 		}
-		erp->data[erp->n].mjd=v[0];
-		erp->data[erp->n].xp=v[1]*1E-6*AS2R;
-		erp->data[erp->n].yp=v[2]*1E-6*AS2R;
-		erp->data[erp->n].ut1_utc=v[3]*1E-7;
-		erp->data[erp->n].lod=v[4]*1E-7;
-		erp->data[erp->n].xpr=v[12]*1E-6*AS2R;
-		erp->data[erp->n++].ypr=v[13]*1E-6*AS2R;
+		erp->data[erp->n].mjd		= v[0];
+		erp->data[erp->n].xp		= v[1]	*1E-6*AS2R;
+		erp->data[erp->n].yp		= v[2]	*1E-6*AS2R;
+		erp->data[erp->n].ut1_utc	= v[3]	*1E-7;
+		erp->data[erp->n].lod		= v[4]	*1E-7;
+		erp->data[erp->n].xpr		= v[12]	*1E-6*AS2R;
+		erp->data[erp->n].ypr		= v[13]	*1E-6*AS2R;
+		erp->n++;
 	}
 	fclose(fp);
 	return 1;
@@ -665,57 +703,78 @@ int readerp(string file, erp_t *erp)
 *          double *erpv       O   erp values {xp,yp,ut1_utc,lod} (rad,rad,s,s/d)
 * return : status (1:ok,0:error)
 *-----------------------------------------------------------------------------*/
-int geterp(const erp_t *erp, GTime time, double *erpv)
+int geterp(
+	const erp_t*	erp, 
+	GTime			time,
+	double*			erpv)
 {
-	const double ep[]={2000,1,1,12,0,0};
-	double mjd,day,a;
-	int i,j,k;
+	const double ep[] = {2000, 1, 1, 12, 0, 0};
+	double day;
 
-//     trace(4,"geterp:\n");
+//	trace(4,"geterp:\n");
 
-	if (erp->n<=0) return 0;
+	if (erp->n <= 0)
+		return 0;
 
-	mjd=51544.5+(timediff(gpst2utc(time),epoch2time(ep)))/86400.0;
+	double mjd = 51544.5 + (gpst2utc(time) - epoch2time(ep)) / 86400.0;
 
-	if (mjd<=erp->data[0].mjd)
+	if (mjd <= erp->data[0].mjd)
 	{
-		day=mjd-erp->data[0].mjd;
-		erpv[0]=erp->data[0].xp     +erp->data[0].xpr*day;
-		erpv[1]=erp->data[0].yp     +erp->data[0].ypr*day;
-		erpv[2]=erp->data[0].ut1_utc-erp->data[0].lod*day;
-		erpv[3]=erp->data[0].lod;
+		day = mjd-erp->data[0].mjd;
+		
+		erpv[0]	= erp->data[0].xp     			+ erp->data[0].xpr * day;
+		erpv[1]	= erp->data[0].yp     			+ erp->data[0].ypr * day;
+		erpv[2]	= erp->data[0].ut1_utc			- erp->data[0].lod * day;
+		erpv[3]	= erp->data[0].lod;
+		
 		return 1;
 	}
-	if (mjd>=erp->data[erp->n-1].mjd)
+	
+	if (mjd >= erp->data[erp->n-1].mjd)
 	{
-		day=mjd-erp->data[erp->n-1].mjd;
-		erpv[0]=erp->data[erp->n-1].xp     +erp->data[erp->n-1].xpr*day;
-		erpv[1]=erp->data[erp->n-1].yp     +erp->data[erp->n-1].ypr*day;
-		erpv[2]=erp->data[erp->n-1].ut1_utc-erp->data[erp->n-1].lod*day;
-		erpv[3]=erp->data[erp->n-1].lod;
+		day = mjd-erp->data[erp->n-1].mjd;
+		
+		erpv[0] = erp->data[erp->n-1].xp     	+ erp->data[erp->n-1].xpr * day;
+		erpv[1] = erp->data[erp->n-1].yp     	+ erp->data[erp->n-1].ypr * day;
+		erpv[2] = erp->data[erp->n-1].ut1_utc	- erp->data[erp->n-1].lod * day;
+		erpv[3] = erp->data[erp->n-1].lod;
+		
 		return 1;
 	}
-	for (j=0,k=erp->n-1;j<k-1;)
+	
+	int i;
+	int j = 0;
+	int k = erp->n - 1;
+	while (j < k-1)
 	{
-		i=(j+k)/2;
-		if (mjd<erp->data[i].mjd) k=i; else j=i;
+		i = (j+k) / 2;
+		
+		if (mjd < erp->data[i].mjd)
+			k = i; 
+		else 
+			j = i;
 	}
-	if (erp->data[j].mjd==erp->data[j+1].mjd)
+	
+	double a;
+	if (erp->data[j].mjd == erp->data[j+1].mjd)
 	{
-		a=0.5;
+		a = 0.5;
 	}
 	else
 	{
-		a=(mjd-erp->data[j].mjd)/(erp->data[j+1].mjd-erp->data[j].mjd);
+		a = (mjd - erp->data[j].mjd) / (erp->data[j+1].mjd - erp->data[j].mjd);
 	}
-	erpv[0]=(1.0-a)*erp->data[j].xp     +a*erp->data[j+1].xp;
-	erpv[1]=(1.0-a)*erp->data[j].yp     +a*erp->data[j+1].yp;
-	erpv[2]=(1.0-a)*erp->data[j].ut1_utc+a*erp->data[j+1].ut1_utc;
-	erpv[3]=(1.0-a)*erp->data[j].lod    +a*erp->data[j+1].lod;
+	
+	erpv[0] = (1-a) * erp->data[j].xp     + a * erp->data[j+1].xp;
+	erpv[1] = (1-a) * erp->data[j].yp     + a * erp->data[j+1].yp;
+	erpv[2] = (1-a) * erp->data[j].ut1_utc+ a * erp->data[j+1].ut1_utc;
+	erpv[3] = (1-a) * erp->data[j].lod    + a * erp->data[j+1].lod;
+	
 	return 1;
 }
 
-void updatenav(Obs& obs)
+void updatenav(
+	Obs& obs)
 {
 	int sys = obs.Sat.sys;
 	if (obs.satNav_ptr == nullptr)
@@ -757,7 +816,7 @@ void updatenav(Obs& obs)
 double satwavelen(SatSys Sat, int frq, SatNav* satNav_ptr)
 {
 	const double freq_glo[] = { FREQ1_GLO, FREQ2_GLO, FREQ3_GLO};
-	const double dfrq_glo[] = { DFRQ1_GLO, DFRQ2_GLO, 0.0};
+	const double dfrq_glo[] = { DFRQ1_GLO, DFRQ2_GLO, 0};
 
 	int sys = Sat.sys;
 
@@ -788,23 +847,19 @@ double satwavelen(SatSys Sat, int frq, SatNav* satNav_ptr)
 	return 0;
 }
 
-/* geometric distance ----------------------------------------------------------
+/** geometric distance
 * compute geometric distance and receiver-to-satellite unit vector
-* args   : double *rs       I   satellilte position (ecef at transmission) (m)
-*          double *rr       I   receiver position (ecef at reception) (m)
-*          double *e        O   line-of-sight vector (ecef)
-* return : geometric distance (m) (0>:error/no satellite position)
 * notes  : distance includes sagnac effect correction
-*-----------------------------------------------------------------------------*/
+*/
 double geodist(
-	const double *rs,
-	const double *rr,
-	double *e)
+	const double *rs,	///< satellilte position (ecef at transmission) (m)
+	const double *rr,	///< receiver position (ecef at reception) (m)
+	double *e)			///< line-of-sight vector (ecef)
 {
 	int i;
 
 	if (norm(rs, 3) < RE_WGS84)
-		return -1.0;
+		return -1;
 
 	for (i = 0; i < 3; i++)
 	{
@@ -820,13 +875,17 @@ double geodist(
 	return r + OMGE * (rs[0] * rr[1] - rs[1] * rr[0]) / CLIGHT;
 }
 
+/** geometric distance
+* compute geometric distance and receiver-to-satellite unit vector
+* notes  : distance includes sagnac effect correction
+*/
 double geodist(
-	Vector3d& rs,
-	Vector3d& rr,
-	Vector3d& e)
+	Vector3d& rs,	///< satellilte position (ecef at transmission) (m)
+	Vector3d& rr,	///< receiver position (ecef at reception) (m)
+	Vector3d& e)	///< line-of-sight vector (ecef)
 {
 	if (rs.norm() < RE_WGS84)
-		return -1.0;
+		return -1;
 
 	e = rs - rr;
 	double r = e.norm();
@@ -834,11 +893,18 @@ double geodist(
 	return r + OMGE * (rs(0) * rr(1) - rs(1) * rr(0)) / CLIGHT;
 }
 
+double sagnac(
+	Vector3d& rSource,
+	Vector3d& rDest)
+{
+	return OMGE * (rSource(0) * rDest(1) - rSource(1) * rDest(0)) / CLIGHT;
+}
+
 /* satellite azimuth/elevation angle -------------------------------------------
 * compute satellite azimuth/elevation angle
 * args   : double *pos      I   geodetic position {lat,lon,h} (rad,m)
 *          double *e        I   receiver-to-satellilte unit vevtor (ecef)
-*          double *azel     IO  azimuth/elevation {az,el} (rad) (NULL: no output)
+*          double *azel     IO  azimuth/elevation {az,el} (rad) (nullptr: no output)
 *                               (0.0<=azel[0]<2*pi,-pi/2<=azel[1]<=pi/2)
 * return : elevation angle (rad)
 *-----------------------------------------------------------------------------*/
@@ -966,102 +1032,123 @@ void dops(
 }
 
 void sunmoonpos_eci(
-	GTime tut,
-	double *rsun,
-	double *rmoon)
+	GTime		tut,
+	Vector3d*	rsun_ptr,
+	Vector3d*	rmoon_ptr)
 {
-	const double ep2000[]={2000,1,1,12,0,0};
-	double t,f[5],eps,Ms,ls,rs,lm,pm,rm,sine,cose,sinp,cosp,sinl,cosl;
+	const double ep2000[] = {2000, 1, 1, 12, 0, 0};
 
-//     trace(4,"sunmoonpos_eci: tut=%s\n", tut.to_string(3).c_str());
+//	trace(4,"%s: tut=%s\n", __FUNCCTION__, tut.to_string(3).c_str());
 
-	t=timediff(tut,epoch2time(ep2000))/86400.0/36525.0;
+	double t = (tut - epoch2time(ep2000)) / 86400.0 / 36525.0;
 
 	/* astronomical arguments */
-	ast_args(t,f);
+	double f[5];
+	ast_args(t, f);
 
 	/* obliquity of the ecliptic */
-	eps=23.439291-0.0130042*t;
-	sine=sin(eps*D2R); cose=cos(eps*D2R);
+	double eps	= 23.439291 
+				- 0.0130042 * t;
+				
+	double sine	= sin(eps * D2R); 
+	double cose	= cos(eps * D2R);
 
 	/* sun position in eci */
-	if (rsun) {
-		Ms=357.5277233+35999.05034*t;
-		ls=280.460+36000.770*t+1.914666471*sin(Ms*D2R)+0.019994643*sin(2.0*Ms*D2R);
-		rs=AU*(1.000140612-0.016708617*cos(Ms*D2R)-0.000139589*cos(2.0*Ms*D2R));
-		sinl=sin(ls*D2R); cosl=cos(ls*D2R);
-		rsun[0]=rs*cosl;
-		rsun[1]=rs*cose*sinl;
-		rsun[2]=rs*sine*sinl;
+	if (rsun_ptr)
+	{
+		auto& rsun = *rsun_ptr;
+		
+		double Ms	= 357.5277233
+					+ 35999.05034	* t;
+					
+		double ls	= 280.460
+					+ 36000.770		* t
+					+ 1.914666471	* sin(Ms*D2R)
+					+ 0.019994643	* sin(Ms*D2R*2);
+					
+		double rs	= 1.000140612	
+					- 0.016708617	* cos(Ms*D2R)
+					- 0.000139589	* cos(Ms*D2R*2);
+		rs *= AU;
+		
+		double sinl	= sin(ls*D2R); 
+		double cosl	= cos(ls*D2R);
+		
+		rsun[0] = cosl;
+		rsun[1] = cose * sinl;
+		rsun[2] = sine * sinl;
+		rsun *= rs;
 
-//         trace(5,"rsun =%.3f %.3f %.3f\n",rsun[0],rsun[1],rsun[2]);
+//		trace(5,"rsun =%.3f %.3f %.3f\n",rsun[0],rsun[1],rsun[2]);
 	}
+	
 	/* moon position in eci */
-	if (rmoon) {
-		lm=218.32+481267.883*t+6.29*sin(f[0])-1.27*sin(f[0]-2.0*f[3])+
-		0.66*sin(2.0*f[3])+0.21*sin(2.0*f[0])-0.19*sin(f[1])-0.11*sin(2.0*f[2]);
-		pm=5.13*sin(f[2])+0.28*sin(f[0]+f[2])-0.28*sin(f[2]-f[0])-
-		0.17*sin(f[2]-2.0*f[3]);
-		rm=RE_WGS84/sin((0.9508+0.0518*cos(f[0])+0.0095*cos(f[0]-2.0*f[3])+
-				0.0078*cos(2.0*f[3])+0.0028*cos(2.0*f[0]))*D2R);
-		sinl=sin(lm*D2R); cosl=cos(lm*D2R);
-		sinp=sin(pm*D2R); cosp=cos(pm*D2R);
-		rmoon[0]=rm*cosp*cosl;
-		rmoon[1]=rm*(cose*cosp*sinl-sine*sinp);
-		rmoon[2]=rm*(sine*cosp*sinl+cose*sinp);
-
-//         trace(5,"rmoon=%.3f %.3f %.3f\n",rmoon[0],rmoon[1],rmoon[2]);
+	if (rmoon_ptr)
+	{
+		auto& rmoon = *rmoon_ptr;
+		
+		double lm	= 218.32
+					+ 481267.883	* t
+					+ 6.29			* sin(f[0])
+					- 1.27			* sin(f[0]	-f[3]*2)
+					+ 0.66			* sin(f[3]*2)
+					+ 0.21			* sin(f[0]*2)
+					- 0.19			* sin(f[1])
+					- 0.11			* sin(f[2]*2);
+		
+		double pm	= 5.13			* sin(f[2])
+					+ 0.28			* sin(f[0]	+f[2])
+					- 0.28			* sin(f[2]	-f[0])
+					- 0.17			* sin(f[2]	-f[3]*2);
+		
+		double temp	= 0.9508 
+					+ 0.0518		* cos(f[0]) 
+					+ 0.0095		* cos(f[0]	-f[3]*2) 
+					+ 0.0078		* cos(f[3]*2)
+					+ 0.0028		* cos(f[0]*2);
+		
+		double rm	= RE_WGS84 / sin(temp * D2R);
+		
+		double sinl	= sin(lm*D2R); 
+		double cosl	= cos(lm*D2R);
+		
+		double sinp	= sin(pm*D2R); 
+		double cosp	= cos(pm*D2R);
+		
+		rmoon[0] = cosp * cosl;
+		rmoon[1] = cose * cosp * sinl - sine * sinp;
+		rmoon[2] = sine * cosp * sinl + cose * sinp;
+		rmoon *= rm;
+		
+//		trace(5,"rmoon=%.3f %.3f %.3f\n",rmoon[0],rmoon[1],rmoon[2]);
 	}
 }
-/* sun and moon position -------------------------------------------------------
-* get sun and moon position in ecef
-* args   : gtime_t tut      I   time in ut1
-*          double *erpv     I   erp value {xp,yp,ut1_utc,lod} (rad,rad,s,s/d)
-*          double *rsun     IO  sun position in ecef  (m) (NULL: not output)
-*          double *rmoon    IO  moon position in ecef (m) (NULL: not output)
-*          double *gmst     O   gmst (rad)
-* return : none
-*-----------------------------------------------------------------------------*/
+/** get sun and moon position in ecef
+*/
 void sunmoonpos(
-	GTime			tutc,
-	const double *	erpv,
-	double *		rsun,
-	double *		rmoon,
-	double *		gmst)
+	GTime			tutc,	///< time in ut1
+	const double*	erpv,	///< erp value {xp,yp,ut1_utc,lod} (rad,rad,s,s/d)
+	Vector3d*		rsun,	///< sun position in ecef  (m)
+	Vector3d*		rmoon,	///< moon position in ecef (m) 
+	double*			gmst)	///< gmst (rad)
 {
-	GTime tut;
-	double rs[3],rm[3],U[9],gmst_;
+//	trace(4,"%s: tutc=%s\n",__FUNCTION__, tutc.to_string(3).c_str());
 
-//     trace(4,"sunmoonpos: tutc=%s\n",tutc.to_string(3).c_str());
-
-	tut=timeadd(tutc,erpv[2]); /* utc -> ut1 */
+	GTime tut = tutc + erpv[2]; /* utc -> ut1 */
 
 	/* sun and moon position in eci */
-	sunmoonpos_eci(tut,rsun?rs:NULL,rmoon?rm:NULL);
+	Vector3d rs;
+	Vector3d rm;
+	sunmoonpos_eci(tut, &rs, &rm);
 
 	/* eci to ecef transformation matrix */
-	eci2ecef(tutc,erpv,U,&gmst_);
+	Matrix3d U;
+	double gmst_;
+	eci2ecef(tutc, erpv, U, &gmst_);
 
 	/* sun and moon postion in ecef */
-	if (rsun ) matmul("NN",3,1,3,1.0,U,rs,0.0,rsun );
-	if (rmoon) matmul("NN",3,1,3,1.0,U,rm,0.0,rmoon);
-	if (gmst ) *gmst=gmst_;
+	if (rsun )		*rsun	= U * rs;
+	if (rmoon)		*rmoon	= U * rm;
+	if (gmst )		*gmst	= gmst_;
 }
 
-/* replace string ------------------------------------------------------------*/
-int repstr(char *str, const char *pat, const char *rep)
-{
-	int len=strlen(pat);
-	char buff[1024],*p,*q,*r;
-
-	for (p=str,r=buff;*p;p=q+len) {
-		if (!(q=strstr(p,pat))) break;
-		strncpy(r,p,q-p);
-		r+=q-p;
-		r+=sprintf(r,"%s",rep);
-	}
-	if (p<=str) return 0;
-	strcpy(r,p);
-	strcpy(str,buff);
-	return 1;
-}

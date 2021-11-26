@@ -285,7 +285,7 @@ bool TestStack::checkMat(
 	bool fail = false;
 	for (int i = 0; i < n; i++)
 	{
-		if (std::isnan(mat[i]))		//todo aaron, eigen has internal versions of these
+		if (std::isnan(mat[i]))
 		{
 			TestOutputStream << std::endl << stack << " has NAN at " << i << std::endl;
 
@@ -379,7 +379,7 @@ void TestStack::testMat(
 	bool	nan = false;
 	bool	inf = false;
 
-	auto& data = entry->second;
+	auto& [dummy, data] = *entry;
 
 	bool sizeOk = true;
 

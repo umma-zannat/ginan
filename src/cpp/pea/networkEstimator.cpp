@@ -8,7 +8,7 @@
 #include "navigation.hpp"
 #include "testUtils.hpp"
 #include "acsConfig.hpp"
-#include "cycleSlip.hpp"
+#include "constants.hpp"
 #include "station.hpp"
 #include "algebra.hpp"
 #include "common.hpp"
@@ -34,6 +34,11 @@ void removeBadAmbiguities(
 			continue;
 		}
 		
+		if (key.station_ptr == nullptr)
+		{
+			continue;
+		}
+		
 		E_FType ft = (E_FType) key.num;
 		
 		auto& station = *key.station_ptr;
@@ -44,7 +49,7 @@ void removeBadAmbiguities(
 		{
 			sigStat.netwPhaseOutageCount = 0;
 			
-			trace << std::endl << "Phase ambiguity removed due to long outage: "		<< key.str << " " << key.Sat.id();
+			trace << std::endl << "Phase ambiguity removed due to long outage: "		<< key;
 			
 			kfState.removeState(key);
 		}
@@ -53,9 +58,18 @@ void removeBadAmbiguities(
 		{
 			sigStat.netwPhaseRejectCount = 0;
 			
-			trace << std::endl << "Phase ambiguity removed due to high reject count: "	<< key.str << " " << key.Sat.id();
+			trace << std::endl << "Phase ambiguity removed due to high reject count: "	<< key;
 			
 			kfState.removeState(key);
+			
+			if (acsConfig.getRecOpts("").ion.estimate == false)
+			{
+				KFKey kfKey = key;
+				for (kfKey.num = 0; kfKey.num < NUM_FTYPES; kfKey.num++)
+				{
+					kfState.removeState(kfKey);
+				}
+			}
 		}
 	}
 }
@@ -74,7 +88,8 @@ void postFilterChecks(
 Matrix3d stationEopPartials(
 	Vector3d&	rRec)
 {
-	const double radsPerMas = PI / (180 * 60 * 60 * 1000);
+	const double radsPerMas = 2 * PI / (360	* 60 * 60 * 1000);
+	const double radsPerMts = 2 * PI / (24	* 60 * 60 * 1000);
 
 	Matrix3d partials;
 	auto& X = rRec(0);
@@ -88,8 +103,8 @@ Matrix3d stationEopPartials(
 	partials(1,1) = -Z * radsPerMas;	//dy/dyp		= dy/dRotX
 	partials(1,2) = +Y * radsPerMas;	//dz/dyp		= dz/dRotX
 
-	partials(2,0) = +Y * radsPerMas;	//dx/dut1		= dx/dRotZ
-	partials(2,1) = -X * radsPerMas;	//dy/dut1		= dy/dRotZ
+	partials(2,0) = +Y * radsPerMts;	//dx/dut1		= dx/dRotZ
+	partials(2,1) = -X * radsPerMts;	//dy/dut1		= dy/dRotZ
 	partials(2,2) =  0;					//dz/dut1		= dz/dRotZ
 
 	return partials;
@@ -102,6 +117,9 @@ void correctRecClocks(
 	KFState&	kfState,	///< Filter to correct clock estimates in
 	Station*	refRec)		///< Reference clock to use as basis for adjusting others
 {
+	double wraparound_distance	= CLIGHT * 1e-3;
+	double wraparound_tolerance	= CLIGHT * acsConfig.clock_wrap_threshold;
+	
 	for (auto& [key, index] : kfState.kfIndexMap)
 	{
 		if	( (key.type			!= KF::REC_SYS_BIAS)
@@ -114,13 +132,10 @@ void correctRecClocks(
 		auto& rec		= *key.station_ptr;
  		auto& recOpts	= acsConfig.getRecOpts(key.str);
 
-		double wraparound_distance	= CLIGHT * 1e-3;
-		double wraparound_tolerance	= CLIGHT * acsConfig.clock_wrap_threshold;
-
 		double deltaBias		= rec.    rtk.sol.dtRec_m[0] 
 								- refRec->rtk.sol.dtRec_m[0];
 								
-		double previousDelta	=  rec.rtk.sol.deltaDt_net_old	[0];
+		double previousDelta	=  rec.rtk.sol.deltaDt_net_old[0];
 
 		double deltaDelta = deltaBias - previousDelta;
 
@@ -156,9 +171,9 @@ void correctRecClocks(
  */
 void networkEstimator(
 	Trace&			trace,			///< Trace to output to
-	StationList&	stations,		///< List of stations containing observations for this epoch
+	StationMap&		stations,		///< List of stations containing observations for this epoch
 	KFState&		kfState,		///< Kalman filter object containing the network state parameters
-	GTime			tsync)			///< The time of the epoch
+	GTime			time)			///< The time of the epoch
 {
 	TestStack ts(__FUNCTION__);
 
@@ -167,10 +182,8 @@ void networkEstimator(
 	removeBadAmbiguities(trace, kfState);
 	
 	//increment the outage count for all signals
-	for (auto& rec_ptr : stations)
+	for (auto& [id, rec] : stations)
 	{
-		auto& rec = *rec_ptr;
-		
 		for (auto& [Sat,	satStat] : rec.rtk.satStatMap)
 		for (auto& [ft,		sigStat] : satStat.sigStatMap)
 		{
@@ -181,10 +194,10 @@ void networkEstimator(
 	//count the satellites common between receivers
 	int total = 0;
 	std::map<int, int> satCountMap;
-	for (auto& rec : stations)
+	for (auto& [id, rec] : stations)
 	{
 		int count = 0;
-		for (auto& obs : rec->obsList)
+		for (auto& obs : rec.obsList)
 		{
 			if (acsConfig.process_sys[obs.Sat.sys] == false)
 			{
@@ -198,14 +211,14 @@ void networkEstimator(
 		total+= count;
 	}
 	string recString;
-	for (auto& rec_ptr : stations)
+	for (auto& [id, rec] : stations)
 	{
-		auto& recOpts = acsConfig.getRecOpts(rec_ptr->id);
+		auto& recOpts = acsConfig.getRecOpts(rec.id);
 
 		if	(recOpts.exclude)
 			continue;
 
-		recString += rec_ptr->id + ",";
+		recString += rec.id + ",";
 	}
 																								TestStack::testStr("recString", recString);
 
@@ -213,13 +226,25 @@ void networkEstimator(
 	Station*	refRec = nullptr;
 	bool		refClk = false;
 
+	for (auto& [id, satNav] : nav.satNavMap)
+	{
+		SatSys Sat;
+		Sat.fromHash(id);
+		
+		if (acsConfig.process_sys[Sat.sys] == false)
+		{
+			continue;
+		}
+		
+		orbPartials(trace, tsync, Sat, satNav.satPartialMat);	
+	}
+	
 	string obsString;
 
-	for (auto& rec_ptr		: stations)  														if (obsString += rec_ptr->id, true)
-	for (auto& obs 			: rec_ptr->obsList)
+	for (auto& [id, rec]	: stations)  														if (obsString += rec.id, true)
+	for (auto& obs 			: rec.obsList)
 	for (auto& [ft, sig] 	: obs.Sigs)
 	{
-		auto& rec = *rec_ptr;
 		auto& satOpts = acsConfig.getSatOpts(obs.Sat);
 		auto& recOpts = acsConfig.getRecOpts(rec.id);
 
@@ -250,8 +275,9 @@ void networkEstimator(
 		KFMeasEntry	codeMeas(&kfState, obsKeyCode);
 		KFMeasEntry	phasMeas(&kfState, obsKeyPhas);
 
-		SatStat& satStat = *obs.satStat_ptr;
-		SigStat& sigStat = satStat.sigStatMap[ft];
+		SatNav&		satNav	= *obs.satNav_ptr;
+		SatStat&	satStat	= *obs.satStat_ptr;
+		SigStat&	sigStat	= satStat.sigStatMap[ft];
 
 		codeMeas.metaDataMap["obs_ptr"]	= &obs;
 		phasMeas.metaDataMap["obs_ptr"]	= &obs;
@@ -280,13 +306,16 @@ void networkEstimator(
 		KFKey recClockKey		=	{KF::REC_SYS_BIAS,		{},			rec.id,	SatSys(E_Sys::GPS).biasGroup(),	&rec	};
 		KFKey recClockRateKey	=	{KF::REC_SYS_BIAS_RATE,	{},			rec.id,	SatSys(E_Sys::GPS).biasGroup(),	&rec	};
 		KFKey recSysBiasKey		=	{KF::REC_SYS_BIAS,		{},			rec.id, obs.Sat.biasGroup(),			&rec	};
-		KFKey recPosKeys[3];
-		KFKey satPosKeys[3];
-		KFKey tropKeys	[3];
-		KFKey tropGMKeys[3];
-		KFKey eopKeys	[3]		= {	{KF::EOP,				{},			"XP"},
-									{KF::EOP,				{},			"YP"},
-									{KF::EOP,				{},			"UT1"}	};
+		KFKey recPosKeys	[3];
+		KFKey satPosKeys	[3];
+		KFKey tropKeys		[3];
+		KFKey tropGMKeys	[3];
+		KFKey eopKeys		[3]		= {	{KF::EOP,				{},			"_XP"},
+										{KF::EOP,				{},			"_YP"},
+										{KF::EOP,				{},			"_UT1"}	};
+		KFKey eopRateKeys	[3]		= {	{KF::EOP_RATE,			{},			"_XP"},
+										{KF::EOP_RATE,			{},			"_YP"},
+										{KF::EOP_RATE,			{},			"_UT1"}	};
 		for (short i = 0; i < 3; i++)
 		{
 			recPosKeys[i]	= {KF::REC_POS,			{},			rec.id,	i,				&rec	};
@@ -327,8 +356,8 @@ void networkEstimator(
 			{
 				refClk = true;
 
-				KFMeasEntry	pseudoMeas(&kfState);	//todo aaron, add pseudomeasurements to set the reference receiver to 0 rather than being blank?
-				pseudoMeas.setValue(0);				//this works, but is it general? what happens after the first epoch?
+				KFMeasEntry	pseudoMeas(&kfState);
+				pseudoMeas.setValue(0);
 				pseudoMeas.setNoise(0.000001);
 
 				InitialState init		= {0, SQR(0.0001), SQR(0)};
@@ -425,22 +454,12 @@ void networkEstimator(
 
 		if (satOpts.orb.estimate)
 		{
-			/* transmission time by satellite clock */
-			auto& [ft, sig] = *obs.Sigs.begin();
-			double pr = sig.P;
-			GTime time = timeadd(obs.time, - pr / CLIGHT);
+			VectorXd orbitPartials = satNav.satPartialMat * satStat.e;
 
-			bool pass = orbPartials(trace, time, obs, obs.satPartialMat);
-			if (pass == false)
+			if (satNav.satOrbit.numUnknowns == orbitPartials.rows())
+			for (int i = 0; i < satNav.satOrbit.numUnknowns; i++)
 			{
-				continue;
-			}
-
-			VectorXd orbitPartials = obs.satPartialMat * satStat.e;
-
-			for (int i = 0; i < obs.satOrb_ptr->numUnknowns; i++)
-			{
-				string name = obs.satOrb_ptr->parameterNames[i];
+				string name = satNav.satOrbit.parameterNames[i];
 				KFKey orbPtKey	= {KF::ORBIT_PTS,	obs.Sat,	std::to_string(100 + i).substr(1) + "_" + name};
 
 				InitialState init	= initialStateFromConfig(satOpts.orb, i);
@@ -459,6 +478,13 @@ void networkEstimator(
 				InitialState init	= initialStateFromConfig(acsConfig.netwOpts.eop, i);
 				codeMeas.addDsgnEntry(eopKeys[i],	eopPartials(i),				init);
 				phasMeas.addDsgnEntry(eopKeys[i],	eopPartials(i),				init);
+				
+				if (acsConfig.netwOpts.eop_rates.estimate)
+				{
+					InitialState eopRateInit	= initialStateFromConfig(acsConfig.netwOpts.eop_rates, i);
+					
+					kfState.setKFTransRate(eopKeys[i], eopRateKeys[i],	1/86400.0,	eopRateInit);
+				}
 			}
 		}
 		
@@ -470,7 +496,7 @@ void networkEstimator(
 	}
 
 	//add process noise to existing states as per their initialisations.
-	kfState.stateTransition(trace, tsync);
+	kfState.stateTransition(trace, time);
 
 	//if not enough data is available, return early
 	if (refRec == nullptr)
@@ -481,7 +507,7 @@ void networkEstimator(
 
 	//combine the measurement list into a single matrix
 	KFMeas combinedMeas = kfState.combineKFMeasList(kfMeasEntryList);
-	combinedMeas.time = stations.front()->obsList.front().time;
+	combinedMeas.time = time;
 
 	correctRecClocks(trace, kfState, refRec);
 																								TestStack::testStr("obsString", obsString);
@@ -498,7 +524,7 @@ void networkEstimator(
  		kfState.leastSquareInitStates(trace, combinedMeas);
 	}
 
-	if (acsConfig.netwOpts.filter_mode == E_FilterMode::LSQ)
+	if (acsConfig.netwOpts.filter_mode == +E_FilterMode::LSQ)
 	{
 		trace << std::endl << " -------DOING NETWORK LEAST SQUARES--------" << std::endl;
 

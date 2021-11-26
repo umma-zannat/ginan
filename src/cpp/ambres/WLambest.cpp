@@ -12,7 +12,7 @@ map<string,KFState> userWL23KF;
  * resolution of cycle-slips
  */
 void removeUnmeasuredAmbiguities(
-	Trace&				trace,
+	Trace&				trace,				///< Debug trace
 	KFState&			kfState, 			///< Filter to remove states from
 	map<KFKey, bool>	measuredStates)		///< Map of measured states in this epoch to compare against.
 {
@@ -24,12 +24,11 @@ void removeUnmeasuredAmbiguities(
 			&&(measuredStates[key] == false))
 		{
 			trace << std::endl << "Removing " << key.str << " " << key.Sat.id();
-			kfState.procNoiseMap.		erase(key);
-			kfState.initNoiseMap.		erase(key);
-			kfState.stateClampMaxMap.	erase(key);
-			kfState.stateClampMinMap.	erase(key);
-			kfState.rateTransitionMap.	erase(key);
-			kfState.gaussMarkovTauMap.	erase(key);
+			kfState.procNoiseMap.			erase(key);
+			kfState.initNoiseMap.			erase(key);
+			kfState.rateTransitionMap.		erase(key);
+			kfState.rateRateTransitionMap.	erase(key);
+			kfState.gaussMarkovTauMap.		erase(key);
 
 			it = kfState.stateTransitionMap.erase(it);
 		}
@@ -54,33 +53,30 @@ void ResetDisconnectedStates( Trace& trace, KFState& kfState)
 				(key.num == E_AmbTyp::WL23 && StatAmbMap_list[key.Sat.sys][key.str].SignList[key.Sat].flt.WL23var < 0)))
 		{
 			tracepdeex(wltrclvl, trace, "\n#WLR Resetting ambiguity between %s - %s", key.str.c_str(), key.Sat.id().c_str());
-			kfState.procNoiseMap.		erase(key);
-			kfState.initNoiseMap.		erase(key);
-			kfState.stateClampMaxMap.	erase(key);
-			kfState.stateClampMinMap.	erase(key);
-			kfState.rateTransitionMap.	erase(key);
+			kfState.procNoiseMap.			erase(key);
+			kfState.initNoiseMap.			erase(key);
+			kfState.rateTransitionMap.		erase(key);
+			kfState.rateRateTransitionMap.	erase(key);
 
 			it = kfState.stateTransitionMap.erase(it);
 		}
 		else if ((key.type == KF::PHASE_BIAS) && satpiv[key.Sat].reset)
 		{
 			tracepdeex(wltrclvl + 1, trace, "\n#WLR Resetting satellite bias for %s", key.Sat.id().c_str());
-			kfState.procNoiseMap.		erase(key);
-			kfState.initNoiseMap.		erase(key);
-			kfState.stateClampMaxMap.	erase(key);
-			kfState.stateClampMinMap.	erase(key);
-			kfState.rateTransitionMap.	erase(key);
+			kfState.procNoiseMap.			erase(key);
+			kfState.initNoiseMap.			erase(key);
+			kfState.rateTransitionMap.		erase(key);
+			kfState.rateRateTransitionMap.	erase(key);
 
 			it = kfState.stateTransitionMap.erase(it);
 		}
 		else if ((key.type == KF::REC_SYS_BIAS) && StatAmbMap_list[key.Sat.sys][key.str].reset)  			/* make sure that key.Sat.sys has the right value */
 		{
 			tracepdeex(wltrclvl + 1, trace, "\n#WLR Resetting station bias for %s", key.str.c_str());
-			kfState.procNoiseMap.		erase(key);
-			kfState.initNoiseMap.		erase(key);
-			kfState.stateClampMaxMap.	erase(key);
-			kfState.stateClampMinMap.	erase(key);
-			kfState.rateTransitionMap.	erase(key);
+			kfState.procNoiseMap.			erase(key);
+			kfState.initNoiseMap.			erase(key);
+			kfState.rateTransitionMap.		erase(key);
+			kfState.rateRateTransitionMap.	erase(key);
 
 			it = kfState.stateTransitionMap.erase(it);
 		}

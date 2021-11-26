@@ -7,7 +7,7 @@ input_files:
     root_input_directory: products/
 
     atxfiles:   [ igs14_2045_plus.atx                                     ]    # required
-    snxfiles:   [ /data/meta_gather.snx, cod21620.snx                     ]    # required
+    snxfiles:   [ ./data/meta_gather.snx, cod21620.snx                     ]    # required
     blqfiles:   [ OLOAD_GO.BLQ                                            ]    # required if ocean loading is applied 
 
     sp3files:   [ igu_prod/igu*.sp3                                       ] # most recent ultras as we are solving for clocks / or pod
@@ -15,7 +15,7 @@ input_files:
     
 station_data:
 
-    stream_root: "https://user:pass@ntrip.data.gnss.ga.gov.au/"
+    stream_root: "https://<USER>:<PASS>@ntrip.data.gnss.ga.gov.au/"
     nav_streams:
         - BCEP00BKG0
     obs_streams:
@@ -188,12 +188,12 @@ processing_options:
 
     #start_epoch:               2019-07-18 23:39:00
     #end_epoch:                 2017-03-29 23:59:30
-    #max_epochs:                 10800        #0 is infinite
+    max_epochs:                 120        #0 is infinite
     epoch_interval:             5          #seconds
     wait_next_epoch:            11
     wait_all_stations:          5
 
-    ppp_ephemeris:              precise     # broadcast  ssr_apc  ssr_com  precise
+    ppp_ephemeris:              precise     # broadcast  ssr precise
 
     process_modes:
         user:                   false
@@ -206,7 +206,7 @@ processing_options:
     process_sys:
         gps:            true
         glo:            false
-        gal:            false
+        gal:            true
         #bds:           true
 
     elevation_mask:     10   #degrees
@@ -270,15 +270,11 @@ default_filter_parameters:
             estimated:          true
             sigma:              [10.0]
             proc_noise:         [0] # stations static
-            #apriori:                                   # taken from other source, rinex file etc.
-            #frame:              xyz #ned
-            #proc_noise_model:   Gaussian
 
         clk:
             estimated:          true
             sigma:              [0]
             proc_noise:         [10.0]
-            #proc_noise_model:   Gaussian
 
         clk_rate:
             estimated:          false
@@ -290,21 +286,18 @@ default_filter_parameters:
             sigma:              [60]
             proc_noise:         [0]
             #proc_noise_dt:      day
-            #proc_noise_model:   RandomWalk
 
         trop:
             estimated:          true
             sigma:              [0.1]
             proc_noise:         [0.3]
             proc_noise_dt:      hour
-            #proc_noise_model:   RandomWalk
 
         trop_grads:
             estimated:          true
             sigma:              [1]
             proc_noise:         [0]
             #proc_noise_dt:      hour
-            #proc_noise_model:   RandomWalk
 
     satellites:
 
@@ -313,7 +306,6 @@ default_filter_parameters:
             sigma:              [10.0]
             proc_noise:         [1.0]
             #proc_noise_dt:      min
-            #proc_noise_model:   RandomWalk
 
         clk_rate:
             estimated:          false
@@ -356,7 +348,6 @@ override_filter_parameters:
         #    pos:
         #        sigma:              [60]
         #        proc_noise:         [0]
-                ##proc_noise_model:   Gaussian
             #clk:
                 #sigma:              [0.01]
 
@@ -366,7 +357,7 @@ override_filter_parameters:
             #exclude: true
         #ANKR:
             #exclude: true
-                #network_estimated:  false
+                #estimated:  false
 
     satellites:
 
@@ -375,7 +366,6 @@ override_filter_parameters:
             #srp:
                 #sigma:              [0.01]
                 #proc_noise:         [0.001]
-                ##proc_noise_model:   RandomWalk
 
         ### Block Type Overrides
         #GPS-IIR-A:

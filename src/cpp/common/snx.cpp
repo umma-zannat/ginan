@@ -16,7 +16,6 @@ using std::endl;
 using std::getline;
 using std::ifstream;
 using std::ofstream;
-using std::cout;			//todo aaron, should be using boost log or other
 
 
 
@@ -517,7 +516,6 @@ void dedupe_sinex()
 	dedupeB(theSinex.list_gal_pcs);
 	dedupeB(theSinex.list_solepochs);
 	dedupeB(theSinex.list_normal_eqns);
-	Sinex_solmatrix_t me_copy;
 
 	for (matrix_type	t = ESTIMATE;		t < MAX_MATRIX_TYPE;	t = static_cast<matrix_type>	(static_cast<int>(t) + 1))
 	for (matrix_value	v = CORRELATION;	v < MAX_MATRIX_VALUE;	v = static_cast<matrix_value>	(static_cast<int>(v) + 1))
@@ -1013,11 +1011,6 @@ int write_snx_acknowledgements(ofstream& out)
 	return 0;
 }
 
-// compare by sitecode only.
-static bool compare_siteids(const Sinex_siteid_t& left, const Sinex_siteid_t& right)
-{
-	return left.sitecode.compare(right.sitecode) < 0;
-}
 
 void parse_snx_siteIds(string& s)
 {
@@ -1195,7 +1188,7 @@ int write_snx_sitedata(ofstream& out, std::list<Sinex_stn_snx_t>* pstns)
 				ssd.create[1],
 				ssd.create[2]);
 
-		if (pstns == NULL)
+		if (pstns == nullptr)
 			doit = true;
 		else
 		{
@@ -1217,27 +1210,10 @@ int write_snx_sitedata(ofstream& out, std::list<Sinex_stn_snx_t>* pstns)
 	return 0;
 }
 
-// compare by site code and start time. 
-static bool compare_receivers(const Sinex_receiver_t& left, const Sinex_receiver_t& right)
-{
-	// Always upper case so no need to case compare
-	int comp = left.sitecode.compare(right.sitecode);
-
-	int i = 0;
-
-	while (comp == 0 && i < 3)
-	{
-		comp = left.recstart[i] - right.recstart[i];
-		i++;
-	}
-
-	return (comp < 0);
-}
-
 void parse_snx_receivers(string& s)
 {
 	const char* p = s.c_str();
-	
+
 	Sinex_receiver_t srt;
 
 	srt.sitecode	= s.substr(1, 4);
@@ -1247,8 +1223,6 @@ void parse_snx_receivers(string& s)
 	srt.rectype		= s.substr(42, 20);
 	srt.recsn		= s.substr(63, 5);
 	srt.recfirm 	= trim(s.substr(69, 11));
-	int start[3];
-	int stop[3];
 	int readcount;
 
 	readcount = sscanf(p + 16, "%2d:%3d:%5d %2d:%3d:%5d",
@@ -1320,22 +1294,6 @@ int write_snx_receivers(ofstream& out)
 
 	out << "-SITE/RECEIVER" << endl;
 	return 0;
-}
-
-// compare by sitecode and start time.
-static bool compare_antennas(const Sinex_antenna_t& left, Sinex_antenna_t& right)
-{
-	int comp = left.sitecode.compare(right.sitecode);
-
-	int i = 0;
-
-	while (!comp && i < 3)
-	{
-		comp = left.antstart[i] - right.antstart[i];
-		i++;
-	}
-
-	return (comp < 0);
 }
 
 void parse_snx_antennas(string& s)
@@ -1509,7 +1467,7 @@ int write_snx_gps_pcs(ofstream& out, std::list<Sinex_stn_snx_t>* pstns)
 
 		strcat(line, sgt.calib.c_str());
 
-		if (pstns == NULL)
+		if (pstns == nullptr)
 		{
 			doit = true;
 		}
@@ -1618,7 +1576,7 @@ int write_snx_gal_pcs(ofstream& out, std::list<Sinex_stn_snx_t>* pstns)
 		char buf[8];
 		bool doit = false;
 
-		if (pstns == NULL)
+		if (pstns == nullptr)
 			doit = true;
 		else
 		{
@@ -1702,19 +1660,6 @@ int write_snx_gal_pcs(ofstream& out, std::list<Sinex_stn_snx_t>* pstns)
 	return 0;
 }
 
-static bool compare_eccentricity(Sinex_site_ecc_t& left, Sinex_site_ecc_t& right)
-{
-	int comp = left.sitecode.compare(right.sitecode);
-	int i = 0;
-
-	while (!comp && i < 3)
-	{
-		comp = left.eccstart[i] - right.eccstart[i];
-		i++;
-	}
-
-	return (comp < 0);
-}
 
 void parse_snx_siteEccentricity(string& s)
 {
@@ -1900,7 +1845,7 @@ int write_snx_epochs(ofstream& out, std::list<Sinex_stn_snx_t>* pstns)
 					sst.mean[1],
 					sst.mean[2]);
 
-		if (pstns == NULL)
+		if (pstns == nullptr)
 			doit = true;
 		else
 		{
@@ -1981,46 +1926,6 @@ int write_snx_statistics(ofstream& out)
 	return 0;
 }
 
-static bool compare_estimates(Sinex_solestimate_t& left, Sinex_solestimate_t& right)
-{
-	int comp = left.sitecode.compare(right.sitecode);
-
-	if (!comp)
-	{
-		// compare first on type, then on epoch
-		if (left.type.compare(right.type) == 0)
-		{
-			comp = time_compare(left.refepoch, right.refepoch);
-		}
-		else
-		{
-			int ltype = 0;
-			int rtype = 0;
-			string s = trim(left.type);
-
-			try
-			{
-				ltype = E_Estimate::_from_string(s.c_str());
-			}
-			catch (...)			{			}
-
-			s = trim(right.type);
-
-			try
-			{
-				rtype = E_Estimate::_from_string(s.c_str());
-			}
-			catch (...)			{			}
-
-			comp = ltype - rtype;
-		}
-	}
-
-	if (!comp)
-		comp = left.index - right.index;
-
-	return (comp < 0);
-}
 
 void parse_snx_solutionEstimates(string& s)
 {
@@ -2090,8 +1995,7 @@ int write_snx_estimates_from_filter(ofstream& out)
 
 		string ptcode = theSinex.map_siteids[key.str].ptcode;
 
-		char line[83];
-		sprintf(line, " %5d %-6s %4s %2s %4d %02d:%03d:%05d %-4s %c %21.14le %11.5le",
+		tracepdeex(0, out, " %5d %-6s %4s %2s %4d %02d:%03d:%05d %-4s %c %21.14le %11.5le\n",
 				index,
 				type.c_str(),
 				key.str.c_str(),
@@ -2104,8 +2008,6 @@ int write_snx_estimates_from_filter(ofstream& out)
 				'9',	// TODO: replace with sst.constraint when fixed
 						theSinex.kfState.x(index),
 				sqrt(	theSinex.kfState.P(index,index)));
-
-		out << line << endl;
 	}
 
 	out << "-SOLUTION/ESTIMATE" << endl;
@@ -2115,7 +2017,7 @@ int write_snx_estimates_from_filter(ofstream& out)
 
 // int write_snx_estimates(
 // 	ofstream& out,
-// 	std::list<Sinex_stn_snx_t>* pstns = NULL)
+// 	std::list<Sinex_stn_snx_t>* pstns = nullptr)
 // {
 // 	out << "+SOLUTION/ESTIMATE" << endl;
 // 
@@ -2123,9 +2025,9 @@ int write_snx_estimates_from_filter(ofstream& out)
 // 
 // 	for (auto& [index, sst] : theSinex.estimates_map)
 // 	{
-// 		bool doit = (pstns == NULL);
+// 		bool doit = (pstns == nullptr);
 // 
-// 		if (pstns != NULL)
+// 		if (pstns != nullptr)
 // 		{
 // 			for (auto& stn : *pstns)
 // 			{
@@ -2164,47 +2066,6 @@ int write_snx_estimates_from_filter(ofstream& out)
 // 	return 0;
 // }
 
-// return true if left is less than right
-static bool compare_apriori(Sinex_solapriori_t& left, Sinex_solapriori_t& right)
-{
-	int comp = left.sitecode.compare(right.sitecode);
-
-	if (!comp)
-	{
-		// compare first on type, then on epoch
-		if (left.param_type.compare(right.param_type) == 0)
-		{
-			comp = time_compare(left.epoch, right.epoch);
-		}
-		else
-		{
-			int ltype = 0;
-			int rtype = 0;
-			string s = trim(left.param_type);
-
-			try
-			{
-				ltype = E_Estimate::_from_string(s.c_str());
-			}
-			catch (...)			{			}
-
-			s = trim(right.param_type);
-
-			try
-			{
-				rtype = E_Estimate::_from_string(s.c_str());
-			}
-			catch (...)			{			}
-
-			comp = ltype - rtype;
-		}
-	}
-
-	if (!comp)
-		comp = left.idx - right.idx;
-
-	return (comp < 0);
-}
 
 void parse_snx_apriori(string& s)
 {
@@ -2250,7 +2111,7 @@ void parse_snx_apriori(string& s)
 	}
 }
 
-int write_snx_apriori(ofstream& out, std::list<Sinex_stn_snx_t>* pstns = NULL)
+int write_snx_apriori(ofstream& out, std::list<Sinex_stn_snx_t>* pstns = nullptr)
 {
 	out << "+SOLUTION/APRIORI" << endl;
 
@@ -2259,17 +2120,15 @@ int write_snx_apriori(ofstream& out, std::list<Sinex_stn_snx_t>* pstns = NULL)
 	for (auto& [index, apriori] : theSinex.apriori_map)
 	{
 		Sinex_solapriori_t& sst = apriori;
-		bool doit = (pstns == NULL);
+		bool doit = (pstns == nullptr);
 
-		if (pstns != NULL)
+		if (pstns)
+		for (auto& stn : *pstns)
 		{
-			for (auto& stn : *pstns)
+			if (sst.sitecode.compare(stn.sitecode) == 0)
 			{
-				if (sst.sitecode.compare(stn.sitecode) == 0)
-				{
-					doit = true;
-					break;
-				}
+				doit = true;
+				break;
 			}
 		}
 
@@ -2427,7 +2286,7 @@ void parse_snx_normals(string& s)
 	}
 }
 
-int write_snx_normal(ofstream& out, std::list<Sinex_stn_snx_t>* pstns = NULL)
+int write_snx_normal(ofstream& out, std::list<Sinex_stn_snx_t>* pstns = nullptr)
 {
 	out << "+SOLUTION/NORMAL_EQUATION_VECTOR" << endl;
 
@@ -2437,15 +2296,13 @@ int write_snx_normal(ofstream& out, std::list<Sinex_stn_snx_t>* pstns = NULL)
 	{
 		bool doit = (pstns == NULL);
 
-		if (pstns != NULL)
+		if (pstns)
+		for (auto& stn : *pstns)
 		{
-			for (auto& stn : *pstns)
+			if (sst.site.compare(stn.sitecode) != 0)
 			{
-				if (sst.site.compare(stn.sitecode) != 0)
-				{
-					doit = true;
-					break;
-				}
+				doit = true;
+				break;
 			}
 		}
 
@@ -3469,8 +3326,6 @@ int read_sinex(
 		}
 		else if (line[0] == '+')
 		{
-			char	c;
-			matrix_value mv;
 			string	mvs;
 			
 			//prepare closing line for comparison
@@ -3635,7 +3490,7 @@ int read_sinex(
 
 
 int  write_sinex(
-	string filepath,
+	string						filepath,
 	map<string, Station>*		stationMap_ptr,
 	Sinex_sat_snx_t*			psat,
 	bool 						comm_override)
@@ -3684,8 +3539,10 @@ int  write_sinex(
 			domatrices |= !theSinex.matrix_map[i].empty();
 
 		if (domatrices)
+		{
 // 			write_snx_matrices(filestream, stationListPointer);
 			write_snx_matrices_from_filter(filestream); if (comm_override) write_pretty_line(filestream);
+		}
 	}
 
 	if	(psat == nullptr)
@@ -3860,69 +3717,70 @@ void sinex_add_file(const string& who, const GTime& when, const string& filename
 	theSinex.inputFiles.push_back(sif);
 }
 
-void sinex_report()
+void sinex_report(
+	Trace& trace)
 {
-	cout << "count of refstrings = " 					<< theSinex.refstrings			.size() << endl;
-	cout << "count of comments = " 						<< theSinex.commentstrings		.size() << endl;
-	cout << "count of history comments = " 				<< theSinex.historyComments		.size() << endl;
-	cout << "count of input histories = " 				<< theSinex.inputHistory		.size() << endl;
-	cout << "count of file comments = " 				<< theSinex.filesComments		.size() << endl;
-	cout << "count of input files = " 					<< theSinex.inputFiles			.size() << endl;
-	cout << "count of acknowledgement comments = " 		<< theSinex.ackComments			.size() << endl;
-	cout << "count of acknowledgements = " 				<< theSinex.acknowledgements	.size() << endl;
+	trace << "count of refstrings = " 					<< theSinex.refstrings			.size() << endl;
+	trace << "count of comments = " 					<< theSinex.commentstrings		.size() << endl;
+	trace << "count of history comments = " 			<< theSinex.historyComments		.size() << endl;
+	trace << "count of input histories = " 				<< theSinex.inputHistory		.size() << endl;
+	trace << "count of file comments = " 				<< theSinex.filesComments		.size() << endl;
+	trace << "count of input files = " 					<< theSinex.inputFiles			.size() << endl;
+	trace << "count of acknowledgement comments = " 	<< theSinex.ackComments			.size() << endl;
+	trace << "count of acknowledgements = " 			<< theSinex.acknowledgements	.size() << endl;
 
-	cout << "count of site id comments = " 				<< theSinex.siteIdcomments		.size() << endl;
-	cout << "count of site ids = " 						<< theSinex.map_siteids			.size() << endl;
-	cout << "count of site data comments = " 			<< theSinex.siteDatacomments	.size() << endl;
-	cout << "count of site datas = " 					<< theSinex.list_sitedata		.size() << endl;
-	cout << "count of receiver comments = " 			<< theSinex.receivercomments	.size() << endl;
-	cout << "count of receivers = " 					<< theSinex.map_receivers		.size() << endl;
-	cout << "count of antenna comments = " 				<< theSinex.antennacomments		.size() << endl;
-	cout << "count of antenna sites = " 				<< theSinex.map_antennas		.size() << endl;
-	cout << "count of site eccentricity comments = " 	<< theSinex.site_ecc_comments	.size() << endl;
-	cout << "count of site eccentricities = " 			<< theSinex.map_eccentricities	.size() << endl;
-	cout << "count of GPS phase centre comments = " 	<< theSinex.gps_pc_comments		.size() << endl;
-	cout << "count of GPS phase centres = " 			<< theSinex.list_gps_pcs		.size() << endl;
-	cout << "count of GAL phase cnetre comments = " 	<< theSinex.gal_pc_comments		.size() << endl;
-	cout << "count of GAL phase centres = " 			<< theSinex.list_gal_pcs		.size() << endl;
+	trace << "count of site id comments = " 			<< theSinex.siteIdcomments		.size() << endl;
+	trace << "count of site ids = " 					<< theSinex.map_siteids			.size() << endl;
+	trace << "count of site data comments = " 			<< theSinex.siteDatacomments	.size() << endl;
+	trace << "count of site datas = " 					<< theSinex.list_sitedata		.size() << endl;
+	trace << "count of receiver comments = " 			<< theSinex.receivercomments	.size() << endl;
+	trace << "count of receivers = " 					<< theSinex.map_receivers		.size() << endl;
+	trace << "count of antenna comments = " 			<< theSinex.antennacomments		.size() << endl;
+	trace << "count of antenna sites = " 				<< theSinex.map_antennas		.size() << endl;
+	trace << "count of site eccentricity comments = " 	<< theSinex.site_ecc_comments	.size() << endl;
+	trace << "count of site eccentricities = " 			<< theSinex.map_eccentricities	.size() << endl;
+	trace << "count of GPS phase centre comments = " 	<< theSinex.gps_pc_comments		.size() << endl;
+	trace << "count of GPS phase centres = " 			<< theSinex.list_gps_pcs		.size() << endl;
+	trace << "count of GAL phase cnetre comments = " 	<< theSinex.gal_pc_comments		.size() << endl;
+	trace << "count of GAL phase centres = " 			<< theSinex.list_gal_pcs		.size() << endl;
 
-	cout << "solutions have bias = " 					<< theSinex.epochs_have_bias << endl;
-	cout << "count of epoch comments = " 				<< theSinex.epochcomments		.size() << endl;
-	cout << "count of solution epochs = " 				<< theSinex.list_solepochs		.size() << endl;
-	cout << "count of statistics comments = " 			<< theSinex.statistics_comments	.size() << endl;
-	cout << "count of statistics = " 					<< theSinex.list_statistics		.size() << endl;
-	cout << "count of estimate comments = " 			<< theSinex.estimate_comments	.size() << endl;
-	cout << "count of estimates = " 					<< theSinex.map_estimates		.size() << endl;
-	cout << "count of apriori comments = " 				<< theSinex.apriori_comments	.size() << endl;
-	cout << "count of aprioris = " 						<< theSinex.apriori_map			.size() << endl;
-	cout << "count of normal equation comments = " 		<< theSinex.normal_eqns_comments.size() << endl;
-	cout << "count of normal equations = " 				<< theSinex.list_normal_eqns	.size() << endl;
-	cout << "count of matrix comments = " 				<< theSinex.matrix_comments		.size() << endl;
+	trace << "solutions have bias = " 					<< theSinex.epochs_have_bias << endl;
+	trace << "count of epoch comments = " 				<< theSinex.epochcomments		.size() << endl;
+	trace << "count of solution epochs = " 				<< theSinex.list_solepochs		.size() << endl;
+	trace << "count of statistics comments = " 			<< theSinex.statistics_comments	.size() << endl;
+	trace << "count of statistics = " 					<< theSinex.list_statistics		.size() << endl;
+	trace << "count of estimate comments = " 			<< theSinex.estimate_comments	.size() << endl;
+	trace << "count of estimates = " 					<< theSinex.map_estimates		.size() << endl;
+	trace << "count of apriori comments = " 			<< theSinex.apriori_comments	.size() << endl;
+	trace << "count of aprioris = " 					<< theSinex.apriori_map			.size() << endl;
+	trace << "count of normal equation comments = " 	<< theSinex.normal_eqns_comments.size() << endl;
+	trace << "count of normal equations = " 			<< theSinex.list_normal_eqns	.size() << endl;
+	trace << "count of matrix comments = " 				<< theSinex.matrix_comments		.size() << endl;
 
-	cout << "count of satid comments = " 				<< theSinex.satid_comments		.size() << endl;
-	cout << "count of sat IDs = " 						<< theSinex.list_satids			.size() << endl;
-	cout << "count of satident comments = " 			<< theSinex.satident_comments	.size() << endl;
-	cout << "count of sat idents = " 					<< theSinex.list_satidents		.size() << endl;
-	cout << "count of prn comments = " 					<< theSinex.satprn_comments		.size() << endl;
-	cout << "count of prns = " 							<< theSinex.list_satprns		.size() << endl;
-	cout << "count of freq channel comments = " 		<< theSinex.satfreqchn_comments	.size() << endl;
-	cout << "count of freq channels = " 				<< theSinex.list_satfreqchns	.size() << endl;
-	cout << "count of mass comments = " 				<< theSinex.satmass_comments	.size() << endl;
-	cout << "count of satmasses = " 					<< theSinex.list_satmasses		.size() << endl;
-	cout << "count of COM comments = " 					<< theSinex.satcom_comments		.size() << endl;
-	cout << "count of sat COMs = "			 			<< theSinex.list_satcoms		.size() << endl;
-	cout << "count of sat ecc comments = " 				<< theSinex.satecc_comments		.size() << endl;
-	cout << "count of sat eccentricities = " 			<< theSinex.list_sateccs		.size() << endl;
-	cout << "count of sat power comments = " 			<< theSinex.satpower_comments	.size() << endl;
-	cout << "count of sat powers = " 					<< theSinex.list_satpowers		.size() << endl;
-	cout << "count of sat phase centre comments = " 	<< theSinex.satpc_comments		.size() << endl;
-	cout << "count of sat phase centres = " 			<< theSinex.list_satpcs			.size() << endl;
-	cout << "count of source ID comments = " 			<< theSinex.sourceid_comments	.size() << endl;
-	cout << "count of source IDs = " 					<< theSinex.list_source_ids		.size() << endl;
-	cout << "count of nutation comments = " 			<< theSinex.nutation_comments	.size() << endl;
-	cout << "count of nutations = " 					<< theSinex.list_nutcodes		.size() << endl;
-	cout << "count of precession_comments = "	 		<< theSinex.precession_comments	.size() << endl;
-	cout << "count of precessions = " 					<< theSinex.list_precessions	.size() << endl;
+	trace << "count of satid comments = " 				<< theSinex.satid_comments		.size() << endl;
+	trace << "count of sat IDs = " 						<< theSinex.list_satids			.size() << endl;
+	trace << "count of satident comments = " 			<< theSinex.satident_comments	.size() << endl;
+	trace << "count of sat idents = " 					<< theSinex.list_satidents		.size() << endl;
+	trace << "count of prn comments = " 				<< theSinex.satprn_comments		.size() << endl;
+	trace << "count of prns = " 						<< theSinex.list_satprns		.size() << endl;
+	trace << "count of freq channel comments = " 		<< theSinex.satfreqchn_comments	.size() << endl;
+	trace << "count of freq channels = " 				<< theSinex.list_satfreqchns	.size() << endl;
+	trace << "count of mass comments = " 				<< theSinex.satmass_comments	.size() << endl;
+	trace << "count of satmasses = " 					<< theSinex.list_satmasses		.size() << endl;
+	trace << "count of COM comments = " 				<< theSinex.satcom_comments		.size() << endl;
+	trace << "count of sat COMs = "			 			<< theSinex.list_satcoms		.size() << endl;
+	trace << "count of sat ecc comments = " 			<< theSinex.satecc_comments		.size() << endl;
+	trace << "count of sat eccentricities = " 			<< theSinex.list_sateccs		.size() << endl;
+	trace << "count of sat power comments = " 			<< theSinex.satpower_comments	.size() << endl;
+	trace << "count of sat powers = " 					<< theSinex.list_satpowers		.size() << endl;
+	trace << "count of sat phase centre comments = " 	<< theSinex.satpc_comments		.size() << endl;
+	trace << "count of sat phase centres = " 			<< theSinex.list_satpcs			.size() << endl;
+	trace << "count of source ID comments = " 			<< theSinex.sourceid_comments	.size() << endl;
+	trace << "count of source IDs = " 					<< theSinex.list_source_ids		.size() << endl;
+	trace << "count of nutation comments = " 			<< theSinex.nutation_comments	.size() << endl;
+	trace << "count of nutations = " 					<< theSinex.list_nutcodes		.size() << endl;
+	trace << "count of precession_comments = "	 		<< theSinex.precession_comments	.size() << endl;
+	trace << "count of precessions = " 					<< theSinex.list_precessions	.size() << endl;
 }
 
 int sinex_site_count()
@@ -4038,10 +3896,10 @@ int getstnsnx(
 			auto& receiver = timeRec_it->second;
 		
 			receiver.used = true;
-			
-// 			stn_snx.rectype			= receiver.rectype;
-// 			stn_snx.recsn			= receiver.recsn;
-// 			stn_snx.recfirm			= receiver.recfirm;
+
+			stn_snx.rectype			= receiver.rectype;
+			stn_snx.recsn			= receiver.recsn;
+ 			stn_snx.recfirm			= receiver.recfirm;
 			found = true;
 		
 			// get next next start time as end time for this aspect

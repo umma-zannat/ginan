@@ -39,15 +39,15 @@ using std::vector;
 #include "testUtils.hpp"
 #include "acsConfig.hpp"
 #include "biasSINEX.hpp"
-#include "constants.h"
+#include "constants.hpp"
 #include "satStat.hpp"
 #include "preceph.hpp"
 #include "station.hpp"
 #include "algebra.hpp"
-#include "constants.h"
 #include "antenna.hpp"
 #include "common.hpp"
 #include "wancorr.h"
+#include "mongo.hpp"
 #include "tides.hpp"
 #include "enums.h"
 #include "ppp.hpp"
@@ -70,7 +70,7 @@ void testeclipse(
 
 	/* unit vector of sun direction (ecef) */
 	Vector3d rsun;
-	sunmoonpos(gpst2utc(obsList.front().time), erpv, rsun.data(), NULL, NULL);
+	sunmoonpos(gpst2utc(obsList.front().time), erpv, &rsun);
 	Vector3d esun = rsun.normalized();
 
 	for (auto& obs : obsList)
@@ -90,12 +90,14 @@ void testeclipse(
 
 		/* sun-earth-satellite angle */
 		double cosa = obs.rSat.dot(esun) / r;
-		if (cosa < -1)	cosa = -1;
-		if (cosa > +1)	cosa = +1;
+		
+		if (cosa < -1)		cosa = -1;
+		if (cosa > +1)		cosa = +1;
+		
 		double ang = acos(cosa);
 
 		/* test eclipse */
-		if (ang < PI / 2
+		if	( ang < PI / 2
 			|| r * sin(ang) > RE_WGS84)
 			continue;
 
@@ -129,7 +131,7 @@ int sat_yaw(
 {
 	Vector3d	rSun;
 	double		erpv[5] = {};
-	sunmoonpos(gpst2utc(time), erpv, rSun.data(), NULL, NULL);
+	sunmoonpos(gpst2utc(time), erpv, &rSun);
 
 	Vector3d vSatPrime = vSat;
 
@@ -148,8 +150,8 @@ int sat_yaw(
 	double beta	= PI / 2 - acos(eSun.dot(en));
 	double E	= acos(es.dot(ep));
 	double mu	= PI / 2 + (es.dot(eSun) <= 0 ? -E : E);
-	if      (mu < -PI / 2) mu += 2 * PI;
-	else if (mu >= PI / 2) mu -= 2 * PI;
+	if      (mu < -PI / 2)		mu += 2 * PI;
+	else if (mu >= PI / 2)		mu -= 2 * PI;
 
 	/* yaw-angle of satellite */
 	double yaw = yaw_nominal(beta, mu);
@@ -367,13 +369,13 @@ void corr_meas(
 		if	( (ft == F1 && sig.code == +E_ObsCode::L1C) 
 			||(ft == F2 && sig.code == +E_ObsCode::L2W))
 		{
-			obs.satNav_ptr->ssrOut.ssrCodeBias.canExport		= false;
-			obs.satNav_ptr->ssrOut.ssrCodeBias.bias	[sig.code]	= dummyVal;
-			obs.satNav_ptr->ssrOut.ssrCodeBias.var	[sig.code]	= dummyVar;
-			obs.satNav_ptr->ssrOut.ssrCodeBias.isSet			= true;
+			obs.satNav_ptr->ssrOut.ssrCodeBias.canExport					= false;
+			obs.satNav_ptr->ssrOut.ssrCodeBias.codeBias_map[sig.code].bias	= dummyVal;
+			obs.satNav_ptr->ssrOut.ssrCodeBias.codeBias_map[sig.code].var	= dummyVar;
+			obs.satNav_ptr->ssrOut.ssrCodeBias.isSet						= true;
 		}
 	}
-
+	
 	
 #if 0 /* this should not be done. Once all bias messages follow the SINEX format properly, could be activated temporaly in case Galileo L5 biases are absent */ 	
 	if(bias[1]==0.0){
@@ -411,9 +413,9 @@ void corr_meas(
 void satantpcv(
 	Vector3d&			rs,
 	Vector3d&			rr,
-	pcvacs_t&			pcv,
+	PhaseCenterData&			pcv,
 	map<int, double>&	dAntSat,
-	double*				nad = nullptr)
+	double*				nad)
 {
 	Vector3d ru = rr - rs;
 	Vector3d rz = -rs;
@@ -446,30 +448,41 @@ double trop_model_prec(
 	/* zenith hydrostatic delay */
 	double zhd = tropacs(pos, azel, map);
 
-	if (acsConfig.process_user)
+	double zwd = tropStates[0] - zhd;
+	
+	if	( acsConfig.process_user
+		||acsConfig.process_ppp)
 	{
 		/* mapping function */
 		double m_w;
 		double m_h = tropmapf(time, pos, azel, &m_w);
 
-		if (azel[1] > 0)
+		double& az = azel[0];
+		double& el = azel[1];
+		
+		double m_az = 0;
+		
+		if (el > 0)
+		if (el < 0.9999 * PI/2)
 		{
-			/* m_w=m_0+m_0*cot(el)*(Gn*cos(az)+Ge*sin(az)): ref [6] */
-			double cotz = 1 / tan(azel[1]);
-			double grad_n = m_w * cotz * cos(azel[0]);
-			double grad_e = m_w * cotz * sin(azel[0]);
-
-			m_w += grad_n * tropStates[1];
-			m_w	+= grad_e * tropStates[2];
-
-			dTropDx[1] = grad_n * (tropStates[0] - zhd);
-			dTropDx[2] = grad_e * (tropStates[0] - zhd);
+			double c = 0.0031;
+			m_az = 1 / (sin(el) * tan(el) + c);
 		}
+		
+		double grad_n = m_az * cos(az);
+		double grad_e = m_az * sin(az);
 
-		dTropDx[0]	= m_w;
 		var			= SQR(0.01);		//todo aaron, move this somewhere else, should use trop state variance?
-		double value	= m_h * zhd
-						+ m_w * (tropStates[0] - zhd);
+		
+		double value	= m_h		* zhd
+						+ m_w		* zwd
+						+ grad_n	* tropStates[1]
+						+ grad_e	* tropStates[2];
+						
+		dTropDx[0] = m_w;
+		dTropDx[1] = grad_n;
+		dTropDx[2] = grad_e;
+		
 		return value;
 	}
 	else
@@ -480,21 +493,6 @@ double trop_model_prec(
 
 		return map[0] * zhd;
 	}
-}
-
-/* tropospheric model ---------------------------------------------------------*/
-int model_trop(
-	GTime		time,
-	double*		pos,
-	double*		azel,
-	double*		tropStates,
-	double*		dTropDx,
-	double&		dTrp,
-	double&		var)
-{
-	dTrp = trop_model_prec(time, pos, azel, tropStates, dTropDx, var);
-
-	return 1;
 }
 
 /* ionospheric model ---------------------------------------------------------*/
@@ -536,6 +534,10 @@ int model_iono(
 			var		= 0;
 
 			return 1;
+		}
+		case E_IonoMode::OFF:
+		{
+			return 0;
 		}
 	}
 
@@ -599,10 +601,7 @@ void pppCorrections(
 		map<int, double> dAntSat;
 		if	(acsConfig.sat_pcv)
 		{
-			double ep[6];
-			time2epoch(obs.time, ep);
-
-			pcvacs_t* pcvsat = findAntenna(obs.Sat.id(), ep, nav);
+			PhaseCenterData* pcvsat = findAntenna(obs.Sat.id(), obs.time, nav);
 			if (pcvsat)
 			{
 				satantpcv(obs.rSat, rRec, *pcvsat, dAntSat);
@@ -677,7 +676,7 @@ void pppCorrections(
 								TestStack::testMat("dAntSat",	dAntSat[ft]);
 		}
 
-		if (acsConfig.ionoOpts.corr_mode == E_IonoMode::IONO_FREE_LINEAR_COMBO)
+		if (acsConfig.ionoOpts.corr_mode == +E_IonoMode::IONO_FREE_LINEAR_COMBO)
 		for (E_FType ft : {F2, F5})
 		{
 			/* iono-free LC */
@@ -724,6 +723,13 @@ void pppCorrections(
 			lcSig.Range	= sig1.Range * c1
 						- sig2.Range * c2;
 
+			double AA = POW4(CLIGHT/lam[F1]) / POW2(POW2(CLIGHT/lam[F1]) - POW2(CLIGHT/lam[ft]));
+			double BB = POW4(CLIGHT/lam[ft]) / POW2(POW2(CLIGHT/lam[F1]) - POW2(CLIGHT/lam[ft]));
+
+			double A = POW4(lam[F1]) / POW2(POW2(lam[F1]) - POW2(lam[ft]));
+			double B = POW4(lam[ft]) / POW2(POW2(lam[F1]) - POW2(lam[ft]));
+// 			printf("\n%f %f\n", A, B);
+// 			printf("\n%f %f\n", AA, BB);
 			lcSig.codeVar	= POW4(lam[F1]) * sig1.codeVar / POW2(POW2(lam[F1]) - POW2(lam[ft]))
 							+ POW4(lam[ft]) * sig2.codeVar / POW2(POW2(lam[F1]) - POW2(lam[ft]));
 
@@ -737,6 +743,81 @@ void pppCorrections(
 		}
 	}
 }
+
+void outputApriori(
+	StationMap& stationMap)
+{
+	KFState aprioriState;
+	for (auto& [id, rec] : stationMap)
+	{
+		KFKey kfKey;
+		kfKey.str	= id + "_0";
+		kfKey.type	= KF::REC_POS;
+		
+		for (int i = 0; i < 3; i++)
+		{
+			kfKey.num = i;
+			
+			aprioriState.addKFState(kfKey, {.x = rec.aprioriPos[i]});
+		}
+	}
+	for (auto& [id, rec] : stationMap)
+	{
+		KFKey kfKey;
+		kfKey.str	= id + "_0";
+		kfKey.type	= KF::REC_CLOCK;
+			
+		double precDtRec	= 0;
+		pephclk(tsync, id, nav, precDtRec);
+
+		aprioriState.addKFState(kfKey, {.x = CLIGHT * precDtRec});
+	}
+	aprioriState.stateTransition(nullStream, tsync);
+	
+#ifdef ENABLE_MONGODB
+	mongoStates(aprioriState);
+#endif
+}
+
+/** Compare estimated station position with benchmark in SINEX file
+ */
+void outputPPPSolution(
+	Station& rec)
+{
+	Vector3d snxPos = rec.snx.pos;
+	Vector3d estPos = rec.rtk.sol.pppRRec;
+	Vector3d diffEcef = snxPos - estPos;
+	
+	double latLonHt[3];
+	ecef2pos(snxPos, latLonHt); // rad,rad,m
+	
+	double diffEcefArr[3];
+	Vector3d::Map(diffEcefArr, diffEcef.rows())	= diffEcef; // equiv. to diffEcef = diff
+	
+	double diffEnuArr[3];
+	ecef2enu(latLonHt, diffEcefArr, diffEnuArr);
+	
+	Vector3d diffEnu;
+	diffEnu = Vector3d::Map(diffEnuArr, diffEnu.rows());
+
+	std::ofstream fout(acsConfig.ppp_sol_filename, std::ios::out | std::ios::app);
+	if (!fout)
+	{
+		BOOST_LOG_TRIVIAL(error)
+		<< "Could not open trace file for PPP solution at " << acsConfig.ppp_sol_filename;
+	}
+	else
+	{
+		fout << epoch << " ";
+		fout << rec.id << " ";
+		fout << snxPos.transpose() << " ";
+		fout << estPos.transpose() << " ";
+		fout << diffEcef.transpose() << " ";
+		fout << diffEnu.transpose() << " ";
+		fout << std::endl;
+	}
+}
+
 
 void selectAprioriSource(
 	Station&	rec,
@@ -785,7 +866,8 @@ bool deweightMeas(
 {
 	trace << std::endl << "Deweighting " << kfMeas.obsKeys[index] << std::endl;
 
-	kfMeas.R[index] *= SQR(acsConfig.deweight_factor);
+	kfMeas.R.row(index) *= acsConfig.deweight_factor;
+	kfMeas.R.col(index) *= acsConfig.deweight_factor;
 	
 	return true;
 }

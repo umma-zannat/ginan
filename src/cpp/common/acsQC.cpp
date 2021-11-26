@@ -6,8 +6,8 @@
 #include "streamTrace.hpp"
 #include "acsConfig.hpp"
 #include "testUtils.hpp"
+#include "constants.hpp"
 #include "satStat.hpp"
-#include "constants.h"
 #include "algebra.hpp"
 #include "common.hpp"
 #include "acsQC.hpp"
@@ -26,9 +26,10 @@
 /** Detect cycle slip by reported loss of lock
 */
 void detslp_ll(
-	ObsList&  obsList)	///< List of observations to detect slips within
+	Trace&		trace,		///< Trace to output to
+	ObsList&	obsList)	///< List of observations to detect slips within
 {
-	BOOST_LOG_TRIVIAL(debug) << "detslp_ll: n=" << obsList.size();
+	tracepdeex(5, trace, "detslp_ll: n=%d", obsList.size());
 
 	for (auto& obs			: obsList)
 	for (auto& [ft, sig]	: obs.Sigs)
@@ -40,12 +41,12 @@ void detslp_ll(
 
 		int f = ft;
 		if	( sig.L == 0
-			|| !(sig.LLI & 0x03))
+			|| (sig.LLI & 0x03) == 0)
 		{
 			continue;
 		}
 
-		BOOST_LOG_TRIVIAL(debug) << "detslp_ll: slip detected sat=" << obs.Sat.id() << " f=" << f + 1;
+		tracepdeex(3, trace, "detslp_ll: slip detected sat=%s f=F%d\n", obs.Sat.id().c_str(), ft);
 
 		obs.satStat_ptr->sigStatMap[ft].slip.LLI = true;
 	}
@@ -54,9 +55,10 @@ void detslp_ll(
 /** Detect cycle slip by geometry free phase jump
 */
 void detslp_gf(
-	ObsList&  obsList)	///< List of observations to detect slips within
+	Trace&		trace,		///< Trace to output to
+	ObsList&	obsList)	///< List of observations to detect slips within
 {
-	BOOST_LOG_TRIVIAL(debug) << "detslp_gf: n=" << obsList.size();
+	tracepdeex(5, trace, "detslp_gf: n=%d", obsList.size());
 
 	for (auto& obs : obsList)
 	{
@@ -64,8 +66,8 @@ void detslp_gf(
 		{
 			continue;
 		}
-		E_FType frq2=F2;
-		if(obs.Sat.sys == +E_Sys::GAL) frq2=F5;
+		E_FType							frq2 = F2;
+		if(obs.Sat.sys == +E_Sys::GAL)	frq2 = F5;
 		
 		S_LC& lc = getLC(obs.satStat_ptr->lc_new, F1, frq2);
 
@@ -84,11 +86,11 @@ void detslp_gf(
 			continue;
 		}
 
-		BOOST_LOG_TRIVIAL(debug) << "detslip_gf: sat=" << obs.Sat.id() << " gf0=" << gf0 << " gf1=" << gf1;
+		tracepdeex(5, trace, "detslip_gf: sat=%s gf0=%f gf1=%f", obs.Sat.id().c_str(), gf0, gf1);
 
 		if (fabs(gf1 - gf0) > acsConfig.thres_slip)
 		{
-			BOOST_LOG_TRIVIAL(debug) << "detslip_gf: slip detected sat=" << obs.Sat.id() << " gf=" << gf0 << "->" << gf1;
+			tracepdeex(3, trace, "detslip_gf: slip detected: sat=%s gf0=%f gf1=%f", obs.Sat.id().c_str(), gf0, gf1);
 
 			for (auto& [ft, sigStat] : obs.satStat_ptr->sigStatMap)
 			{
@@ -101,9 +103,10 @@ void detslp_gf(
 /** Detect slip by Melbourne-Wubbena linear combination jump
 */
 void detslp_mw(
-	ObsList&  obsList)	///< List of observations to detect slips within
+	Trace&		trace,		///< Trace to output to
+	ObsList&	obsList)	///< List of observations to detect slips within
 {
-	BOOST_LOG_TRIVIAL(debug) << "detslp_mw: n=" << obsList.size();
+	tracepdeex(5, trace, "detslp_mw: n=%d",  obsList.size());
 
 	for (auto& obs : obsList)
 	{
@@ -111,8 +114,8 @@ void detslp_mw(
 		{
 			continue;
 		}
-		E_FType frq2=F2;
-		if(obs.Sat.sys == +E_Sys::GAL) frq2=F5;
+		E_FType							frq2 = F2;
+		if (obs.Sat.sys == +E_Sys::GAL)	frq2 = F5;
 		
 		S_LC& lc = getLC(obs.satStat_ptr->lc_new, F1, frq2);
 
@@ -131,11 +134,11 @@ void detslp_mw(
 			continue;
 		}
 
-		BOOST_LOG_TRIVIAL(debug) << "detslip_mw: sat=" << obs.Sat.id() << " mw0=" << mw0 << " mw1=" << mw1;
+		tracepdeex(5, trace, "detslip_mw: sat=%s mw0=%f mw1=%f", obs.Sat.id().c_str(), mw0, mw1);
 
 		if (fabs(mw1 - mw0) > THRES_MW_JUMP)
 		{
-			BOOST_LOG_TRIVIAL(debug) << "detslip_mw: slip detected sat=" << obs.Sat.id() << " mw=" << mw0 << "->" << mw1;
+			tracepdeex(3, trace, "detslip_mw: slip detected: sat=%s mw0=%f mw1=%f", obs.Sat.id().c_str(), mw0, mw1);
 
 			for (auto& [ft, sigStat] : obs.satStat_ptr->sigStatMap)
 			{
@@ -216,11 +219,11 @@ void scdia(
 	TestStack ts(__FUNCTION__);
 
 	double *H, *P, *Z, *N, *x, *Px, *N1, *a, *Qa, *F, *xp, *Pp, *H1, *I, *Z1, *Hlom, *v;
-	double lam1, lam2, lam5, s[2], coef;
+	double lam1, lam2, lam5, s[2];
 	int i, j, m, n, index, ind = 0; /* m-rows measurements, n-cols unknowns */
 
 #ifdef DEBUGLOM
-	GTime t1={0};
+	GTime t1;
 #endif
 
 	E_FType frq2=F2,frq3=F5;
@@ -260,8 +263,6 @@ void scdia(
 	lam1 = lam[F1];
 	lam2 = lam[frq2];
 	lam5 = lam[frq3];
-
-	coef = (lam2 * lam2) / (lam1 * lam1);
 
 	/* single frequency, prepare H, R, Z, not supported in current PDE */
 	if (nf == 1 && 0)
@@ -385,7 +386,7 @@ void scdia(
 				TestStack::testMat("Hlom", Hlom, m*2);
 				TestStack::testMat("P", P, m*m);
 	ind=lsqqc(trace,Hlom,P,Z,v,NULL,NULL,m,2,0,0);
-	*timeStamp=timediff(utc2gpst(timeget()),t1);
+	*timeStamp = utc2gpst(timeget()) - t1;
 	if (ind==0) tracepdeex(2,trace,"\n");
 #else
 	ind = 1;
@@ -501,7 +502,7 @@ void scdia(
 			satStat.flt.amb[2] = 0;
 			if (index)
 			{
-				memset(satStat.flt.a, 0, 3);
+				memset(satStat.flt.a, 0, 3 * sizeof (double));
 				memset(satStat.flt.Qa, 0, 9);
 				satStat.flt.slip |= 2;
 				tracepdeex(1, trace, "     ACC fixed ");
@@ -568,7 +569,7 @@ void cycleslip2(
 {
 	int week;
 	double sec	= time2gpst(lcBase.time, &week);
-	double dt	= timediff(lcBase.time, satStat.lc_pre.time);
+	double dt	= lcBase.time - satStat.lc_pre.time;
 
 	if	( dt < 20
 		||dt > PDEGAP)
@@ -634,17 +635,17 @@ void cycleslip2(
 	if (satStat.mwSlip.num >= 15 && 0)
 	{
 		fNw = lc12new.MW_c - satStat.mwSlip.mean;
-		sigmaMW = SQRT(2) * satStat.mwSlip.sigma * lamw;
+		sigmaMW = sqrt(2) * satStat.mwSlip.sigma * lamw;
 	}
 	else
 	{
 		fNw = lc12new.MW_c - lc12old.MW_c; /* Eq (6) in TN */
-		sigmaMW = SQRT(2) * mwNoise;
+		sigmaMW = sqrt(2) * mwNoise;
 	}
 
 	if (acsConfig.debug_cs)
 	{
-		sigmaMW = SQRT(2 * SQR(mwNoise) + 0.05 + 0.5);
+		sigmaMW = sqrt(2 * SQR(mwNoise) + 0.05 + 0.5);
 	}
 
 	/* clock jump */
@@ -674,30 +675,35 @@ void cycleslip2(
 		else
 			scdia(trace, satStat, lcBase, lam, sigmaPhase, sigmaCode, 2, sys, 1, timeStamp);
 #else
-		double t1 = utc2gpst(timeget());
-
 		/* cycle slip detection by MW */
 		if (fabs(fNw) > (4 * sigmw / lamw))
 		{
 			tracepdeex(2, trace, "detected by MW12 ");
-			satStat->slip[0] |= 1;
-			satStat->slip[1] |= 1;
+			for (auto& [ft, sigStat] : satStat.sigStatMap)
+			{
+				sigStat.slip.MW = 1;
+			}
 		}
 		/* cycle slip detection by GF when identical slips on both frequency */
 		else if (fabs(gf) > (4 * siggf + coef * sigiono))
 		{
 			tracepdeex(2, trace, "detected by GF12 ");
-			satStat->slip[0] |= 1;
-			satStat->slip[1] |= 1;
+			for (auto& [ft, sigStat] : satStat.sigStatMap)
+			{
+				sigStat.slip.GF = 1;
+			}
 		}
 
 		*timeStamp = timediff(utc2gpst(timeget()), t1);
 
 		/* integer cycle slip resolution by Ps-LAMBDA */
-		if (satStat->slip[0]
-			|| satStat->slip[1])
+		for (auto& [ft, sigStat] : satStat.sigStatMap)
 		{
-			scdia(trace, satStat, lc, lam, sigphase, sigcode, 2, sys, 1, timeStamp);
+			if (sigStat.slip.any)
+			{
+				scdia(trace, satStat, lc, lam, sigmaPhase, sigmaCode, 2, sys, 1, timeStamp);
+				break;
+			}
 		}
 
 #ifdef DEBUGCSACC
@@ -764,7 +770,7 @@ void cycleslip3(
 {
 	int week;
 	double sec	= time2gpst(lc.time, &week);
-	double dt	= timediff(lc.time, satStat.lc_pre.time);
+	double dt	= lc.time - satStat.lc_pre.time;
 
 	/* small interval */
 	if (dt < 20)
@@ -790,11 +796,8 @@ void cycleslip3(
 
 	int sys = lc.Sat.sys;
 
-	E_FType frq2=F2,frq3=F5;
-	if(obs.Sat.sys == +E_Sys::GAL)
-	{
-		frq2=F5; frq3=F7;
-	}
+	E_FType								frq2=F2,	frq3=F5;
+	if (obs.Sat.sys == +E_Sys::GAL)	{	frq2=F5;	frq3=F7;	}
 
 	auto&	lam = obs.satNav_ptr->lamMap;
 	double lam1 = lam[F1];
@@ -985,9 +988,9 @@ void cycleslip3(
 		*timeStamp = timediff(utc2gpst(timeget()), t1);
 
 		/* integer cycle slip resolution by Ps-LAMBDA */
-		if	( satStat->slip[0].byte
-			||satStat->slip[1].byte
-			||satStat->slip[2].byte)
+		if	( satStat.slip[0].byte
+			||satStat.slip[1].byte
+			||satStat.slip[2].byte)
 		{
 			scdia(trace, satStat, lc, lam, sigphase, sigcode, 3, sys, 1, timeStamp);
 		}
@@ -1007,9 +1010,9 @@ void cycleslip3(
 			&&satStat.sigStatMap[frq3].slip == 2)
 		{
 			/* false detection, set the slip to 0 (no cycle slip) */
-			if	( satStat->amb[0] == 0
-				&&satStat->amb[1] == 0
-				&&satStat->amb[2] == 0)
+			if	( satStat.amb[0] == 0
+				&&satStat.amb[1] == 0
+				&&satStat.amb[2] == 0)
 			{
 				satStat.sigStatMap[F1].slip.any = 0;
 				satStat.sigStatMap[frq2].slip.any = 0;
@@ -1106,16 +1109,16 @@ void detectslip(
 	}
 
 	/* first epoch or large gap or low elevation */			//todo aaron initialisation stuff, remove
-	if  ( satStat.lc_pre.time.time == 0
-		||satStat.el < acsConfig.elevation_mask
-		||timediff(lc_new.time, lc_old.time) > PDEGAP)
+	if  (  satStat.lc_pre.time.time == 0
+		|| satStat.el	< acsConfig.elevation_mask
+		|| lc_new.time	> lc_old.time + PDEGAP)
 	{
 		satStat.mwSlip	= {};
 		satStat.emwSlip	= {};
 
-		if (timediff(lc_new.time, lc_old.time) > PDEGAP)	tracepde(1, trace, "PDE-CS GPST       %4d %8.1f %4s %5.2f --time gap --\n", 				week, sec, id, satStat.el * R2D);
-		if (satStat.el < acsConfig.elevation_mask)			tracepde(1, trace, "PDE-CS GPST       %4d %8.1f %4s %5.2f --low_elevation --\n", 			week, sec, id, satStat.el * R2D);
-		if (satStat.el > acsConfig.elevation_mask)			tracepde(1, trace, "PDE-CS GPST       %4d %8.1f %4s %5.2f --satStat.lc_pre.time.time --\n", week, sec, id, satStat.el * R2D);
+		if (lc_new.time	> lc_old.time + PDEGAP)				tracepde(1, trace, "PDE-CS GPST       %4d %8.1f %4s %5.2f --time gap --\n", 				week, sec, id, satStat.el * R2D);
+		if (satStat.el	< acsConfig.elevation_mask)			tracepde(1, trace, "PDE-CS GPST       %4d %8.1f %4s %5.2f --low_elevation --\n", 			week, sec, id, satStat.el * R2D);
+		if (satStat.el	> acsConfig.elevation_mask)			tracepde(1, trace, "PDE-CS GPST       %4d %8.1f %4s %5.2f --satStat.lc_pre.time.time --\n", week, sec, id, satStat.el * R2D);
 
 		return;
 	}
@@ -1259,16 +1262,17 @@ void detectslips(
 	}
 
 	tracepdeex(2, trace, "\n   *-------- PDE cycle slip detection & repair --------*\n");
-	tracepde  (2, trace, "PDE-CS GPST       week      sec  prn   el   lamw     gf12    mw12    siggf  sigmw  lamew     gf25    mw25               LC                   N1   N2   N5\n");
-
+	
 	/* detect cycle slip by LLI */
-	detslp_ll(obsList);
+	detslp_ll(trace, obsList);
 
 	/* detect cycle slip by geometry-free phase jump */
-	detslp_gf(obsList);
+	detslp_gf(trace, obsList);
 
 	/* detect slip by Melbourne-Wubbena linear combination jump */
-	detslp_mw(obsList);
+	detslp_mw(trace, obsList);
+	
+	tracepde  (2, trace, "PDE-CS GPST       week      sec  prn   el   lamw     gf12    mw12    siggf  sigmw  lamew     gf25    mw25               LC                   N1   N2   N5\n");
 
 	for (auto& obs : obsList)
 	{
@@ -1308,13 +1312,12 @@ void detectjump(
 		}
 
 		int sys = obs.Sat.sys;
-		E_FType frq2=F2;
-		if(sys == E_Sys::GAL) frq2=F5;
+		E_FType					frq2 = F2;
+		if (sys == E_Sys::GAL)	frq2 = F5;
 
 		auto& satStat = *(obs.satStat_ptr);
 		lc_t& lc_pre = satStat.lc_pre;
 		lc_t& lc_new = satStat.lc_new;
-		int week;
 		int ind = 0;
 
 		/*------PDE clock jump-----low elevation */
@@ -1327,7 +1330,7 @@ void detectjump(
 		/*------PDE clock jump-----First epoch */
 		if  ( lc_pre.time.time == 0
 			||sys != E_Sys::GPS
-			||timediff(lc_new.time, lc_pre.time) > PDEGAP)
+			||(lc_new.time - lc_pre.time) > PDEGAP)
 		{
 			nsat--;
 			continue;

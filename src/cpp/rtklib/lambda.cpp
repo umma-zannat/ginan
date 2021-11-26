@@ -422,7 +422,7 @@ int lambda(Trace& trace, int n, int m, const double *a, const double *Q,
 				srate,1/cratio,1/ratio);
 		*index=(ratio<=cratio)?1:0;
 	}
-	//if (info==-1&&fppde!=NULL) fprintf(fppde,"Error\n");
+	//if (info==-1&&fppde!=nullptr) fprintf(fppde,"Error\n");
 	free(L); free(D); free(Z); free(z); free(E);
 	return info;
 }
