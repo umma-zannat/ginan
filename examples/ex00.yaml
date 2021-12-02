@@ -1,0 +1,254 @@
+# ex17 - Network Example
+# Uses TU GRAZ orbit to solve for satellite clocks solution (GPS-only, resolved ambiguities)
+# Total processing duration  ~ 2.5 minutes on 2-cores
+# Estimates clocks
+
+input_files:
+
+    root_input_directory: products/
+
+    atxfiles:   [ igs14_2045_plus.atx                                ]    # required
+    snxfiles:   [ igs19P2062.snx                                     ]    # required
+    blqfiles:   [ OLOAD_GO.BLQ                                       ]    # required if ocean loading is applied
+    sp3files:   [ igs20624.sp3                                       ]
+    # erpfiles:   [ igs19P2062.erp                                     ]    #config parser doesn't accept weekly files yet.
+    # bsxfiles:   [ CAS0MGXRAP_20191990000_01D_01D_DCB.BSX             ]
+    clkfiles: [ igs20624.clk_30s    ]  # Clk files
+    #clkfiles: [ cod19900.clk_05sA    ]  # Clk files
+    #orbfiles:   [ orb_partials/gag20624_orbits_partials.out.eop_test23      ]    # only need this if we are estimating orbits
+
+    navfiles: [ brdm1990.19p        ]  # broadcast navigation file
+    # dcbfiles: [ TUG0R03FIN_20191990000_01D_01D_OSB.BIA ] # daily signal biases files
+
+station_data:
+
+    root_stations_directory: data/
+
+    rnxfiles:
+        # Select files to run by:
+                                                        # - selecting one on the command line using the -rnxfiles option
+        #- "*.rnx"                                       # - searching all in file_root directory, or
+        - "ALIC*.rnx"                                       # - searching all in file_root directory, or
+        #- "C*.rnx"                                       # - searching all in file_root directory, or
+        #- "D*.rnx"                                       # - searching all in file_root directory, or
+        
+    pseudoobs_files:
+        #- ../products/igs20624.sp3
+
+
+output_files:
+
+    root_output_directory:          <CONFIG>/
+
+    output_trace:                   true
+    trace_level:                    4
+    trace_directory:                ./
+    trace_filename:                 <CONFIG>-<STATION><YYYY><DDD><HH>-<LOGTIME>.TRACE
+    #trace_rotate_period:            6
+    #trace_rotate_period_units:      hours
+
+    output_residuals:               true
+
+    output_summary:                 true
+    summary_directory:              ./
+    summary_filename:               PEA<LOGTIME><YYYY><DDD><HH>.SUM
+
+    output_clocks:                  true
+    clocks_directory:               ./
+    clocks_filename:                <CONFIG><LOGTIME>.clk
+
+    output_mongo_measurements:      true
+    output_mongo_states:            true
+    output_mongo_metadata:          false
+    delete_mongo_history:           true
+    mongo_uri:                      mongodb://127.0.0.1:27017
+    #mongo_suffix:                   _H
+
+
+output_options:
+
+    config_description:             ex00
+
+
+processing_options:
+
+    #start_epoch:                2019-07-18 12:00:00
+    end_epoch:                2019-07-18 23:00:00
+    #max_epochs:                 12        #0 is infinite
+    epoch_interval:             900          #seconds
+    wait_next_epoch:            60
+    wait_all_stations:          1
+    
+
+    process_modes:
+        user:                   true
+        ppp:                    true
+        #rts:                    true
+        
+    pivot_station:      DAV1
+
+    process_sys:
+        gps:            true
+        
+    process_freq:
+        l1:            true
+        l2:            true
+        l5:            true
+
+    elevation_mask:     10   #degrees
+
+    tide_solid:         true
+    tide_pole:          true
+    tide_otl:           true
+
+    phase_windup:       true
+    reject_eclipse:     true
+    raim:               true
+    antexacs:           true
+
+    cycle_slip:
+        thres_slip: 0.05
+
+    max_inno:   0
+    max_gdop:   30
+
+    troposphere:
+        model:      vmf3    #gpt2
+        vmf3dir:    grid5/
+        orography:  orography_ell_5x5
+        # gpt2grid: EX03/general/gpt_25.grd
+
+    ionosphere:
+        corr_mode:          iono_free_linear_combo
+        iflc_freqs:         l1l2_only   #any l1l2_only l1l5_only
+        common_ionosphere:  true
+        
+          
+    force_models:
+        central_force_gravity:          true
+        direct_solar_radiation:         false
+        
+        some_configuration_parameter:   50
+        
+
+network_filter_parameters:
+
+    max_filter_iterations:      3
+    max_prefit_removals:        3
+
+    rts_lag:                    -80      #-ve for full reverse, +ve for limited epochs
+    rts_directory:              ./
+    rts_filename:               PPP-<CONFIG>-<STATION>.rts
+    
+    phase_reject_limit:         2
+
+default_filter_parameters:
+
+    stations:
+
+        error_model:        elevation_dependent
+        code_sigmas:        [1]
+        phase_sigmas:       [0.0015]
+
+        #keplers:
+            #estimated:          true
+            #sigma:              [10000,	10000,	10000,	1,			1,			1       ]
+            #proc_noise:         [0.001,	0.001,	0.001,	0.0000001,	0.0000001,	0.00001 ]
+            
+        #pos:
+            #estimated:          true
+            #sigma:              [0.1]
+            #proc_noise:         [0]
+
+        clk:
+            #estimated:          true
+            sigma:              [1000]
+            proc_noise:         [1]
+            proc_noise_dt:      sqrt_second
+            
+        amb:
+            estimated:          true
+            sigma:              [600]
+            proc_noise:         [0]
+
+        ion:
+            estimated:          true
+            sigma:              [200]
+            proc_noise:         [1]
+
+        trop:
+            estimated:          true
+            sigma:              [0.3]
+            proc_noise:         [0.00001] #0.01 mm
+            proc_noise_dt:      sqrt_second
+
+        trop_grads:
+            estimated:          true
+            sigma:              [0.03]
+            proc_noise:         [0.0000001] #0.001 mm
+            proc_noise_dt:      sqrt_second
+
+        code_bias:
+            estimated:          true
+            sigma:              [1]
+            proc_noise:         [0.1]
+            proc_noise_dt:      sqrt_year
+
+        phas_bias:
+            estimated:          true
+            sigma:              [0.3]
+            proc_noise:         [0.03]
+            proc_noise_dt:      sqrt_year
+
+    satellites:
+
+        #keplers:
+            #estimated:          true
+            #sigma:              [0.1]
+            #proc_noise:         [0]
+            
+        pos:
+            #estimated:          true
+            sigma:              [5]
+            proc_noise:         [0]
+            
+        pos_rate:
+            #estimated:          true
+            sigma:              [5000]
+            proc_noise:         [0]
+
+        clk:
+            estimated:          true
+            sigma:              [1000]
+            proc_noise:         [1]
+
+        code_bias:
+            estimated:          true
+            sigma:              [100]
+            proc_noise:         [1]
+            proc_noise_dt:      sqrt_year
+
+        #phas_bias:
+            #estimated:          true
+            #sigma:              [0.1]
+            #proc_noise:         [1]
+            #proc_noise_dt:      sqrt_year
+
+            
+override_filter_parameters:
+    satellites:
+
+        PRN_G01:
+
+            #pos:
+                #estimated:          true
+                #sigma:              [100]
+                #proc_noise:         [0]
+
+            #pos_rate:
+                #estimated:          true
+                #sigma:              [10000]
+                #proc_noise:         [10]
+                #proc_noise_dt:      sqrt_second
+
+              
