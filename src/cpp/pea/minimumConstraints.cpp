@@ -120,7 +120,7 @@ void minimum(
 
 	//generalised inverse (Ref:E.3)
 	MatrixXd T = combinedMeas.A;
-	VectorXd W = (1 / combinedMeas.R.array()).matrix();
+	VectorXd W = (1 / combinedMeas.R.diagonal().array()).matrix();	//todo aaron, straight inversion?, yes, but will be slow and big, non optimal probably fine for initialisation
 	for (int i = 0; i < W.rows(); i++)
 	{
 		if (std::isinf(W(i)))
@@ -142,7 +142,7 @@ void minimum(
 		int rows = kfStateTrans.x.rows() - 1;
 		pseudoMeas.V = - kfStateTrans.x.bottomRows(rows);
 		pseudoMeas.A = Tdash.bottomRows	(rows);
-		pseudoMeas.R = VectorXd::Zero	(rows);
+		pseudoMeas.R = MatrixXd::Zero	(rows, rows);
 		pseudoMeas.obsKeys.resize		(rows);
 
 		//use a state transition to ensure output logs are complete
@@ -169,8 +169,6 @@ void minimum(
 
 		kfState.x = xp;
 		kfState.P = Pp;
-
-		kfState.clampStateValues();
 
 		if (kfState.rts_filename.empty() == false)
 		{

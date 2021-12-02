@@ -38,7 +38,8 @@ typedef enum
 	LEX  = F6,
 	B1,
 	B2,
-	B3
+	B3,
+	NUM_FTYPES
 } E_FType;
 
 typedef enum
@@ -47,6 +48,13 @@ typedef enum
 	PHAS,
 	NUM_MEAS
 } E_MeasType;
+
+typedef enum
+{
+	SVH_OK,
+	SVH_UNHEALTHY = -1
+} E_Svh;
+
 
 BETTER_ENUM(E_Sys,			short int,
 			NONE,
@@ -58,8 +66,14 @@ BETTER_ENUM(E_Sys,			short int,
 			CMP,
 			LEO,
 			IRN,
-			NUM_SYS
-		)
+			NUM_SYS)
+
+
+BETTER_ENUM(E_DCBPair,		short int,
+			NONE,
+			P1_P2,
+			P1_C1,
+			P2_C2)
 
 BETTER_ENUM(BiasGroup,		short int,
 			GPS,
@@ -68,44 +82,70 @@ BETTER_ENUM(BiasGroup,		short int,
 			BDS,
 			NUM)
 
-BETTER_ENUM(E_Ephemeris,	short int,
-			BROADCAST,
-			PRECISE,
-			PRECISE_COM,
-			SBAS,
-			SSR_APC,
-			SSR_COM)
+
+BETTER_ENUM(E_OffsetType,	short int,
+			APC,
+			COM)
 
 BETTER_ENUM(KF,				short int,
 	NONE,
 	ONE,
+	
 	REC_POS,
 	REC_POS_RATE,
+	
 	SAT_POS,
 	SAT_POS_RATE,
+	
 	REF_SYS_BIAS,
+	
 	REC_SYS_BIAS,
 	REC_SYS_BIAS_RATE,
-	TROP,
-	TROP_GM,
+	
+	REC_CLOCK,
+	REC_CLOCK_RATE,
+	
 	SAT_CLOCK,
 	SAT_CLOCK_RATE,
+	
+	TROP,
+	TROP_GM,
+	
 	ORBIT_PTS,
-	AMBIGUITY,
+	
+	KEPLERS,
+	
+	
 	IONOSPHERIC,
+	IONO_STEC,
+	
 	DCB,
+	
 	EOP,
+	EOP_RATE,
+	
+	CALC,
 
 	XFORM_XLATE,
 	XFORM_RTATE,
 	XFORM_SCALE,
 
 
-	PHASE_BIAS
+	AMBIGUITY,
+	PHASE_BIAS,
+	CODE_BIAS
 )
 
 
-
+BETTER_ENUM(KEPLER,				short int,
+			LX,
+			LY,
+			LZ,
+			EU,
+			EV,
+			M,
+			NUM
+)
 
 BETTER_ENUM(E_BiasType,				short int,
 	NONE,
@@ -172,21 +212,28 @@ BETTER_ENUM(E_Period,			int,
 			SQRT_SECOND		= SECOND,	SQRT_MINUTE		= MINUTE,	SQRT_HOUR	= HOUR,	SQRT_DAY	= DAY,	SQRT_WEEK	= WEEK,	SQRT_YEAR	= YEAR,
 			SQRT_SECONDS	= SECOND,	SQRT_MINUTES	= MINUTE,	SQRT_HOURS	= HOUR,	SQRT_DAYS	= DAY,	SQRT_WEEKS	= WEEK,	SQRT_YEARS	= YEAR)
 
-BETTER_ENUM(E_PosFrame,			int,
+BETTER_ENUM(E_PosFrame, int,
 			NONE,
 			XYZ,
 			NED,
 			RTN)
 
-BETTER_ENUM(E_FilterMode,		int,
+BETTER_ENUM(E_FilterMode, int,
 			LSQ,
 			KALMAN)
 
-BETTER_ENUM(E_Inverter,			int,
+BETTER_ENUM(E_Inverter, int,
 			LLT,
 			LDLT,
 			INV)
 
+BETTER_ENUM(E_ObsDesc, int,
+	C, // Code / Pseudorange
+	L, // Phase
+	D, // Doppler
+	S, // Raw signal strength (carrier to noise ratio)
+	X  // Receiver channel numbers
+)
 
 BETTER_ENUM(E_ObsCode, int,
 	NONE  = 0 ,     		          /* none or unknown */
@@ -323,47 +370,69 @@ BETTER_ENUM(E_AmbTyp,	short int,
 
 BETTER_ENUM(RtcmMessageType, uint16_t,
 		NONE 				= 0,
-		CUSTOM			= 4082,
-		MSM4_GPS 			= 1074,
-		MSM4_GLONASS 		= 1084,
-		MSM4_GALILEO 		= 1094,
-		MSM4_QZSS 			= 1114,
-		MSM4_BEIDOU 		= 1124,
-		MSM5_GPS 			= 1075,
-		MSM5_GLONASS 		= 1085,
-		MSM5_GALILEO 		= 1095,
-		MSM5_QZSS 			= 1115,
-		MSM5_BEIDOU 		= 1125,
-		MSM6_GPS 			= 1076,
-		MSM6_GLONASS 		= 1086,
-		MSM6_GALILEO 		= 1096,
-		MSM6_QZSS 			= 1116,
-		MSM6_BEIDOU 		= 1126,
-		MSM7_GPS 			= 1077,
-		MSM7_GLONASS 		= 1087,
-		MSM7_GALILEO 		= 1097,
-		MSM7_QZSS 			= 1117,
-		MSM7_BEIDOU 		= 1127,
+		
 		GPS_EPHEMERIS		= 1019,
-		GPS_SSR_ORB_CORR	= 1057,
-		GPS_SSR_CLK_CORR	= 1058,
-		GPS_SSR_COMB_CORR	= 1060,
-		GPS_SSR_URA			= 1061,
-		GPS_SSR_CODE_BIAS	= 1059,
-		GPS_SSR_PHASE_BIAS	= 1265,
+
+		//GPS_NETWORK_RTK_RESIDUAL = 1030,
+		//RECEIVER_AND_ANTENNA_DESC = 1033,
+
+		//BDS_EPHEMERIS = 1042,
+		
 		GAL_FNAV_EPHEMERIS	= 1045,
 		GAL_INAV_EPHEMERIS	= 1046,
+		
+		GPS_SSR_ORB_CORR	= 1057,
+		GPS_SSR_CLK_CORR	= 1058,
+		GPS_SSR_CODE_BIAS	= 1059,
+		GPS_SSR_COMB_CORR	= 1060,
+		GPS_SSR_URA			= 1061,
+		
+		MSM4_GPS 			= 1074,
+		MSM5_GPS 			= 1075,
+		MSM6_GPS 			= 1076,
+		MSM7_GPS 			= 1077,
+		
+		MSM4_GLONASS 		= 1084,
+		MSM5_GLONASS 		= 1085,
+		MSM6_GLONASS 		= 1086,
+		MSM7_GLONASS 		= 1087,
+		
+		MSM4_GALILEO 		= 1094,
+		MSM5_GALILEO 		= 1095,
+		MSM6_GALILEO 		= 1096,
+		MSM7_GALILEO 		= 1097,
+		
+		MSM4_QZSS 			= 1114,
+		MSM5_QZSS 			= 1115,
+		MSM6_QZSS 			= 1116,
+		MSM7_QZSS 			= 1117,
+		
+		MSM4_BEIDOU 		= 1124,
+		MSM5_BEIDOU 		= 1125,
+		MSM6_BEIDOU 		= 1126,
+		MSM7_BEIDOU 		= 1127,
+		
+		//GLONASS_AUX_OPERATION_INFO = 1230
+		
 		GAL_SSR_ORB_CORR	= 1240,
 		GAL_SSR_CLK_CORR	= 1241,
 		GAL_SSR_COMB_CORR	= 1243,
 		GAL_SSR_CODE_BIAS	= 1242,
-		GAL_SSR_PHASE_BIAS	= 1267
 		
-		//RECEIVER_AND_ANTENNA_DESC = 1033,
-		//BDS_EPHEMERIS = 1042,
-		//GPS_NETWORK_RTK_RESIDUAL = 1030,
-		//GLONASS_AUX_OPERATION_INFO = 1230
+		GPS_SSR_PHASE_BIAS	= 1265,
+		
+		GAL_SSR_PHASE_BIAS	= 1267,
+		
+		CUSTOM				= 4082
 )
+
+BETTER_ENUM(E_Ephemeris, int,
+		NONE,
+		PRECISE,
+		SSR,
+		KALMAN,
+		BROADCAST)
+
 
 BETTER_ENUM(E_RTCMSubmessage,	short int,
 		TIMESTAMP = 1

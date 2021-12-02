@@ -1,0 +1,118 @@
+# ex01 - Orbit Propagation Example
+
+
+input_files:
+
+    root_input_directory: products/
+
+    atxfiles:   [ igs14_2045_plus.atx                                ]    # required
+    snxfiles:   [ igs19P2062.snx                                     ]    # required
+    blqfiles:   [ OLOAD_GO.BLQ                                       ]    # required if ocean loading is applied
+    sp3files:   [ igs20624.sp3                                       ]
+    # erpfiles:   [ igs19P2062.erp                                     ]    #config parser doesn't accept weekly files yet.
+    # bsxfiles:   [ CAS0MGXRAP_20191990000_01D_01D_DCB.BSX             ]
+    #clkfiles: [ igs20624.clk_30s    ]  # Clk files
+    #clkfiles: [ cod19900.clk_05sA    ]  # Clk files
+    #orbfiles:   [ orb_partials/gag20624_orbits_partials.out.eop_test23      ]    # only need this if we are estimating orbits
+
+    navfiles: [ brdm1990.19p        ]  # broadcast navigation file
+    # dcbfiles: [ TUG0R03FIN_20191990000_01D_01D_OSB.BIA ] # daily signal biases files
+
+station_data:
+
+    root_stations_directory: data/
+
+    pseudoobs_files:
+        - ../products/igs20624.sp3
+
+
+output_files:
+
+    root_output_directory:          <CONFIG>/
+
+    output_trace:                   true
+    trace_level:                    4
+    trace_directory:                ./
+    trace_filename:                 <CONFIG>-<STATION><YYYY><DDD><HH>-<LOGTIME>.TRACE
+    #trace_rotate_period:            6
+    #trace_rotate_period_units:      hours
+
+    output_residuals:               true
+
+    output_summary:                 true
+    summary_directory:              ./
+    summary_filename:               PEA<LOGTIME><YYYY><DDD><HH>.SUM
+
+    output_mongo_measurements:      true
+    output_mongo_states:            true
+    output_mongo_metadata:          false
+    delete_mongo_history:           true
+    mongo_uri:                      mongodb://127.0.0.1:27017
+    #mongo_suffix:                   _H
+
+
+output_options:
+
+    config_description:             ex01
+
+
+processing_options:
+
+    #start_epoch:                2019-07-18 12:00:00
+    end_epoch:                2019-07-18 23:00:00
+    #max_epochs:                 12        #0 is infinite
+    epoch_interval:             900          #seconds
+    wait_next_epoch:            60
+    wait_all_stations:          1
+    
+
+    process_modes:
+        ppp:                    true
+        #rts:                    true
+        
+    process_sys:
+        gps:            true
+        gal:            false
+          
+    force_models:
+        central_force_gravity:          true
+        direct_solar_radiation:         false
+        
+        some_configuration_parameter:   50
+        
+
+network_filter_parameters:
+
+    max_filter_iterations:      3
+    max_prefit_removals:        3
+
+    rts_lag:                    -1      #-ve for full reverse, +ve for limited epochs
+    rts_directory:              ./
+    rts_filename:               <CONFIG>.rts
+
+default_filter_parameters:
+
+    satellites:
+        pos:
+            estimated:          false
+            sigma:              [5]
+            proc_noise:         [0]
+            
+        pos_rate:
+            estimated:          false
+            sigma:              [5000]
+            proc_noise:         [0]
+            
+override_filter_parameters:
+    satellites:
+
+        PRN_G01:
+            pos:
+                estimated:          true
+                sigma:              [5]
+                proc_noise:         [0]
+                
+            pos_rate:
+                estimated:          true
+                sigma:              [5000]
+                proc_noise:         [0]

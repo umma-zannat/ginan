@@ -1,24 +1,27 @@
-
 #ifndef WRITECLK_HPP
 #define WRITECLK_HPP
 
+// Needed as StationMap is a kind of typedef.
+#include "station.hpp"
 
+#include <string>
+
+using std::string;
+
+struct GTime;
 struct KFState;
+class E_Ephemeris;
 
-void outputReceiverClocks(
-	string&		filename,
-	KFState&	kfState,
-	double*		epoch);
+void tryPrepareFilterPointers(
+	KFState&		kfState, 
+	StationMap*		stationMap_ptr);
 
-void outputSatelliteClocks(
-	string&		filename,
-	KFState&	kfState,
-	double*		epoch);
-
-void outputClockfileHeader(
-	string&		filename,
-	KFState&	kfState,
-	double*		epoch);
-
+void outputClocks(
+	string			filename,
+	E_Ephemeris		clkDataRecSrc,
+	E_Ephemeris		clkDataSatSrc,
+	GTime			tsync,	
+	KFState&		kfState,
+	StationMap*		stationMap_ptr);
 
 #endif

@@ -358,7 +358,7 @@ END IF
 ALLOCATE (srpcoef(ECOMNUM), STAT = AllocateStatus)
 if (AllocateStatus .ne. 0) then
         write(mesg, *) "failed to allocate srpfcoef array, dimension=", ECOMNUM
-        call report('FATAL', pgrm_name, 'force_srp', mesg, 'src/force_srp.f90', 1)
+        call report('FATAL', pgrm_name, 'force_srp', mesg, 'src/fortran/force_srp.f90', 1)
 endif
 
 !ALLOCATE (srpcoef(NPARAM_EMP_ECOM_glb), STAT = AllocateStatus)

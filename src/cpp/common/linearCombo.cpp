@@ -145,10 +145,10 @@ S_LC& getLC(
 	double lamA = obs.satNav_ptr->lamMap[fA];
 	double lamB = obs.satNav_ptr->lamMap[fB];
 
-	lc = getLC(L_A, L_B, P_A, P_B, lamA, lamB, NULL, NULL);
+	lc = getLC(L_A, L_B, P_A, P_B, lamA, lamB, nullptr, nullptr);
 
 	//special cases
-	if (fB == F5 && (obs.Sat.sys == +E_Sys::GAL || obs.Sat.sys == +E_Sys::CMP))	//todo aaron, check why these are reversed
+	if (fB == F5 && (obs.Sat.sys == +E_Sys::GAL || obs.Sat.sys == +E_Sys::CMP))
 		lc.MW_c *= -1; /* cycle */
 
 	if (fA == F1 && fB == F2)
@@ -214,7 +214,7 @@ void obs2lc(
 
 	lcPrepareBase(obs, lcBase);
 
-	artificialSlip(trace, obs, lcBase, strprefix);
+// 	artificialSlip(trace, obs, lcBase, strprefix);
 
 	//iterate pairwise over the frequencies.
 	S_LC& lc12 = getLC(obs, lcBase, F1, F2);

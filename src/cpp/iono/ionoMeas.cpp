@@ -4,7 +4,7 @@
 #include "corrections.hpp"
 #include "ionoModel.hpp"
 #include "acsConfig.hpp"
-#include "constants.h"
+#include "constants.hpp"
 #include "satStat.hpp"
 #include "station.hpp"
 #include "common.hpp"
@@ -12,7 +12,7 @@
 
 #define PHASE_BIAS_STD 0.05
 
-extern int Ipp_in_range(GTime time, double *Ion_pp)
+int Ipp_in_range(GTime time, double *Ion_pp)
 {
 	switch (acsConfig.ionFilterOpts.model)
 	{
@@ -112,7 +112,7 @@ int update_receivr_measr(
 		if (obs.ionExclude) 
 			continue;
 
-		if (fabs(timediff(satStat.lastObsTime, obs.time)) > 300)
+		if (fabs(satStat.lastObsTime - obs.time) > 300)
 		{
 			satStat.ambvar	= 0;
 		}
@@ -121,7 +121,7 @@ int update_receivr_measr(
 		double varL = obs.Sigs.begin()->second.phasVar;
 		double varP = obs.Sigs.begin()->second.codeVar;
 
-		double amb = - (lc.GF_Phas_m + lc.GF_Code_m);	//todo aaron, the signs of these come out a bit weird
+		double amb = - (lc.GF_Phas_m + lc.GF_Code_m);
 
 		if	( fabs(lc.GF_Phas_m - lc_pre.GF_Phas_m) > 0.05		/* Basic cycle slip detection */
 			||satStat.ambvar <= 0)
@@ -156,9 +156,9 @@ int update_receivr_measr(
 }
 
 void write_receivr_measr(
-	Trace&				trace, 
-	std::list<Station*>	stations, 
-	GTime				time)
+	Trace&						trace, 
+	std::map<string, Station>	stations, 
+	GTime						time)
 {
 	int week;
 	double tow = time2gpst(time, &week);
@@ -181,11 +181,8 @@ void write_receivr_measr(
 	}
 
 	int i = 0;
-	for (auto& rec_ptr : stations)
+	for (auto& [id, rec] : stations)
 	{
-		auto& rec = *rec_ptr;
-		//Trace& rectrc = *rec.trace.get();
-		
 		if (rec.obsList.size() < MIN_NSAT_STA) 
 			continue;
 

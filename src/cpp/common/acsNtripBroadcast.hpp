@@ -1,3 +1,4 @@
+
 #ifndef NTRIPSSRBROADCASTER_H
 #define NTRIPSSRBROADCASTER_H
 
@@ -12,9 +13,6 @@
 #include "enums.h"
 
 
-
-template<typename T>
-extern std::ofstream getTraceFile(T& thing);
 
 struct NtripBroadcaster
 {
@@ -59,6 +57,7 @@ struct NtripBroadcaster
 										request_stream	<< "User-Agent: NTRIP ACS/1.0\r\n";
 			if (!ntripStr.empty())	    request_stream	<< "Ntrip-STR: " << ntripStr << "\r\n";
 										request_stream	<< "Connection: close\r\n";
+										request_stream  << "Transfer-Encoding: chunked\r\n";
 										request_stream	<< "\r\n";
 			request_string = request_stream.str();
 			
@@ -82,7 +81,7 @@ struct NtripBroadcaster
 			SSREph ssrEph)
 		override
 		{
-			ntripTrace.traceSsrEph(Sat,ssrEph);
+			ntripTrace.traceSsrEph(Sat, ssrEph);
 		}
 
 		void traceSsrClk(
@@ -90,16 +89,16 @@ struct NtripBroadcaster
 			SSRClk ssrClk) 
 		override
 		{
-			ntripTrace.traceSsrClk(Sat,ssrClk);
+			ntripTrace.traceSsrClk(Sat, ssrClk);
 		}
 
 		void traceSsrCodeB(
 			SatSys Sat,
-			E_ObsCode mode, 
+			E_ObsCode code, 
 			SSRBias ssrBias)
 		override
 		{
-			ntripTrace.traceSsrCodeB(Sat, mode, ssrBias);
+			ntripTrace.traceSsrCodeB(Sat, code, ssrBias);
 		}
 
 		void traceSsrPhasB(
@@ -131,8 +130,9 @@ struct NtripBroadcaster
 		void traceWriteEpoch(
 			Trace& trace)
 		{
-			traceMakeNetworkOverview(trace);
-			ntripTrace.traceWriteEpoch(trace);
+			//TODO add uploading network tracing
+			//traceMakeNetworkOverview(trace);
+			//ntripTrace.traceWriteEpoch(trace);
 		}
 	};
 	
@@ -142,5 +142,7 @@ struct NtripBroadcaster
 	std::multimap<string, std::shared_ptr<NtripUploadClient>> ntripUploadStreams;
 	
 };
+
+extern	NtripBroadcaster outStreamManager;
 
 #endif

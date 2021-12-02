@@ -24,12 +24,12 @@ map<E_Sys,string>  IonRefSta;
 
 FILE* fp_iondebug;
 
-extern int config_ionosph_model()
+int config_ionosph_model()
 {
 	fp_iondebug = nullptr;
 	
-	if (acsConfig.output_ionstec) std::ofstream(acsConfig.ionstec_filename);
-	if (acsConfig.output_ionex)   std::ofstream(acsConfig.ionex_filename);
+	if (acsConfig.output_ionstec)	std::ofstream(acsConfig.ionstec_filename);
+	if (acsConfig.output_ionex)		std::ofstream(acsConfig.ionex_filename);
 	
 	iono_KFState.max_filter_iter	= acsConfig.ionFilterOpts.max_filter_iter;
 	iono_KFState.max_prefit_remv	= acsConfig.ionFilterOpts.max_prefit_remv;
@@ -40,19 +40,22 @@ extern int config_ionosph_model()
 	{
 		case E_IonoModel::MEAS_OUT:				return 1;
 		case E_IonoModel::SPHERICAL_HARMONICS:	return configure_iono_model_sphhar();
-		case E_IonoModel::SPHERICAL_CAPS:	    return configure_iono_model_sphcap();
-		case E_IonoModel::BSPLINE:			    return configure_iono_model_bsplin();
+		case E_IonoModel::SPHERICAL_CAPS:		return configure_iono_model_sphcap();
+		case E_IonoModel::BSPLINE:				return configure_iono_model_bsplin();
 	}
 	return 0;
 }
 
-static double ion_coef(int ind, Obs& obs, bool slant)
+static double ion_coef(
+	int		ind,
+	Obs&	obs, 
+	bool	slant)
 {
-	switch(acsConfig.ionFilterOpts.model)
+	switch (acsConfig.ionFilterOpts.model)
 	{
-		case E_IonoModel::SPHERICAL_HARMONICS:  return ion_coef_sphhar(ind, obs, slant);
-		case E_IonoModel::SPHERICAL_CAPS:   	return ion_coef_sphcap(ind, obs, slant);
-		case E_IonoModel::BSPLINE:      	  	return ion_coef_bsplin(ind, obs, slant);
+		case E_IonoModel::SPHERICAL_HARMONICS:	return ion_coef_sphhar(ind, obs, slant);
+		case E_IonoModel::SPHERICAL_CAPS:		return ion_coef_sphcap(ind, obs, slant);
+		case E_IonoModel::BSPLINE:				return ion_coef_bsplin(ind, obs, slant);
 	}
 	return 0;
 }
@@ -64,7 +67,7 @@ static double ion_coef(int ind, Obs& obs, bool slant)
 /*****************************************************************************************/
 void update_ionosph_model(
 	Trace&			trace,			///< Trace to output to
-	StationList&	stations,       ///< List of pointers to stations to use
+	StationMap&		stations,		///< List of pointers to stations to use
 	GTime 			iontime)		///< Time of this epoch
 {
 	TestStack ts(__FUNCTION__);
@@ -86,12 +89,11 @@ void update_ionosph_model(
 	map<SatSys, int> satelltlist;
 	map<E_Sys, string> maxCountSta;
 	map<E_Sys,int> satCount;
-	int NmeaTot=0;
 	
-	for (auto& rec_ptr 	: stations)
+	for (auto& [id, rec] : stations)
 	{
-		map<E_Sys,int> satcnt;
-		for (auto& obs 		: rec_ptr->obsList)
+		map<E_Sys, int> satcnt;
+		for (auto& obs 		: rec.obsList)
 		{
 			if (obs.ionExclude) 
 				continue;
@@ -103,15 +105,15 @@ void update_ionosph_model(
 		{
 			if(nsat<MIN_NSAT_STA) 
 				continue;
-			stationlist[rec_ptr->id][sys]+=nsat;
+			stationlist[rec.id][sys]+=nsat;
 			
-			if (rec_ptr->id==acsConfig.pivot_station ) nsat=999;
-			if (rec_ptr->id==IonRefSta[sys])		   nsat=9999;
+			if (rec.id==acsConfig.pivot_station )	nsat=999;
+			if (rec.id==IonRefSta[sys])				nsat=9999;
 			
 			if (satCount[sys]<nsat)
 			{
 				satCount[sys]=nsat;
-				maxCountSta[sys]=rec_ptr->id;
+				maxCountSta[sys]=rec.id;
 			}
 		}
 	}
@@ -151,11 +153,11 @@ void update_ionosph_model(
 	//add measurements and create design matrix entries
 	KFMeasEntryList kfMeasEntryList;
 
-	for (auto& rec_ptr	: stations)
+	for (auto& [id, rec] : stations)
 	{
-		auto& rec = *rec_ptr;
-		string sta= rec.id;
-		for (auto& obs 		: rec_ptr->obsList)
+		string sta = rec.id;
+		
+		for (auto& obs 		: rec.obsList)
 		{
 			E_Sys sys=obs.Sat.sys;
 			

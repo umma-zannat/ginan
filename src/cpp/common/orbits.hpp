@@ -11,9 +11,6 @@ using std::list;
 
 
 #include "eigenIncluder.hpp"
-
-
-#include "navigation.hpp"
 #include "satSys.hpp"
 
 
@@ -39,33 +36,52 @@ struct OrbitInfo
 
 struct SatOrbit
 {
-	InitialOrbit			initialOrbit;
-	map<GTime, OrbitInfo>	orbitInfoList;
-	int						numUnknowns;			///< number of unknowns
-	vector<string>			parameterNames;
-	string					srpModel[2];
-	double					mass;
+	InitialOrbit								initialOrbit;
+	map<GTime, OrbitInfo, std::greater<GTime>>	orbitInfoMap;
+	int											numUnknowns;			///< number of unknowns
+	vector<string>								parameterNames;
+	string										srpModel[2];
+	double										mass;
 };
 
-struct orbpod_t
-{
-	/* orbit info from POD */
-	double							startEpoch[2];			///< start epoch [mjd][sod]
-	double							endEpoch[2];			///< end epoch [mjd][sod]
-	int								numSats;				///< number of satellite
-	int								numEpochs;				///< number of epochs
-	int								nint;					///< interval (s)
-	map<SatSys, SatOrbit>			satOrbitMap;			//key is satSys uid
-	list<string>					infoList;
-};
+
+
+int orbPartials(
+	Trace&		trace,
+	GTime		time,
+	SatSys		Sat,
+	MatrixXd&	interpPartials);
 
 int readorbit(
-	string		file,
-	orbpod_t&	orbpod);
+	string		file);
 
 struct KFState;
 
 void outputOrbit(
 	KFState&	kfState);
+
+
+void keplers2inertial(
+	VectorXd&	keplers0, 
+	Vector3d&	pos,
+	double&		dM);
+
+
+void inertial2Keplers(
+			Trace&		trace,
+	const	Vector3d&	r,
+	const	Vector3d&	v,
+			VectorXd&	keplers);
+
+void getKeplerPartials(
+	VectorXd&	keplers0,
+	MatrixXd&	partials);
+	
+	
+void getKeplerInversePartials(
+	Vector3d&	pos,
+	Vector3d&	vel,
+	MatrixXd&	partials);
+
 #endif
 

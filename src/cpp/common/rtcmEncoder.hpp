@@ -38,4 +38,6 @@ struct RtcmEncoder
     };
 };
 
+void	rtcmEncodeToFile			(int epochNum);
+
 #endif

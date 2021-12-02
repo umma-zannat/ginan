@@ -8,7 +8,9 @@
 
 using std::map;
 
-#include "acsStream.hpp"
+#include "acsObsStream.hpp"
+#include "acsNavStream.hpp"
+
 #include "ntripTrace.hpp"
 
 struct LockTimeInfo

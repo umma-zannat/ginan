@@ -25,6 +25,9 @@ def _txt2bytes(path):
 
 def path2bytes(path):
     '''Main file reading function.'''
+    if isinstance(path, bytes): # no reading is necessary - pass through.
+        return path
+
     if path.endswith('.Z'):
         databytes = _lzw2bytes(path)
     elif path.endswith('.gz'):

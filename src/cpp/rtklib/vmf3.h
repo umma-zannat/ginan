@@ -21,14 +21,14 @@
 struct vmf3grid_t
 {
 	/* vmf3 grid file contents */
-	double lat	[NGRID];          	/* lat grid (degree) */
-	double lon	[NGRID];          	/* lon grid (degree) */
-	double ah	[NGRID];           	/* hydrostatic mapping coefficient */
-	double aw	[NGRID];           	/* wet mapping coefficient */
-	double zhd	[NGRID];          	/* zenith hydrastatic delay (m) */
-	double zwd	[NGRID];			/* zenith wet delay */
-	double resol;					/* grid resolution */
-	double mjd;						/* modified julian date */
+	double lat	[NGRID] = {};          	/* lat grid (degree) */
+	double lon	[NGRID] = {};          	/* lon grid (degree) */
+	double ah	[NGRID] = {};           	/* hydrostatic mapping coefficient */
+	double aw	[NGRID] = {};           	/* wet mapping coefficient */
+	double zhd	[NGRID] = {};          	/* zenith hydrastatic delay (m) */
+	double zwd	[NGRID] = {};			/* zenith wet delay */
+	double resol		= 0;					/* grid resolution */
+	double mjd			= 0;						/* modified julian date */
 } ;
 
 struct vmf3_t

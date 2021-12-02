@@ -8,8 +8,39 @@
 using std::string;
 using std::map;
 
-#include "constants.h"
+
 #include "enums.h"
+
+#define MINPRNGPS   1                   /* min satellite PRN number of GPS */
+#define MAXPRNGPS   32                  /* max satellite PRN number of GPS */
+#define NSATGPS     (MAXPRNGPS-MINPRNGPS+1) /* number of GPS satellites */
+#define NSYSGPS     1
+
+#define MINPRNGLO   1                   /* min satellite slot number of GLONASS */
+#define MAXPRNGLO   27                  /* max satellite slot number of GLONASS */
+#define NSATGLO     (MAXPRNGLO-MINPRNGLO+1) /* number of GLONASS satellites */
+
+#define MINPRNGAL   1                   /* min satellite PRN number of Galileo */
+#define MAXPRNGAL   30                  /* max satellite PRN number of Galileo */
+#define NSATGAL    (MAXPRNGAL-MINPRNGAL+1) /* number of Galileo satellites */
+
+#define MINPRNQZS   193                 /* min satellite PRN number of QZSS */
+#define MAXPRNQZS   199                 /* max satellite PRN number of QZSS */
+#define MINPRNQZS_S 183                 /* min satellite PRN number of QZSS SAIF */
+#define MAXPRNQZS_S 189                 /* max satellite PRN number of QZSS SAIF */
+#define NSATQZS     (MAXPRNQZS-MINPRNQZS+1) /* number of QZSS satellites */
+
+#define MINPRNCMP   1                   /* min satellite sat number of BeiDou */
+#define MAXPRNCMP   35                  /* max satellite sat number of BeiDou */
+#define NSATCMP     (MAXPRNCMP-MINPRNCMP+1) /* number of BeiDou satellites */
+
+#define MINPRNLEO   1                   /* min satellite sat number of LEO */
+#define MAXPRNLEO   10                  /* max satellite sat number of LEO */
+#define NSATLEO     (MAXPRNLEO-MINPRNLEO+1) /* number of LEO satellites */
+
+#define MINPRNSBS   120                 /* min satellite PRN number of SBAS */
+#define MAXPRNSBS   142                 /* max satellite PRN number of SBAS */
+#define NSATSBS     (MAXPRNSBS-MINPRNSBS+1) /* number of SBAS satellites */
 
 /** Object holding satellite id, and providing related functions
 */
@@ -35,7 +66,7 @@ struct SatSys
 
 
 	/** Returns the bias group associated with this satellite.
-	* Receivers may combine multiple satellite systems on a single internal clock, each wih their own bias.
+	* Receivers may combine multiple satellite systems on a single internal clock, each with their own bias.
 	* The biases defined by this function are the basis for the different clocks calculated in this software
 	*/
 	short int biasGroup()

@@ -12,6 +12,36 @@
 #include <boost/asio/buffer.hpp>
 #include <boost/asio.hpp>
 
+
+struct NetworkData
+{
+	std::string streamName;
+	
+	GTime startTime;
+	GTime endTime;
+    long int	numPreambleFound	= 0;
+    long int	numFramesFailedCRC	= 0;
+    long int	numFramesPassCRC	= 0;
+    long int	numFramesDecoded	= 0;
+    long int	numNonMessBytes		= 0;
+	long int	numMessagesLatency	= 0;	
+	double		totalLatency		= 0;
+
+    int disconnectionCount = 0;
+    boost::posix_time::time_duration connectedDuration		= boost::posix_time::hours(0);
+    boost::posix_time::time_duration disconnectedDuration	= boost::posix_time::hours(0);
+	
+    int numberErroredChunks = 0; 
+	int numberChunks = 0;
+	
+	void clearStatistics(GTime tStart, GTime tEnd);
+	void accumulateStatisticsFrom(NetworkData& dataToAdd);
+	
+	std::string previousJSON;
+	std::string getJsonNetworkStatistics(GTime now,std::string label);
+	void printTraceNetworkStatistics(Trace& trace);
+};
+
 struct NtripTrace 
 {
 	int level_trace = 0;

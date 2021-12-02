@@ -1,12 +1,21 @@
 '''Downloads single tarball which has products, data and solutions dirs
 to disk and extracts the content into examples dir
 how-to-update with aws cli: aws s3 cp examples_aux.tar.gz s3://peanpod/aux/ --acl public-read --metadata md5checksum=[checksum as computed by get_checksum]'''
+
+import argparse
 import os
 import tarfile
 import urllib.request
 import shutil
 import base64
 import hashlib
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Downloads single tarball which has products, data and solutions dirs\
+to disk and extracts the content into examples dir')
+    parser.add_argument('-c', '--checksum', action='store_true',help='print checksum to terminal and return 0')
+    return parser.parse_args()
+
 
 def get_checksum(path2file):
     with open(path2file,'rb') as file:
@@ -24,7 +33,7 @@ def untar(file):
         print('Extracting {} to {}'.format(file,destpath))
         tar.extractall(path=destpath)
         
-def download_examples_tar(url,relpath = '../examples/'):
+def download_examples_tar(url,relpath = '../examples/',only_checksum=False):
     '''relpath configures output path relative to the sctipt location'''
     destfile = os.path.basename(url)
     script_path = os.path.dirname(os.path.realpath(__file__))
@@ -35,8 +44,11 @@ def download_examples_tar(url,relpath = '../examples/'):
             if response.status == 200:
                 print('server says OK -> computing MD5 of the file found---')
                 md5_checksum = get_checksum(destfile).decode()
+                if only_checksum:
+                    print(f"MD5 is '{md5_checksum}'. Exiting as -c flag provided.")
+                    return 0
                 print('requesting MD5 from the server---')
-                md5_checksum_response =  response.getheader('x-amz-meta-xmd5checksum')
+                md5_checksum_response =  response.getheader('x-amz-meta-md5checksum')
                 if md5_checksum_response is not None: #md5 checksum exists on server
                     
                     if md5_checksum == md5_checksum_response:
@@ -57,5 +69,10 @@ def download_examples_tar(url,relpath = '../examples/'):
                 with open(destfile, 'wb') as out_file: shutil.copyfileobj(response, out_file)
         untar(destfile)
 
-url='https://peanpod.s3.ap-southeast-2.amazonaws.com/aux/examples_aux.tar.gz'
-download_examples_tar(url=url)
+
+
+if __name__ == "__main__":
+    parsed_args = parse_arguments()
+
+    url='https://peanpod.s3.ap-southeast-2.amazonaws.com/aux/examples_aux.tar.gz'
+    download_examples_tar(url=url,only_checksum=parsed_args.checksum)

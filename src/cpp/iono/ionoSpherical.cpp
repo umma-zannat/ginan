@@ -1,11 +1,12 @@
 
-#include "ionoModel.hpp"
+
 #include "observations.hpp"
-#include "common.hpp"
 #include "acsConfig.hpp"
+#include "constants.hpp"
+#include "ionoModel.hpp"
+#include "common.hpp"
 #include "tides.hpp"
 
-#define SQR(x)  ((x)*(x))
 
 struct leg_elem    /* coef x sin(lat)^sind x cos(lat)^cosd */
 {
@@ -27,7 +28,7 @@ struct Sph_Basis
 map<int, Sph_Basis>  Sph_Basis_list;
 
 double shar_rotmtx[9];				/* Rotation matrix (to centre of map) */
-GTime shar_time = {0};
+GTime shar_time = {};
 double shar_valid = 10.0;
 
 /*-----------------------------------------------------
@@ -195,28 +196,31 @@ Since the spherical harmonic model has global validity, the check always return 
 -----------------------------------------------------
 Author: Ken Harima @ RMIT 29 July 2020
 -----------------------------------------------------*/
-extern int Ipp_check_sphhar(GTime time, double* Ion_pp)
+int Ipp_check_sphhar(GTime time, double* Ion_pp)
 {
+	if 	(time.time == 0) 
+		return 0;
 
-	if ( time.time == 0 ) return 0;
-
-	if (	shar_time.time == 0 ||
-			fabs(timediff(time, shar_time)) > shar_valid )
+	if	(  shar_time.time == 0 
+		|| fabs(time - shar_time) > shar_valid )
 	{
+		double erpv[5] = {};
+		Vector3d rsun;
+		double gmst;
+		sunmoonpos(gpst2utc(time), erpv, &rsun, nullptr, &gmst);
+		
+		double sunpos[3] = {};
+		ecef2pos(rsun.data(), sunpos);
 
-		double erpv[5] = {0}, rsun[3] = {0}, rmon[3] = {0}, gmst, sunpos[3] = {0};
-		sunmoonpos(gpst2utc(time), erpv, rsun, rmon, &gmst);
-		ecef2pos(rsun, sunpos);
-
-		shar_rotmtx[0] = cos(sunpos[0]) * cos(sunpos[1]);
-		shar_rotmtx[1] = cos(sunpos[0]) * sin(sunpos[1]);
-		shar_rotmtx[2] = sin(sunpos[0]);
+		shar_rotmtx[0] =  cos(sunpos[0]) * cos(sunpos[1]);
+		shar_rotmtx[1] =  cos(sunpos[0]) * sin(sunpos[1]);
+		shar_rotmtx[2] =  sin(sunpos[0]);
 		shar_rotmtx[3] = -sin(sunpos[1]);
-		shar_rotmtx[4] = cos(sunpos[1]);
-		shar_rotmtx[5] = 0.0;
+		shar_rotmtx[4] =  cos(sunpos[1]);
+		shar_rotmtx[5] =  0;
 		shar_rotmtx[6] = -sin(sunpos[0]) * cos(sunpos[1]);
 		shar_rotmtx[7] = -sin(sunpos[0]) * sin(sunpos[1]);
-		shar_rotmtx[8] = cos(sunpos[0]);
+		shar_rotmtx[8] =  cos(sunpos[0]);
 
 		shar_time = time;
 
@@ -314,7 +318,6 @@ double ion_vtec_sphhar(
 	KFState& kfState)
 {
 	double ionpp_cpy[3];
-	int ix, m;
 
 	ionpp_cpy[0] = Ion_pp[0];
 	ionpp_cpy[1] = Ion_pp[1];

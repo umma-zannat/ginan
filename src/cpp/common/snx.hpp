@@ -698,7 +698,10 @@ struct  Sinex_stn_snx_t    /* station-wise information */
 	int			stop[3]		= {-1,-1,-1};			/* yr:doy:sod */
 
 	/* receiver block */
-
+	string  rectype;    // receiver type (20)
+	string  recsn;      // receiver serial number (5)
+	string  recfirm;    // receiver firmware  (11)
+	
 	/* anntenna block */
 	string  anttype	= "";    /* antenna type */
 	string  antsn	= "";      /* antenna serial number */
@@ -765,7 +768,7 @@ int  write_sinex(
 
 int getstnsnx	(string station, int yds[3], Sinex_stn_snx_t& snx);
 int getsatsnx	(string prn, int yds[3], Sinex_sat_snx_t&snx);
-void sinex_report();
+void sinex_report(Trace& trace);
 int sinex_sat_count();
 int sinex_site_count();
 long int time_compare(int left[3], int right[3]);

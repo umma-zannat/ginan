@@ -155,13 +155,16 @@ int readvmf(const char *file, const char *staid, double a[7])
 	int info=0;
 
 	fp=fopen(file,"r");
-	if (fp==NULL) {
+	if (fp == nullptr) 
+	{
 		fprintf(stdout,"Warning: no VMF1 coefficients file provided\n");
 		return info;
 	}
 
-	while (fgets(buff,128,fp)!=NULL) {
-		if (strstr(buff,staid)) {
+	while (fgets(buff,128,fp)!=nullptr) 
+	{
+		if (strstr(buff,staid)) 
+		{
 			/* dry a, wet a, zhd, zwd, pressure, temperature, water vapor */
 			sscanf(buff+18,"%lf %lf %lf %lf %lf %lf %lf %lf",
 				&a[0],&a[1],&a[2],&a[3],&tmp,&a[4],&a[5],&a[6]);
@@ -171,8 +174,8 @@ int readvmf(const char *file, const char *staid, double a[7])
 		}
 	}
 
-	if (info==0) fprintf(stdout,"Warning: no station (%s) found in trop.c\n",
-						staid);
+	if (info==0) 
+		fprintf(stdout,"Warning: no station (%s) found in trop.c\n", staid);
 	fclose(fp);
 
 	return info;
@@ -259,7 +262,7 @@ int readgrid(string file, gptgrid_t *gptg)
 	double val[40];
 
 	fp=fopen(file.c_str(),"r");
-	if (fp==NULL)
+	if (fp==nullptr)
 	{
 		gptg->ind = 0;
 
@@ -268,7 +271,7 @@ int readgrid(string file, gptgrid_t *gptg)
 	}
 
 	gptg->ind=1;
-	while (fgets(buff,256,fp)!=NULL)
+	while (fgets(buff,256,fp)!=nullptr)
 	{
 		/* ignore the first line */
 		if (strchr(buff,'%'))
@@ -281,7 +284,7 @@ int readgrid(string file, gptgrid_t *gptg)
 		{
 			sscanf(p,"%lf", &val[j]);
 			j++;
-			p=strtok(NULL," ");
+			p=strtok(nullptr," ");
 		}
 
 		/* assign lat lon */
@@ -349,7 +352,7 @@ double coefr(double p1, double p2, double l1, double l2, double a[4])
 *                                                  [5] wet coef
 *                                                  [6] undulation (m)
 * ---------------------------------------------------------------------------*/
-extern void gpt2(
+void gpt2(
 	const gptgrid_t& gptg,
 	double mjd,
 	double lat,
@@ -660,7 +663,7 @@ double tropemp(const double pres, const double temp, const double e,
 *                  pressure and mapping function coefficients and then vmf1
 *                  is used to derive dry and wet mapping function.
 * ---------------------------------------------------------------------------*/
-extern double tropztd(
+double tropztd(
 	const gptgrid_t& gptg,
 	double pos[3],
 	double mjd,
@@ -699,7 +702,7 @@ extern double tropztd(
 		/* zenith hydrostatic delay */
 		zhd=0.002277*pres/gm;
 	}
-	else if (0 && readvmf(NULL,NULL,a))/* currently omitted */
+	else if (0 && readvmf(nullptr,nullptr,a))/* currently omitted */
 	{
 		vmf1(a[0], a[1], mjd, lat, hgt, zd, 0, mf);
 	}

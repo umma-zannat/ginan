@@ -1,11 +1,17 @@
-#include <sstream>
+
+
 #include <iostream>
+#include <sstream>
 #include <memory>
 #include <string>
-// #include <filesystem>
+#include <tuple>
+#include <map>
 
 using std::unique_ptr;
+using std::multimap;
 using std::string;
+using std::tuple;
+using std::map;
 
 #include <boost/log/trivial.hpp>
 #include <boost/filesystem.hpp>
@@ -19,16 +25,15 @@ using std::string;
 #include "acsNtripBroadcast.hpp"
 #include "rtsSmoothing.hpp"
 #include "streamTrace.hpp"
+#include "constants.hpp"
 #include "acsConfig.hpp"
 #include "acsStream.hpp"
 
 ACSConfig acsConfig = {};
 
-extern	std::multimap	<string, std::shared_ptr<NtripRtcmStream>>	ntripRtcmMultimap;
-extern	std::multimap	<string, ACSObsStreamPtr>	obsStreamMultimap;
-extern	std::multimap	<string, ACSNavStreamPtr>	navStreamMultimap;
-extern	std::map		<string, bool>				streamDOAMap;
-extern	NtripBroadcaster outStreamManager;
+
+
+typedef tuple<YAML::Node, string> NodeStack;
 
 /** Set value according to variable map entry if found
 */
@@ -146,7 +151,7 @@ void ACSConfig::addDataFile(
 		//this stream was already added, dont re-add
 		return;
 	}
-	
+
 	boost::filesystem::path filePath(fileName);
 
 	if (checkValidFile(fileName, dataType) == false)
@@ -171,14 +176,14 @@ void ACSConfig::addDataFile(
 	{
 		return;
 	}
-	
+
 	if (fileType == "RINEX")
 	{
 		auto rinexStream_ptr = std::make_shared<FileRinexStream>(filePath.string());
 
 		if		(dataType == "NAV")		navStreamMultimap.insert({stationId, std::move(rinexStream_ptr)});
 		else if	(dataType == "OBS")		obsStreamMultimap.insert({stationId, std::move(rinexStream_ptr)});
-		
+
 		streamDOAMap[fileName] = false;
 
 		rinexFiles.push_back(filename.string());
@@ -190,7 +195,16 @@ void ACSConfig::addDataFile(
 
 		if		(dataType == "NAV")		navStreamMultimap.insert({stationId, std::move(rtcmStream_ptr)});
 		else if	(dataType == "OBS")		obsStreamMultimap.insert({stationId, std::move(rtcmStream_ptr)});
-		
+
+		streamDOAMap[fileName] = false;
+	}
+	
+	if (fileType == "SP3")
+	{
+		auto pseudoObsStream_ptr = std::make_shared<FileSp3Stream>(filePath.string());
+
+		if		(dataType == "PSEUDO")	pseudoObsStreamMultimap.insert({stationId, std::move(pseudoObsStream_ptr)});
+
 		streamDOAMap[fileName] = false;
 	}
 }
@@ -206,12 +220,18 @@ bool configure(
 
 	// Do not set default values here, as this will overide the configuration file opitions!!!
 	desc.add_options()
-	("help", 																"Help")
-	("quiet", 																"Less output")
-	("verbose", 															"More output")
-	("very-verbose", 														"Much more output")
-	("config", 					boost::program_options::value<string>(), 	"Configuration file")
-	("trace_level", 			boost::program_options::value<int>(), 		"Trace level")
+	("help,h", 																"Help")
+	("quiet,q", 															"Less output")
+	("verbose,v", 															"More output")
+	("very-verbose,V", 														"Much more output")
+	("yaml-defaults,Y",														"Print complete set of parsed parameters and their default values")
+	("config,y", 				boost::program_options::value<string>(), 	"Configuration file")
+	("trace_level,l", 			boost::program_options::value<int>(), 		"Trace level")
+	("elevation_mask,e", 		boost::program_options::value<float>(), 	"Elevation Mask")
+	("max_epochs,n", 			boost::program_options::value<int>(), 		"Maximum Epochs")
+	("epoch_interval,i", 		boost::program_options::value<float>(), 	"Epoch Interval")
+	("stream_user,u", 			boost::program_options::value<string>(),	"Username for RTCM streams")
+	("stream_pass,p", 			boost::program_options::value<string>(),	"Password for RTCM streams")
 	("antenna", 				boost::program_options::value<string>(), 	"ANTEX file")
 	("navigation", 				boost::program_options::value<string>(), 	"Navigation file")
 	("sinex", 					boost::program_options::value<string>(), 	"SINEX file")
@@ -223,9 +243,6 @@ bool configure(
 	("podfiles", 				boost::program_options::value<string>(), 	"Orbits (POD) file")
 	("blqfiles", 				boost::program_options::value<string>(), 	"BLQ (Ocean loading) file")
 	("erpfiles", 				boost::program_options::value<string>(), 	"ERP file")
-	("elevation_mask", 			boost::program_options::value<float>(), 	"Elevation Mask")
-	("max_epochs", 				boost::program_options::value<int>(), 		"Maximum Epochs")
-	("epoch_interval", 			boost::program_options::value<float>(), 	"Epoch Interval")
 	("rnx", 					boost::program_options::value<string>(),	"RINEX station file")
 	("root_input_dir", 			boost::program_options::value<string>(),	"Directory containg the input data")
 	("root_output_directory", 	boost::program_options::value<string>(),	"Output directory")
@@ -256,6 +273,14 @@ bool configure(
 	if (vm.count("verbose"))		{	boost::log::core::get()->set_filter (boost::log::trivial::severity >= boost::log::trivial::info);		}
 	if (vm.count("quiet"))			{	boost::log::core::get()->set_filter (boost::log::trivial::severity >= boost::log::trivial::warning);	}
 
+	
+	if (vm.count("yaml-defaults"))
+	{
+		acsConfig.parse("", vm);
+		
+		exit(EXIT_SUCCESS);	
+	}
+	
 	if (vm.count("run_rts_only"))
 	{
 		string forward = vm["run_rts_only"].as<string>();
@@ -270,10 +295,9 @@ bool configure(
 		acsConfig.clocks_filename	= forward + SMOOTHED_SUFFIX + "_clk";
 
 		RTS_Process	(kfState, true);
-		RTS_Output	(kfState);
 
 		exit(EXIT_SUCCESS);
-	}
+	} 
 
 	if (vm.count("config"))
 	{
@@ -322,12 +346,10 @@ bool configure(
 	valid &= checkValidFiles(acsConfig.orbfiles, 			"orbit determination (pod file)");
 	valid &= checkValidFile (acsConfig.tropOpts.gpt2grid,	"grid");
 
-	if	( acsConfig.snxfiles.empty())
+	if	(acsConfig.snxfiles.empty())
 	{
-		BOOST_LOG_TRIVIAL(error)
+		BOOST_LOG_TRIVIAL(warning)
 		<< "Invalid SINEX file ";
-
-		return false;
 	}
 
 	if (vm.count("dump-config-only"))
@@ -385,6 +407,7 @@ void ACSConfig::info(
 	ss << "\tInonsphereic:        " << process_ionosphere 			<< "\n";
 	ss << "\tRTS Smoothing:       " << process_rts 					<< "\n";
 	ss << "\tUnit tests:          " << process_tests				<< "\n";
+	ss << "\tPPP:                 " << process_ppp					<< "\n";
 	ss << "\n";
 
 	ss << "Systems:\n";
@@ -419,37 +442,83 @@ void ACSConfig::info(
 
 /** Find a yaml node object using a list of strings
 */
-YAML::Node stringsToYamlObject(
-	YAML::Node		yamlBase, 			///< Yaml node to search within
-	vector<string>	yamlNodeDescriptor)	///< List of strings of keys to trace hierarchy
+NodeStack stringsToYamlObject(
+	NodeStack		yamlBase, 						///< Yaml node to search within
+	vector<string>	yamlNodeDescriptor)				///< List of strings of keys to trace hierarchy
 {
 	YAML::Node currentNode;
-	YAML::Node nullNode;
-	currentNode.reset(yamlBase);
 
+	auto [node, stack] = yamlBase;
+	currentNode.reset(node);
+	
 	for (auto& desc : yamlNodeDescriptor)
 	{
 		auto test = currentNode[desc];
 		if (!test)
 		{
-			return test;
+// 			return {test, ""};
 		}
 
 		currentNode.reset(currentNode[desc]);
+		stack += desc + ":";
 	}
-	return currentNode;
+	
+	return {currentNode, stack};
 }
+
+string stringify(
+	string value)
+{
+	return value;
+}
+
+template<typename TYPE>
+string stringify(
+	TYPE value)
+{
+	string output;
+	output += std::to_string(value);
+	return output;
+}
+
+template<typename TYPE>
+string stringify(
+	vector<TYPE>& vec)
+{
+	string output;
+	output += "[";
+	
+	for (int i = 0; i < vec.size(); i++)
+	{
+		output += stringify(vec[i]);
+		
+		if (i < vec.size() - 1)
+		{
+			output += ", ";
+		}
+	}
+	output += "]";
+    return output;
+}
+
+// using namespace std;
+
 
 /** Set an output from yaml object if found
 */
 template<typename TYPE>
 bool trySetFromYaml(
 	TYPE&			output,				///< Variable to output to
-	YAML::Node&		yamlBase,			///< Yaml node to search within
+	NodeStack		yamlBase,			///< Yaml node to search within
 	vector<string>	yamlNodeDescriptor)	///< List of strings of keys to trace hierarcy
 {
-	YAML::Node optNode = stringsToYamlObject(yamlBase, yamlNodeDescriptor);
-
+	auto [optNode, stack] = stringsToYamlObject(yamlBase,			yamlNodeDescriptor);
+	
+	if (acsConfig.yamlDefaults.find(stack) == acsConfig.yamlDefaults.end())
+	{
+		acsConfig.yamlDefaults[stack] = stringify(output);
+	}
+	
 	try
 	{
 		output = optNode.as<TYPE>();
@@ -487,7 +556,7 @@ template<typename TYPE>
 bool trySetFromAny(
 	TYPE&									output,				///< Variable to output to
 	boost::program_options::variables_map&	commandOpts,		///< Command line object to search within
-	YAML::Node&								yamlBase,			///< Yaml node to search within
+	NodeStack&								yamlBase,			///< Yaml node to search within
 	vector<string>							nodeDescriptor)		///< List of strings of keys to trace hierarcy
 {
 	bool found = false;
@@ -500,45 +569,71 @@ bool trySetFromAny(
 */
 template <typename ENUM>
 void trySetEnumOpt(
-	int&			out,							///< Variable to output to
-	YAML::Node&		yamlBase,						///< Yaml node to search within
+	ENUM&			out,							///< Variable to output to
+	NodeStack		yamlBase,						///< Yaml node to search within
 	vector<string>	yamlNodeDescriptor,				///< List of strings of keys to trace hierarcy
 	ENUM			(&_from_string)(const char*))	///< Function to decode enum strings
 {
-	YAML::Node optNode = stringsToYamlObject(yamlBase, yamlNodeDescriptor);
+	auto [optNode, stack] = stringsToYamlObject(yamlBase, yamlNodeDescriptor);
 
+	if (acsConfig.yamlDefaults.find(stack) == acsConfig.yamlDefaults.end())
+	{
+		acsConfig.yamlDefaults[stack] = out._to_string();
+	}
+	
+	string value;
 	try
 	{
-		out = _from_string(optNode.as<string>().c_str());
+		value = optNode.as<string>();
 	}
-	catch (...)	{}
+	catch (...) 
+	{
+		return;
+	}
+	
+	try
+	{
+		out = _from_string(value.c_str());
+	}
+	catch (...)	
+	{
+		BOOST_LOG_TRIVIAL(error)
+		<< "\nError: " << value << " is not a valid entry for option: " << yamlNodeDescriptor.back() << ".\n"
+		<< "Valid options include:";
+		
+		for (const char* name : ENUM::_names())
+		{
+			BOOST_LOG_TRIVIAL(error) << name << std::endl;
+		}
+		exit(0);
+	}
 }
 
 /** Set the variables associated with kalman filter states from yaml
 */
 void trySetKalmanFromYaml(
 	KalmanModel&	output,	///< Variable to output to
-	YAML::Node&		yaml,	///< Yaml node to search within
+	NodeStack&		yaml,	///< Yaml node to search within
 	string			key)	///< Key of yaml object
 {
-	auto entry = yaml[key];
+	auto [node, stack] = yaml;
+	auto entry = node[key];
 	if (entry)
 	{
-		int proc_noise_dt = 1;
-						trySetEnumOpt(proc_noise_dt,			entry, {"proc_noise_dt"	}, E_Period::_from_string_nocase);
-						trySetFromYaml(output.estimate, 		entry, {"estimated"		});
+		NodeStack newYaml = {entry, stack + key + ":"};
+		E_Period proc_noise_dt = E_Period::SECOND;
+						trySetEnumOpt(proc_noise_dt,			newYaml, {"proc_noise_dt"	}, E_Period::_from_string_nocase);
+						trySetFromYaml(output.estimate, 		newYaml, {"estimated"		});
 
-						trySetFromYaml(output.sigma,			entry, {"sigma" 		});
-						trySetFromYaml(output.clamp_max,		entry, {"clamp_max" 	});
-						trySetFromYaml(output.clamp_min,		entry, {"clamp_min" 	});
-						trySetFromYaml(output.apriori_val,		entry, {"apriori_val"	});
-		bool found = 	trySetFromYaml(output.proc_noise,		entry, {"proc_noise" 	});
-		bool foundTau =	trySetFromYaml(output.tau,				entry, {"tau"			});
+						trySetFromYaml(output.sigma,			newYaml, {"sigma" 		});
+						trySetFromYaml(output.apriori_val,		newYaml, {"apriori_val"	});
+		bool found = 	trySetFromYaml(output.proc_noise,		newYaml, {"proc_noise" 	});
+		bool foundTau =	trySetFromYaml(output.tau,				newYaml, {"tau"			});
 		if (found)
 		{
 			for (auto& proc : output.proc_noise)
 			{
-				proc /= sqrt(proc_noise_dt);
+				proc /= sqrt((int)proc_noise_dt);
 			}
 		}
 		if (foundTau)
@@ -555,16 +650,19 @@ void trySetKalmanFromYaml(
 */
 void getFromYaml(
 	SatelliteOptions&	satOpts,			///< Satellite options variable to output to
-	YAML::Node&			yamlBase,			///< Yaml node to search within
+	NodeStack			yamlBase,			///< Yaml node to search within
 	vector<string>		yamlNodeDescriptor)	///< List of strings of keys of yaml hierarchy
 {
-	YAML::Node satNode = stringsToYamlObject(yamlBase, yamlNodeDescriptor);
+	auto satNode = stringsToYamlObject(yamlBase, yamlNodeDescriptor);
 
-	trySetKalmanFromYaml(satOpts.clk,		satNode, "clk"		);
-	trySetKalmanFromYaml(satOpts.clk_rate,	satNode, "clk_rate"	);
-	trySetKalmanFromYaml(satOpts.pos,		satNode, "pos"		);
-	trySetKalmanFromYaml(satOpts.pos_rate,	satNode, "pos_rate"	);
-	trySetKalmanFromYaml(satOpts.orb,		satNode, "orb"		);
+	trySetKalmanFromYaml(satOpts.clk,		satNode, "clk"			);
+	trySetKalmanFromYaml(satOpts.clk_rate,	satNode, "clk_rate"		);
+	trySetKalmanFromYaml(satOpts.pos,		satNode, "pos"			);
+	trySetKalmanFromYaml(satOpts.pos_rate,	satNode, "pos_rate"		);
+	trySetKalmanFromYaml(satOpts.keplers,	satNode, "keplers"		);
+	trySetKalmanFromYaml(satOpts.orb,		satNode, "orb"			);
+	trySetKalmanFromYaml(satOpts.code_bias,	satNode, "code_bias"	);
+	trySetKalmanFromYaml(satOpts.phas_bias,	satNode, "phas_bias"	);
 
 	trySetFromYaml(satOpts.exclude, 	satNode, {"exclude"});
 
@@ -574,19 +672,23 @@ void getFromYaml(
 /** Set receiver options from yaml
 */
 void getFromYaml(
-	ReceiverOptions& 	recOpts, 			///< Receiver options variable to output to
-	YAML::Node&			yamlBase,			///< Yaml node to search within
+	ReceiverOptions&	recOpts, 			///< Receiver options variable to output to
+	NodeStack			yamlBase,			///< Yaml node to search within
 	vector<string>		yamlNodeDescriptor)	///< List of strings of keys of yaml hierarchy
 {
-	YAML::Node recNode = stringsToYamlObject(yamlBase, yamlNodeDescriptor);
+	auto recNode = stringsToYamlObject(yamlBase, yamlNodeDescriptor);
 
-	trySetKalmanFromYaml(recOpts.pos,			recNode, "pos"			);
-	trySetKalmanFromYaml(recOpts.pos_rate,		recNode, "pos_rate"		);
-	trySetKalmanFromYaml(recOpts.clk,			recNode, "clk"			);
-	trySetKalmanFromYaml(recOpts.clk_rate,		recNode, "clk_rate"		);
-	trySetKalmanFromYaml(recOpts.amb,			recNode, "amb"			);
-	trySetKalmanFromYaml(recOpts.trop,			recNode, "trop"			);
-	trySetKalmanFromYaml(recOpts.trop_grads,	recNode, "trop_grads"	);
+	trySetKalmanFromYaml(recOpts.clk,						recNode, "clk"			);
+	trySetKalmanFromYaml(recOpts.clk_rate,					recNode, "clk_rate"		);
+	trySetKalmanFromYaml(recOpts.pos,						recNode, "pos"			);
+	trySetKalmanFromYaml(recOpts.pos_rate,					recNode, "pos_rate"		);
+	trySetKalmanFromYaml(recOpts.keplers,					recNode, "keplers"		);
+	trySetKalmanFromYaml(recOpts.amb,						recNode, "amb"			);
+	trySetKalmanFromYaml(recOpts.code_bias,					recNode, "code_bias"	);
+	trySetKalmanFromYaml(recOpts.phas_bias,					recNode, "phas_bias"	);
+	trySetKalmanFromYaml(recOpts.ion,						recNode, "ion"			);
+	trySetKalmanFromYaml(recOpts.trop,						recNode, "trop"			);
+	trySetKalmanFromYaml(recOpts.trop_grads,				recNode, "trop_grads"	);
 	trySetKalmanFromYaml(recOpts.trop_gauss_markov,			recNode, "trop_gauss_markov"		);
 	trySetKalmanFromYaml(recOpts.trop_grads_gauss_markov,	recNode, "trop_grads_gauss_markov"	);
 
@@ -622,7 +724,7 @@ SatelliteOptions& ACSConfig::getSatOpts(
 			if (globalOpts._initialised == false)
 			{
 				//get specifics from config file
-				getFromYaml(globalOpts, yaml, {"default_filter_parameters", "satellites"});
+				getFromYaml(globalOpts, {yaml, ""}, {"default_filter_parameters", "satellites"});
 				globalOpts._initialised = true;
 			}
 
@@ -631,7 +733,7 @@ SatelliteOptions& ACSConfig::getSatOpts(
 
 			//get specifics from config file
 			string sys = "SYS_" + Sat.sysName();
-			getFromYaml(sysOpts, yaml, {"override_filter_parameters", "satellites", sys});
+			getFromYaml(sysOpts, {yaml, ""}, {"override_filter_parameters", "satellites", sys});
 		}
 
 		//initialise from its parent
@@ -639,7 +741,7 @@ SatelliteOptions& ACSConfig::getSatOpts(
 
 		//get specifics from config file
 		string block = Sat.blockType();
-		getFromYaml(blockOpts, yaml, {"override_filter_parameters", "satellites", block});
+		getFromYaml(blockOpts, {yaml, ""}, {"override_filter_parameters", "satellites", block});
 	}
 
 	//initialise from its parent
@@ -648,12 +750,12 @@ SatelliteOptions& ACSConfig::getSatOpts(
 	//get specifics from config file
 	string prn = "PRN_" + Sat.id();
 	string svn = "SVN_" + Sat.svn();
-	getFromYaml(satOpts, yaml, {"override_filter_parameters", "satellites", prn});
-	getFromYaml(satOpts, yaml, {"override_filter_parameters", "satellites", svn});
+	getFromYaml(satOpts, {yaml, ""}, {"override_filter_parameters", "satellites", prn});
+	getFromYaml(satOpts, {yaml, ""}, {"override_filter_parameters", "satellites", svn});
 
 	return satOpts;
 }
-	//todo aaron these are just asking for it to crash in parallel
+
 /** Set receiver options for a specific receiver using a hierarchy of sources
 */
 ReceiverOptions& ACSConfig::getRecOpts(
@@ -670,7 +772,7 @@ ReceiverOptions& ACSConfig::getRecOpts(
 	if (globalOpts._initialised == false)
 	{
 		//get specifics from config file
-		getFromYaml(globalOpts, yaml, {"default_filter_parameters", "stations"});
+		getFromYaml(globalOpts, {yaml, ""}, {"default_filter_parameters", "stations"});
 		globalOpts._initialised = true;
 	}
 
@@ -678,7 +780,7 @@ ReceiverOptions& ACSConfig::getRecOpts(
 	recOpts = globalOpts;
 
 	//get specifics from config file
-	getFromYaml(recOpts, yaml, {"override_filter_parameters", "stations", id});
+	getFromYaml(recOpts, {yaml, ""}, {"override_filter_parameters", "stations", id});
 
 	return recOpts;
 }
@@ -699,7 +801,7 @@ MinimumStationOptions& ACSConfig::getMinConOpts(
 	if (globalOpts._initialised == false)
 	{
 		//get specifics from config file
-		trySetFromYaml(globalOpts.noise, yaml, {"minimum_constraints", "station_default_noise"});
+		trySetFromYaml(globalOpts.noise, {yaml, ""}, {"minimum_constraints", "station_default_noise"});
 		globalOpts._initialised = true;
 	}
 
@@ -707,7 +809,7 @@ MinimumStationOptions& ACSConfig::getMinConOpts(
 	recOpts = globalOpts;
 
 	//get specifics from config file
-	trySetFromYaml(recOpts.noise, yaml, {"minimum_constraints", "station_noise", id});
+	trySetFromYaml(recOpts.noise, {yaml, ""}, {"minimum_constraints", "station_noise", id});
 
 	return recOpts;
 }
@@ -717,15 +819,15 @@ MinimumStationOptions& ACSConfig::getMinConOpts(
 template<typename ENUM>
 void trySetScaledFromYaml(
 	double&			output,							///< Variable to output to
-	YAML::Node		node,							///< Yaml node to search within
+	NodeStack		node,							///< Yaml node to search within
 	vector<string>	number_parameter,				///< List of keys of the hierarchy to the value to be set
 	vector<string>	scale_parameter,				///< List of keys of the hierarchy to the scale to be applied
 	ENUM			(&_from_string)(const char*))	///< Function to decode scale enum strings
 {
 	double	number			= 0;
-	int		number_units	= 1;
+	ENUM	number_units	= ENUM::_from_integral(1);
 	trySetFromYaml(number,			node, number_parameter);
-	trySetEnumOpt(number_units, node, scale_parameter, _from_string);
+	trySetEnumOpt(number_units, 	node, scale_parameter,	_from_string);
 	number *= number_units;
 	if (number != 0)
 	{
@@ -751,25 +853,36 @@ void replaceString(
 	}
 }
 
+/** Replace macros for times with configured values.
+* Available replacements are "<CONFIG> <USER> <PASS>"
+*/
+void replaceTags(
+	string&						str)		///< String to replace macros within
+{
+	replaceString(str, "<CONFIG>",	acsConfig.config_description);
+	replaceString(str, "<USER>",	acsConfig.stream_user);
+	replaceString(str, "<PASS>",	acsConfig.stream_pass);
+}
+
 /** Replace macros for times with numeric values.
-* Available replacements are "<DDD> <D> <WWWW> <YYYY> <YY> <MM> <DD> <HH>"
+* Available replacements are "<DDD> <D> <WWWW> <YYYY> <YY> <MM> <DD> <HH> <hh> <mm> <LOGTIME>"
 */
 void replaceTimes(
 	string&						str,		///< String to replace macros within
 	boost::posix_time::ptime	time_time)	///< Time to use for replacements
 {
-	string DDD	= "";
-	string D	= "";
-	string WWWW	= "";
-	string YYYY	= "";
-	string YY	= "";
-	string MM	= "";
-	string DD	= "";
-	string HH	= "";
+	string DDD		= "";
+	string D		= "";
+	string WWWW		= "";
+	string YYYY		= "";
+	string YY		= "";
+	string MM		= "";
+	string DD		= "";
+	string HH		= "";
+	string mm		= "";
 
 	if (!time_time.is_not_a_date_time())
 	{
-	// 	string gpsWeek0 = "2019-04-07 00:00:00.000";
 		string gpsWeek0 = "1980-01-06 00:00:00.000";
 		auto gpsZero = boost::posix_time::time_from_string(gpsWeek0);
 		string time_string = boost::posix_time::to_iso_string(time_time);
@@ -780,7 +893,7 @@ void replaceTimes(
 		string ddd = ss.str();
 
 		auto gpsWeek = (time_time - gpsZero);
-		int weeks = gpsWeek.hours() / 24 / 7;		//todo aaron, this is garbage
+		int weeks = gpsWeek.hours() / 24 / 7;
 		ss.str("");
 		ss << std::setw(4) << std::setfill('0') << weeks;
 		string wwww = ss.str();
@@ -788,13 +901,15 @@ void replaceTimes(
 		DDD	= ddd;
 		D	= std::to_string(tm.tm_wday);
 		WWWW	= wwww;
-		YYYY	= time_string.substr(0, 4);
-		YY	= time_string.substr(2, 2);
-		MM	= time_string.substr(4, 2);
-		DD	= time_string.substr(6, 2);
-		HH	= time_string.substr(9, 2);
+		YYYY	= time_string.substr(0,		4);
+		YY		= time_string.substr(2,		2);
+		MM		= time_string.substr(4,		2);
+		DD		= time_string.substr(6,		2);
+		HH		= time_string.substr(9,		2);
+		mm		= time_string.substr(11,	2);
 	}
 
+	replaceString(str, "<LOGTIME>",	"<YYYY>-<MM>-<DD>_<HH>:<mm>");
 	replaceString(str, "<DDD>",		DDD);
 	replaceString(str, "<D>",		D);
 	replaceString(str, "<WWWW>",	WWWW);
@@ -803,7 +918,17 @@ void replaceTimes(
 	replaceString(str, "<MM>",		MM);
 	replaceString(str, "<DD>",		DD);
 	replaceString(str, "<HH>",		HH);
-	replaceString(str, "<CONFIG>",	acsConfig.config_description);
+	replaceString(str, "<hh>",		HH);
+	replaceString(str, "<mm>",		mm);
+}
+
+void replaceTags(
+	vector<string>&				strs)
+{
+	for (auto& str : strs)
+	{
+		replaceTags(str);
+	}
 }
 
 void replaceTimes(
@@ -816,7 +941,9 @@ void replaceTimes(
 	}
 }
 
-bool checkGlob(string str1, string str2)
+bool checkGlob(
+	string str1, 
+	string str2)
 {
 	vector<string> tokens;
 
@@ -882,7 +1009,7 @@ void globber(
 				// Skip if not a file
 				if (boost::filesystem::is_regular_file(dir_file) == false)
 					continue;
-				
+
 				string dir_fileName = dir_file.path().filename().string();
 
 				if (checkGlob(searchGlob, dir_fileName))
@@ -913,17 +1040,20 @@ bool ACSConfig::parse(
 {
 	configFilename = filename;
 
-// 	std::filesystem::path filePath(filename);
-	boost::filesystem::path filePath(filename);
-// 	auto currentConfigModifyTime = std::filesystem::last_write_time(filePath);
-	auto currentConfigModifyTime = boost::filesystem::last_write_time(filePath);
-
-	if (currentConfigModifyTime == configModifyTimeMap["CONFIG"])
+	if (filename != "")
 	{
-		return false;
+		boost::filesystem::path filePath(filename);
+		auto currentConfigModifyTime = boost::filesystem::last_write_time(filePath);
+		
+		if (currentConfigModifyTime == configModifyTimeMap["CONFIG"])
+		{
+			return false;
+		}
+		
+		configModifyTimeMap["CONFIG"] = currentConfigModifyTime;
 	}
 	
-	configModifyTimeMap["CONFIG"] = currentConfigModifyTime;
+
 	commandOpts = newCommandOpts;
 
 	BOOST_LOG_TRIVIAL(info)
@@ -932,20 +1062,27 @@ bool ACSConfig::parse(
 	//clear old saved parameters
 	satOptsMap.clear();
 	recOptsMap.clear();
-	
+
 	try
 	{
 		yaml = YAML::LoadFile(filename);
 	}
 	catch (const YAML::BadFile &e)
 	{
-		BOOST_LOG_TRIVIAL(error) << "Failed to parse configuration file " << filename;
-		BOOST_LOG_TRIVIAL(error) << e.msg;
-		return false;
+		if (commandOpts.count("yaml-defaults"))	
+		{
+			//we expect to break, continue parsing
+		}
+		else
+		{
+			BOOST_LOG_TRIVIAL(error) << "Failed to parse configuration file " << filename;
+			BOOST_LOG_TRIVIAL(error) << e.msg;
+			return false;	
+		}
 	}
 
 	// General Files
-	auto input_files = stringsToYamlObject(yaml, {"input_files"});
+	auto input_files	= stringsToYamlObject({yaml, ""},	{"input_files"});
 	{
 		trySetFromAny(root_input_dir,	commandOpts, input_files, {"root_input_directory"	});
 		trySetFromAny(atxfiles,			commandOpts, input_files, {"atxfiles"				});
@@ -984,30 +1121,38 @@ bool ACSConfig::parse(
 		globber(ionfiles);
 		globber(clkfiles);
 	}
-
 	vector<string> rnxfiles;
 	vector<string> obs_rtcmfiles;
 	vector<string> nav_rtcmfiles;
-	auto station_data = stringsToYamlObject(yaml, {"station_data"});
+	vector<string> pseudoobs_files;
+	auto station_data = stringsToYamlObject({yaml, ""}, {"station_data"});
 	{
-		trySetFromAny(root_stations_dir,	commandOpts, station_data,	{"root_stations_directory"	});
-		trySetFromAny(rnxfiles,				commandOpts, station_data,	{"rnxfiles"					});
+		trySetFromAny(root_stations_dir,		commandOpts, station_data,	{"root_stations_directory"		});
+		trySetFromAny(rnxfiles,					commandOpts, station_data,	{"rnxfiles"						});
 		trySetFromAny(obs_rtcmfiles,			commandOpts, station_data,	{"obs_rtcmfiles"				});
 		trySetFromAny(nav_rtcmfiles,			commandOpts, station_data,	{"nav_rtcmfiles"				});
+		trySetFromAny(pseudoobs_files,			commandOpts, station_data,	{"pseudoobs_files"				});
+		trySetFromAny(stream_user,				commandOpts, station_data,	{"stream_user"					});
+		trySetFromAny(stream_pass,				commandOpts, station_data,	{"stream_pass"					});
+		
+		trySetFromYaml(stream_root,							 station_data,	{"stream_root"	});
+		
 		tryAddRootToPath(root_stations_dir, rnxfiles);
 		tryAddRootToPath(root_stations_dir, obs_rtcmfiles);
 		tryAddRootToPath(root_stations_dir, nav_rtcmfiles);
+		tryAddRootToPath(root_stations_dir, pseudoobs_files);
 
 		globber(rnxfiles);
 		globber(obs_rtcmfiles);
 		globber(nav_rtcmfiles);
+		globber(pseudoobs_files);
 	}
 
 
 	string root_output_dir;
-	auto output_files = stringsToYamlObject(yaml, 		{"output_files"});
+	auto output_files = stringsToYamlObject({yaml, ""}, 		{"output_files"});
 	{
-		trySetFromAny(trace_level,			commandOpts, output_files, {"trace_level"		});
+		trySetFromAny(trace_level, commandOpts,	output_files, {"trace_level"		});
 
 		trySetFromYaml(root_output_dir,			output_files, {"root_output_directory"			});
 
@@ -1017,9 +1162,14 @@ bool ACSConfig::parse(
 
 		trySetFromYaml(record_rtcm,		     	output_files, {"record_rtcm"		});
 		trySetFromYaml(rtcm_directory,			output_files, {"rtcm_directory"	    });
-		trySetFromYaml(nav_rtcm_filename,		output_files, {"nav_rtcm_filename"	}); 
-		trySetFromYaml(obs_rtcm_filename,		output_files, {"obs_rtcm_filename"	});        
-        
+
+		trySetFromYaml(nav_rtcm_filename,		output_files, {"nav_rtcm_filename"	});
+		trySetFromYaml(obs_rtcm_filename,		output_files, {"obs_rtcm_filename"	});
+
+		trySetFromYaml(output_log,		     	output_files, {"output_log"			});
+		trySetFromYaml(log_directory,			output_files, {"log_directory"	    });
+		trySetFromYaml(log_filename,			output_files, {"log_filename"		});
+
 		trySetFromYaml(output_residuals,		output_files, {"output_residuals"	});
 		trySetFromYaml(output_config,			output_files, {"output_config"		});
 
@@ -1027,11 +1177,29 @@ bool ACSConfig::parse(
 		trySetFromYaml(summary_directory,		output_files, {"summary_directory"	});
 		trySetFromYaml(summary_filename,		output_files, {"summary_filename"	});
 
+		trySetFromYaml(output_orbits,			output_files, {"output_orbits"				});
+		trySetFromYaml(output_orbit_velocities,	output_files, {"output_orbit_velocities"	});
+		trySetFromYaml(orbits_directory,		output_files, {"orbits_directory"			});
+		trySetFromYaml(orbits_filename,			output_files, {"orbits_filename"			});
+		trySetEnumOpt(orbits_data_source,		output_files, {"orbits_data_source" 		},E_Ephemeris::_from_string_nocase);
+
+		trySetFromYaml(output_rinex_obs,		output_files, {"output_rinex_obs"	});
+		trySetFromYaml(rinex_obs_directory,		output_files, {"rinex_obs_directory"});
+		trySetFromYaml(rinex_obs_filename,		output_files, {"rinex_obs_filename"	});		
+		trySetFromYaml(rinex_obs_print_C_code,	output_files, {"rinex_obs_print_C_code"	});
+		trySetFromYaml(rinex_obs_print_L_code,	output_files, {"rinex_obs_print_L_code"	});
+		trySetFromYaml(rinex_obs_print_D_code,	output_files, {"rinex_obs_print_D_code"	});
+		trySetFromYaml(rinex_obs_print_S_code,	output_files, {"rinex_obs_print_S_code"	});
+		
 		trySetFromYaml(output_clocks,			output_files, {"output_clocks"		});
 		trySetFromYaml(clocks_directory,		output_files, {"clocks_directory"	});
 		trySetFromYaml(clocks_filename,			output_files, {"clocks_filename"	});
 		trySetFromYaml(output_AR_clocks,		output_files, {"output_AR_clocks"	});
 		
+
+		trySetEnumOpt(clocks_receiver_source,	output_files, {"clocks_receiver_source" }, E_Ephemeris::_from_string_nocase);
+		trySetEnumOpt(clocks_satellite_source,	output_files, {"clocks_satellite_source"}, E_Ephemeris::_from_string_nocase);
+
 		trySetFromYaml(output_ppp_sol,			output_files, {"output_ppp_sol"		});
 		trySetFromYaml(ppp_sol_directory,		output_files, {"ppp_sol_directory"	});
 		trySetFromYaml(ppp_sol_filename,		output_files, {"ppp_sol_filename"	});
@@ -1039,7 +1207,7 @@ bool ACSConfig::parse(
 		trySetFromYaml(output_ionex,			output_files, {"output_ionex"		});
 		trySetFromYaml(ionex_directory,			output_files, {"ionex_directory"	});
 		trySetFromYaml(ionex_filename,			output_files, {"ionex_filename"		});
-		
+
 		trySetFromYaml(output_ionstec,			output_files, {"output_ionstec"		});
 		trySetFromYaml(ionstec_directory,		output_files, {"ionstec_directory"	});
 		trySetFromYaml(ionstec_filename,		output_files, {"ionstec_filename"	});
@@ -1057,36 +1225,40 @@ bool ACSConfig::parse(
 		trySetFromYaml(persistance_directory,	output_files, {"persistance_directory"	});
 		trySetFromYaml(persistance_filename,	output_files, {"persistance_filename"	});
 
-		trySetFromYaml(output_mongo_measurements,		output_files, {"output_mongo_measurements"	});
-		trySetFromYaml(output_mongo_states,				output_files, {"output_mongo_states"		});
-		trySetFromYaml(output_mongo_metadata,			output_files, {"output_mongo_metadata"		});
-		trySetFromYaml(output_mongo_logs,				output_files, {"output_mongo_logs"			});
-		trySetFromYaml(delete_mongo_history,			output_files, {"delete_mongo_history"		});
-		trySetFromYaml(mongo_uri,						output_files, {"mongo_uri"					});
+		trySetFromYaml(output_mongo_measurements,				output_files, {"output_mongo_measurements"					});
+		trySetFromYaml(output_mongo_states,						output_files, {"output_mongo_states"						});
+		trySetFromYaml(output_intermediate_rts_mongo_states,	output_files, {"output_intermediate_rts_mongo_states"		});
+		trySetFromYaml(output_mongo_metadata,					output_files, {"output_mongo_metadata"						});
+		trySetFromYaml(output_mongo_logs,						output_files, {"output_mongo_logs"							});
+		trySetFromYaml(delete_mongo_history,					output_files, {"delete_mongo_history"						});
+		trySetFromYaml(mongo_rts_suffix,						output_files, {"mongo_rts_suffix"							});
+		trySetFromYaml(mongo_suffix,							output_files, {"mongo_suffix"								});
+		trySetFromYaml(mongo_uri,								output_files, {"mongo_uri"									});
 
 		trySetScaledFromYaml(trace_rotate_period,		output_files, {"trace_rotate_period"	},	{"trace_rotate_period_units"	},	E_Period::_from_string_nocase);
 		trySetScaledFromYaml(rtcm_rotate_period,		output_files, {"rtcm_rotate_period"		},	{"rtcm_rotate_period_units"		},	E_Period::_from_string_nocase);
 	}
 
-	auto processing_options = stringsToYamlObject(yaml, {"processing_options"});
+	auto processing_options = stringsToYamlObject({yaml, ""}, {"processing_options"});
 	{
 		trySetFromAny(max_epochs,			commandOpts, processing_options, {"max_epochs"			});
 		trySetFromAny(epoch_interval,		commandOpts, processing_options, {"epoch_interval"		});
 		trySetFromAny(simulate_real_time,	commandOpts, processing_options, {"simulate_real_time"	});
-		
+
 		string startStr;
 		string stopStr;
 		trySetFromAny(startStr,			commandOpts, processing_options, {"start_epoch"		});
 		trySetFromAny(stopStr,			commandOpts, processing_options, {"end_epoch"		});
 		if (!startStr.empty())	start_epoch	= boost::posix_time::time_from_string(startStr);
 		if (!stopStr .empty())	end_epoch	= boost::posix_time::time_from_string(stopStr);
-		
+
 		trySetFromYaml(process_minimum_constraints,	processing_options, {"process_modes","minimum_constraints"	});
 		trySetFromYaml(process_network,				processing_options, {"process_modes","network"				});
 		trySetFromYaml(process_user,				processing_options, {"process_modes","user"					});
 		trySetFromYaml(process_ionosphere,			processing_options, {"process_modes","ionosphere"			});
 		trySetFromYaml(process_rts,					processing_options, {"process_modes","rts"					});
 		trySetFromYaml(process_tests,				processing_options, {"process_modes","unit_tests"			});
+		trySetFromYaml(process_ppp,					processing_options, {"process_modes","ppp"					});
 
 		for (int i = 0; i < E_Sys::_size(); i++)
 		{
@@ -1094,6 +1266,13 @@ bool ACSConfig::parse(
 			string	sys		= E_Sys::_names() [i];		boost::algorithm::to_lower(sys);
 
 			trySetFromYaml(process_sys[index],	processing_options, {"process_sys", sys	});
+		}
+		
+		for (int i = 0; i < NUM_FTYPES; i++)
+		{
+			string	freq = "l" + std::to_string(i);
+
+			trySetFromYaml(process_freq[i],		processing_options, {"process_freq", freq});
 		}
 
 		bool found = trySetFromAny(elevation_mask,	commandOpts, processing_options, {"elevation_mask"	});
@@ -1109,7 +1288,15 @@ bool ACSConfig::parse(
 		trySetFromYaml(phase_windup,		processing_options, {"phase_windup"						});
 		trySetFromYaml(reject_eclipse,		processing_options, {"reject_eclipse"					});
 		trySetFromYaml(raim,				processing_options, {"raim"								});
+		
 		trySetFromYaml(thres_slip,			processing_options, {"cycle_slip",		"thres_slip"	});
+		trySetFromYaml(excludeSlip.LLI,		processing_options, {"cycle_slip",		"exclude_lli"	});            
+		trySetFromYaml(excludeSlip.GF,		processing_options, {"cycle_slip",		"exclude_gf"	});            
+		trySetFromYaml(excludeSlip.MW,		processing_options, {"cycle_slip",		"exclude_mw"	});            
+		trySetFromYaml(excludeSlip.EMW,		processing_options, {"cycle_slip",		"exclude_emw"	});            
+		trySetFromYaml(excludeSlip.CJ,		processing_options, {"cycle_slip",		"exclude_cj"	});            
+		trySetFromYaml(excludeSlip.SCDIA,	processing_options, {"cycle_slip",		"exclude_scdia"	});   
+		
 		trySetFromYaml(max_inno,			processing_options, {"max_inno"			});
 		trySetFromYaml(deweight_factor,		processing_options, {"deweight_factor"	});
 		trySetFromYaml(ratio_limit,			processing_options, {"ratio_limit"		});
@@ -1126,13 +1313,21 @@ bool ACSConfig::parse(
 		trySetFromYaml(debug_cs,			processing_options, {"debug_cs"			});
 		trySetFromYaml(debug_lom,			processing_options, {"debug_lom"		});
 		trySetFromYaml(debug_csacc,			processing_options, {"debug_csacc"		});
+		trySetFromYaml(check_plumbing,		processing_options, {"check_plumbing"	});
+		
+		trySetFromYaml(delete_old_ephemerides,						processing_options, {"delete_old_ephemerides"});
+		  
+		trySetFromYaml(forceModels.central_force_gravity,			processing_options, {"force_models",	"central_force_gravity"			});   
+		trySetFromYaml(forceModels.direct_solar_radiation,			processing_options, {"force_models",	"direct_solar_radiation"		});   
+		trySetFromYaml(forceModels.some_configuration_parameter,	processing_options, {"force_models",	"some_configuration_parameter"	});   
+		
 
 		vector<string> codePriorityStrings;
 		found = trySetFromYaml(codePriorityStrings,	processing_options, {"code_priorities"	});
 		if (found)
 		{
 			code_priorities.clear();
-			
+
 			for (auto& codePriorityString : codePriorityStrings)
 			{
 				try
@@ -1147,9 +1342,10 @@ bool ACSConfig::parse(
 			}
 		}
 		trySetFromYaml(joseph_stabilisation,		processing_options, {"joseph_stabilisation"						});
+		trySetFromYaml(validity_interval_factor,	processing_options, {"validity_interval_factor"					});
 	}
 
-	auto user_filter = stringsToYamlObject(yaml, {"user_filter_parameters"});
+	auto user_filter = stringsToYamlObject({yaml, ""}, {"user_filter_parameters"});
 	{
 		trySetEnumOpt( pppOpts.inverter, 				user_filter,	{"inverter" 				}, E_Inverter::_from_string_nocase);
 		trySetFromYaml(pppOpts.max_filter_iter,			user_filter,	{"max_filter_iterations"	});
@@ -1161,7 +1357,7 @@ bool ACSConfig::parse(
 		trySetFromYaml(pppOpts.phase_reject_limit,		user_filter,	{"phase_reject_limit"		});
 	}
 
-	auto network_filter = stringsToYamlObject(yaml, {"network_filter_parameters"});
+	auto network_filter = stringsToYamlObject({yaml, ""}, {"network_filter_parameters"});
 	{
 		trySetEnumOpt( netwOpts.inverter, 			network_filter,	{"inverter" 				}, E_Inverter::_from_string_nocase);
 		trySetEnumOpt( netwOpts.filter_mode, 		network_filter, {"process_mode" 			}, E_FilterMode::_from_string_nocase);
@@ -1188,11 +1384,12 @@ bool ACSConfig::parse(
 
 	auto ionosphere = stringsToYamlObject(processing_options, {"ionosphere"});
 	{
-		trySetEnumOpt( ionoOpts.corr_mode, 	ionosphere, {"corr_mode" 		}, E_IonoMode::_from_string_nocase);
-		trySetEnumOpt( ionoOpts.iflc_freqs,	ionosphere, {"iflc_freqs" 		}, E_LinearCombo::_from_string_nocase);
+		trySetEnumOpt( ionoOpts.corr_mode, 			ionosphere, {"corr_mode" 		}, E_IonoMode::_from_string_nocase);
+		trySetEnumOpt( ionoOpts.iflc_freqs,			ionosphere, {"iflc_freqs" 		}, E_LinearCombo::_from_string_nocase);
+		trySetFromYaml(ionoOpts.common_ionosphere,	ionosphere, {"common_ionosphere"});
 	}
 
-	auto unit_tests = stringsToYamlObject(yaml, {"unit_test_options"});
+	auto unit_tests = stringsToYamlObject({yaml, ""}, {"unit_test_options"});
 	{
 		trySetFromYaml(testOpts.output_pass,	unit_tests, {"output_pass"		});
 		trySetFromYaml(testOpts.stop_on_fail,	unit_tests, {"stop_on_fail"		});
@@ -1205,7 +1402,7 @@ bool ACSConfig::parse(
 		tryAddRootToPath(root_input_dir, 	testOpts.directory);
 	}
 
-	auto ionFilter = stringsToYamlObject(yaml, {"ionosphere_filter_parameters"});
+	auto ionFilter = stringsToYamlObject({yaml, ""}, {"ionosphere_filter_parameters"});
 	{
 		trySetEnumOpt( ionFilterOpts.model, 			ionFilter, {"model" 				}, E_IonoModel::_from_string_nocase);
 		trySetFromYaml(ionFilterOpts.lat_center,		ionFilter, {"lat_center"			});
@@ -1232,7 +1429,7 @@ bool ACSConfig::parse(
 		}
 	}
 
-	auto ambres_options = stringsToYamlObject(yaml, {"ambiguity_resolution_options"});
+	auto ambres_options = stringsToYamlObject({yaml, ""}, {"ambiguity_resolution_options"});
 	{
 		trySetFromYaml(ambrOpts.min_el_AR		  ,	ambres_options, {"Min_elev_for_AR"			});
 		trySetFromYaml(ambrOpts.lambda_set	      ,	ambres_options, {"Set_size_for_lambda"		});
@@ -1242,35 +1439,35 @@ bool ACSConfig::parse(
 		trySetFromYaml(ambrOpts.solvGAL			  ,	ambres_options, {"GAL_amb_resol"			});
 		trySetFromYaml(ambrOpts.solvBDS			  ,	ambres_options, {"BDS_amb_resol"			});
 		trySetFromYaml(ambrOpts.solvQZS			  ,	ambres_options, {"QZS_amb_resol"			});
-		
+
 		trySetEnumOpt( ambrOpts.WLmode			  , ambres_options,	{"WL_mode" 					}, E_ARmode::_from_string_nocase);
 		trySetFromYaml(ambrOpts.WLsuccsThres	  ,	ambres_options, {"WL_succ_rate_thres"		});
 		trySetFromYaml(ambrOpts.WLratioThres	  ,	ambres_options,	{"WL_sol_ratio_thres"		});
 		trySetFromYaml(ambrOpts.WLSatPrcNois	  ,	ambres_options,	{"WL_procs_noise_sat"		});
 		trySetFromYaml(ambrOpts.WLStaPrcNois	  ,	ambres_options,	{"WL_procs_noise_sta"		});
-		
+
 		trySetEnumOpt( ambrOpts.NLmode			  , ambres_options,	{"NL_mode" 					}, E_ARmode::_from_string_nocase);
 		trySetFromYaml(ambrOpts.NLsuccsThres	  ,	ambres_options, {"NL_succ_rate_thres"		});
 		trySetFromYaml(ambrOpts.NLratioThres	  ,	ambres_options, {"NL_sol_ratio_thres"		});
 		trySetFromYaml(ambrOpts.NLstarttime		  ,	ambres_options, {"NL_proc_start"			});
-		
+
 		trySetFromYaml(ambrOpts.readOSB			  ,	ambres_options, {"read_OSB"					});
 		trySetFromYaml(ambrOpts.readDSB			  ,	ambres_options, {"read_DSB"					});
 		trySetFromYaml(ambrOpts.readSSRbias		  ,	ambres_options, {"read_SSR"					});
 		trySetFromYaml(ambrOpts.readSATbias		  ,	ambres_options, {"read_satellite_bias"		});
 		trySetFromYaml(ambrOpts.readRecBias		  ,	ambres_options, {"read_station_bias"		});
 		trySetFromYaml(ambrOpts.readHYBbias		  ,	ambres_options, {"read_GLONASS_IFB"			});
-		
+
 		trySetFromYaml(ambrOpts.writeOSB		  ,	ambres_options, {"write_OSB"				});
 		trySetFromYaml(ambrOpts.writeDSB		  ,	ambres_options, {"write_DSB"				});
 		trySetFromYaml(ambrOpts.writeSSRbias	  ,	ambres_options, {"write_SSR_bias"			});
 		trySetFromYaml(ambrOpts.writeSATbias	  ,	ambres_options, {"write_satellite_bias"		});
 		trySetFromYaml(ambrOpts.writeRecBias	  ,	ambres_options, {"write_station_bias"		});
-		
+
 		trySetFromYaml(ambrOpts.biasOutrate		  ,	ambres_options, {"bias_output_rate"			});
 	}
 
-	auto minCon = stringsToYamlObject(yaml, {"minimum_constraints"});
+	auto minCon = stringsToYamlObject({yaml, ""}, {"minimum_constraints"});
 	{
 		trySetEnumOpt( minCOpts.filter_mode, 			minCon, {"process_mode" 			}, E_FilterMode::_from_string_nocase);
 		trySetFromYaml(minCOpts.estimate_scale,			minCon, {"estimate", "scale"		});
@@ -1278,7 +1475,7 @@ bool ACSConfig::parse(
 		trySetFromYaml(minCOpts.estimate_translation,	minCon, {"estimate", "translation"	});
 	}
 
-	auto outputOptions = stringsToYamlObject(yaml, {"output_options"});
+	auto outputOptions = stringsToYamlObject({yaml, ""}, {"output_options"});
 	{
 		trySetFromYaml(config_description,	outputOptions, {"config_description"});
 		trySetFromYaml(analysis_agency,		outputOptions, {"analysis_agency"	});
@@ -1287,9 +1484,10 @@ bool ACSConfig::parse(
 		trySetFromYaml(rinex_comment,		outputOptions, {"rinex_comment"		});
 	}
 
-	auto defaultFilter = stringsToYamlObject(yaml, {"default_filter_parameters"});
+	auto defaultFilter = stringsToYamlObject({yaml, ""}, {"default_filter_parameters"});
 	{
-		trySetKalmanFromYaml(netwOpts.eop,			defaultFilter, "eop");
+		trySetKalmanFromYaml(netwOpts.eop,			defaultFilter, "eop"		);
+		trySetKalmanFromYaml(netwOpts.eop_rates,	defaultFilter, "eop_rates"	);
 	}
 
 	//todo get layer heights and process noise
@@ -1302,51 +1500,50 @@ bool ACSConfig::parse(
 		trySetFromYaml(tropOpts.orography,		troposhpere,	{"orography"		});
 	}
 
-	auto cycle_slip = stringsToYamlObject(yaml, {"cycle_slip_filter_parameters"});
-	{
-		trySetFromYaml(csOpts.enable,							cycle_slip, {"enable"							});
-		trySetFromYaml(csOpts.freq_l1,							cycle_slip, {"freq_l1"							});
-		trySetFromYaml(csOpts.freq_l2,							cycle_slip, {"freq_l2"							});
-		trySetFromYaml(csOpts.print_activity,					cycle_slip, {"print_activity"					});
-		trySetFromYaml(csOpts.debug,							cycle_slip, {"debug"							});
-		trySetFromYaml(csOpts.timer_debug,						cycle_slip, {"timer_debug"						});
-		trySetFromYaml(csOpts.new_channel_break_in_duration,	cycle_slip, {"new_channel_break_in_duration"	});
-		trySetFromYaml(csOpts.d_moving_ave_win,					cycle_slip, {"d_moving_ave_win"					});
-		trySetFromYaml(csOpts.common_mode_method,				cycle_slip, {"common_mode_method"				});
-		trySetFromYaml(csOpts.slip_classify_min_pts,			cycle_slip, {"slip_classify_min_pts"			});
-		trySetFromYaml(csOpts.slip_classify_post_outlier_pts,	cycle_slip, {"slip_classify_post_outlier_pts"	});
-		trySetFromYaml(csOpts.outlier_p_alpha,					cycle_slip, {"outlier_p_alpha"					});
-		trySetFromYaml(csOpts.t_alpha,							cycle_slip, {"t_alpha"							});
-		trySetFromYaml(csOpts.min_size_p_alpha,					cycle_slip, {"min_size_p_alpha"					});
-		trySetFromYaml(csOpts.outlier_detect_min_pts,			cycle_slip, {"outlier_detect_min_pts"			});
-		trySetFromYaml(csOpts.int_valid_pdf_thresh,				cycle_slip, {"int_valid_pdf_thresh"				});
-		trySetFromYaml(csOpts.int_valid_outlier_alpha,			cycle_slip, {"int_valid_outlier_alpha"			});
-		trySetFromYaml(csOpts.deweight_noise,					cycle_slip, {"deweight_noise"					});
-		trySetFromYaml(csOpts.int_valid_combo_jump_alpha,		cycle_slip, {"int_valid_combo_jump_alpha"		});
-	}
+// 	auto cycle_slip = stringsToYamlObject({yaml, ""}, {"cycle_slip_filter_parameters"});
+// 	{
+// 		trySetFromYaml(csOpts.enable,							cycle_slip, {"enable"							});
+// 		trySetFromYaml(csOpts.freq_l1,							cycle_slip, {"freq_l1"							});
+// 		trySetFromYaml(csOpts.freq_l2,							cycle_slip, {"freq_l2"							});
+// 		trySetFromYaml(csOpts.print_activity,					cycle_slip, {"print_activity"					});
+// 		trySetFromYaml(csOpts.debug,							cycle_slip, {"debug"							});
+// 		trySetFromYaml(csOpts.timer_debug,						cycle_slip, {"timer_debug"						});
+// 		trySetFromYaml(csOpts.new_channel_break_in_duration,	cycle_slip, {"new_channel_break_in_duration"	});
+// 		trySetFromYaml(csOpts.d_moving_ave_win,					cycle_slip, {"d_moving_ave_win"					});
+// 		trySetFromYaml(csOpts.common_mode_method,				cycle_slip, {"common_mode_method"				});
+// 		trySetFromYaml(csOpts.slip_classify_min_pts,			cycle_slip, {"slip_classify_min_pts"			});
+// 		trySetFromYaml(csOpts.slip_classify_post_outlier_pts,	cycle_slip, {"slip_classify_post_outlier_pts"	});
+// 		trySetFromYaml(csOpts.outlier_p_alpha,					cycle_slip, {"outlier_p_alpha"					});
+// 		trySetFromYaml(csOpts.t_alpha,							cycle_slip, {"t_alpha"							});
+// 		trySetFromYaml(csOpts.min_size_p_alpha,					cycle_slip, {"min_size_p_alpha"					});
+// 		trySetFromYaml(csOpts.outlier_detect_min_pts,			cycle_slip, {"outlier_detect_min_pts"			});
+// 		trySetFromYaml(csOpts.int_valid_pdf_thresh,				cycle_slip, {"int_valid_pdf_thresh"				});
+// 		trySetFromYaml(csOpts.int_valid_outlier_alpha,			cycle_slip, {"int_valid_outlier_alpha"			});
+// 		trySetFromYaml(csOpts.deweight_noise,					cycle_slip, {"deweight_noise"					});
+// 		trySetFromYaml(csOpts.int_valid_combo_jump_alpha,		cycle_slip, {"int_valid_combo_jump_alpha"		});
+// 	}
 
-	auto ssr = stringsToYamlObject(yaml, {"ssr_corrections"});
+	auto ssr = stringsToYamlObject({yaml, ""}, {"ssr_corrections"});
 	{
+		trySetEnumOpt (ssrOpts.ssr_ephemeris_source, 	ssr, {"ssr_ephemeris_source" 	}, E_Ephemeris::_from_string_nocase);
 		trySetFromYaml(ssrOpts.calculate_ssr,			ssr, {"calculate_ssr"			});
 		trySetFromYaml(ssrOpts.update_interval,			ssr, {"update_interval"			});
-		trySetEnumOpt (ssrOpts.ssr_ephemeris, 			ssr, {"ssr_ephemeris" 			}, E_Ephemeris::_from_string_nocase);
 		trySetFromYaml(ssrOpts.upload_to_caster,		ssr, {"upload_to_caster"		});
-		trySetFromYaml(ssrOpts.sync_epochs,				ssr, {"sync_epochs"				});
-		trySetFromYaml(ssrOpts.sync_epoch_offset,		ssr, {"sync_epoch_offset"		});
-		trySetFromYaml(ssrOpts.settime_week_override,	ssr, {"settime_week_override"	});
 		trySetFromYaml(ssrOpts.rtcm_directory,			ssr, {"rtcm_directory"			});
-		trySetFromYaml(ssrOpts.read_from_files,			ssr, {"read_from_files"			});
 	}
-
+	
 	tryAddRootToPath(root_output_dir, 				trace_directory);
-	tryAddRootToPath(root_output_dir, 				rtcm_directory);    
+	tryAddRootToPath(root_output_dir, 				rtcm_directory);
+	tryAddRootToPath(root_output_dir, 				log_directory);
 	tryAddRootToPath(root_output_dir,				summary_directory);
+	tryAddRootToPath(root_output_dir,				orbits_directory);	
 	tryAddRootToPath(root_output_dir,				clocks_directory);
+	tryAddRootToPath(root_output_dir,				rinex_obs_directory);
 	tryAddRootToPath(root_output_dir,				ppp_sol_directory);
 	tryAddRootToPath(root_output_dir,				ionex_directory);
 	tryAddRootToPath(root_output_dir,				ionstec_directory);
 	tryAddRootToPath(root_output_dir,				biasSINEX_directory);
-	
+
 	tryAddRootToPath(root_output_dir,				sinex_directory);
 	tryAddRootToPath(root_output_dir,				persistance_directory);
 	tryAddRootToPath(root_output_dir,				ionFilterOpts.rts_directory);
@@ -1355,15 +1552,18 @@ bool ACSConfig::parse(
 	tryAddRootToPath(root_output_dir,				ssrOpts.rtcm_directory);
 
 	tryAddRootToPath(trace_directory, 				trace_filename);
-    tryAddRootToPath(rtcm_directory, 				nav_rtcm_filename);
-    tryAddRootToPath(rtcm_directory, 				obs_rtcm_filename);
+	tryAddRootToPath(rtcm_directory, 				nav_rtcm_filename);
+	tryAddRootToPath(rtcm_directory, 				obs_rtcm_filename);
+	tryAddRootToPath(log_directory,					log_filename);
 	tryAddRootToPath(summary_directory,				summary_filename);
 	tryAddRootToPath(clocks_directory,				clocks_filename);
+	tryAddRootToPath(orbits_directory,				orbits_filename);
+	tryAddRootToPath(rinex_obs_directory,			rinex_obs_filename);	
 	tryAddRootToPath(ppp_sol_directory,				ppp_sol_filename);
 	tryAddRootToPath(ionex_directory,				ionex_filename);
 	tryAddRootToPath(ionstec_directory,				ionstec_filename);
 	tryAddRootToPath(biasSINEX_directory,			biasSINEX_filename);
-	
+
 
 	tryAddRootToPath(sinex_directory,				sinex_filename);
 	tryAddRootToPath(persistance_directory,			persistance_filename);
@@ -1372,131 +1572,149 @@ bool ACSConfig::parse(
 	tryAddRootToPath(pppOpts.rts_directory,			pppOpts.rts_filename);
 
 	//Try to change all filenames to replace <YYYY> etc with other values.
-	replaceTimes(navfiles,				start_epoch);
-	replaceTimes(orbfiles,				start_epoch);
-	replaceTimes(sp3files,				start_epoch);
-	replaceTimes(clkfiles,				start_epoch);
-	replaceTimes(atxfiles,				start_epoch);
-	replaceTimes(snxfiles,				start_epoch);
-	replaceTimes(blqfiles,				start_epoch);
-	replaceTimes(erpfiles,				start_epoch);
-	replaceTimes(dcbfiles,				start_epoch);
-	replaceTimes(bsxfiles,				start_epoch);
-	replaceTimes(ionfiles,				start_epoch);
-	replaceTimes(trace_directory,		start_epoch);
-	replaceTimes(rtcm_directory,		start_epoch);
-	replaceTimes(trace_filename,		start_epoch);
-	replaceTimes(ionex_directory,		start_epoch);
-	replaceTimes(ionex_filename,		start_epoch);
-	replaceTimes(ionstec_directory,		start_epoch);
-	replaceTimes(ionstec_filename,		start_epoch);
-	replaceTimes(biasSINEX_directory,	start_epoch);
-	replaceTimes(biasSINEX_filename,	start_epoch);
-	replaceTimes(summary_directory,		start_epoch);
-	replaceTimes(summary_filename,		start_epoch);
-	replaceTimes(clocks_directory,		start_epoch);
-	replaceTimes(clocks_filename,		start_epoch);
-	replaceTimes(ppp_sol_directory,		start_epoch);
-	replaceTimes(ppp_sol_filename,		start_epoch);
-	replaceTimes(root_stations_dir,		start_epoch);
-	replaceTimes(sinex_directory,		start_epoch);
-	replaceTimes(sinex_filename,		start_epoch);
-	replaceTimes(ssrOpts.rtcm_directory,		start_epoch);
-	replaceTimes(persistance_directory,			start_epoch);
-	replaceTimes(persistance_filename,			start_epoch);
-	replaceTimes(pppOpts.rts_filename,			start_epoch);
-	replaceTimes(netwOpts.rts_filename,			start_epoch);
-	replaceTimes(ionFilterOpts.rts_filename,	start_epoch);
-    
-    // The network stream time is in UTC to avoid problems with local time.
-    replaceTimes(nav_rtcm_filename,	 	boost::posix_time::second_clock::universal_time());
-    replaceTimes(obs_rtcm_filename,	 	boost::posix_time::second_clock::universal_time());
+	replaceTags(navfiles);
+	replaceTags(orbfiles);
+	replaceTags(sp3files);
+	replaceTags(clkfiles);
+	replaceTags(atxfiles);
+	replaceTags(snxfiles);
+	replaceTags(blqfiles);
+	replaceTags(erpfiles);
+	replaceTags(dcbfiles);
+	replaceTags(bsxfiles);
+	replaceTags(ionfiles);
+	replaceTags(root_stations_dir);
 
+	
+	replaceTags(log_directory);
+	replaceTags(rtcm_directory);
+	replaceTags(orbits_directory);
+	replaceTags(trace_directory);
+	replaceTags(ionex_directory);
+	replaceTags(sinex_directory);
+	replaceTags(clocks_directory);
+	replaceTags(rinex_obs_directory);
+	replaceTags(ionstec_directory);
+	replaceTags(ppp_sol_directory);
+	replaceTags(summary_directory);
+	replaceTags(biasSINEX_directory);
+
+	replaceTags(persistance_directory);
+	replaceTags(pppOpts.rts_directory);
+	replaceTags(ssrOpts.rtcm_directory);
+	replaceTags(netwOpts.rts_directory);
+	replaceTags(ionFilterOpts.rts_directory);
+
+	replaceTags(stream_root);
+	replaceTags(log_filename);
+	replaceTags(trace_filename);
+	replaceTags(ionex_filename);
+	replaceTags(sinex_filename);
+	replaceTags(orbits_filename);
+	replaceTags(clocks_filename);
+	replaceTags(ionstec_filename);
+	replaceTags(ppp_sol_filename);
+	replaceTags(summary_filename);
+	replaceTags(biasSINEX_filename);
+	replaceTags(persistance_filename);
+	replaceTags(pppOpts.rts_filename);
+	replaceTags(netwOpts.rts_filename);
+	replaceTags(ionFilterOpts.rts_filename);
+
+	// The network stream time is in UTC to avoid problems with local time.
+	replaceTags(nav_rtcm_filename);
+	replaceTags(obs_rtcm_filename);
+	replaceTags(rinex_obs_filename);
+	
+	
+	replaceTimes(ionstec_filename,	acsConfig.start_epoch);	//todo aaron delete
+	replaceTimes(ionex_filename,	acsConfig.start_epoch);
+	
 	for (auto& station_file : station_files)
 	{
-		replaceTimes(station_file,		start_epoch);
+		replaceTags(station_file);
 	}
 
 
 
-	trySetFromYaml(caster_test,	yaml,{"station_data", "caster_test"});
-	trySetFromYaml(print_stream_statistics,	yaml,{"station_data", "print_stats"});
+	trySetFromYaml(caster_test,				{yaml, ""},{"station_data", "caster_test"});
+	trySetFromYaml(print_stream_statistics,	{yaml, ""},{"station_data", "print_stats"});
+
+
+	if (caster_test)
+		caster_stream_root = stream_root;
 
 	
+	trySetEnumOpt( ssr_input_antenna_offset, {yaml, ""},	{"station_data","input_ssr_antenna_offset" }, E_OffsetType::_from_string_nocase);
+	auto [obsStreamNode, obsStreamString] = stringsToYamlObject({yaml, ""},	{"station_data","obs_streams"});
+	auto [navStreamNode, navStreamString] = stringsToYamlObject({yaml, ""},	{"station_data","nav_streams"});
 
+
+	std::set<string> hosts;
 	
-	string streamRoot = "";
-	trySetFromYaml(streamRoot,		yaml,	{"station_data", "stream_root"	});
-	if( caster_test )
-		caster_stream_root = streamRoot;
-
-	auto obsStreamNode = stringsToYamlObject(yaml, {"station_data","obs_streams"});
-	auto navStreamNode = stringsToYamlObject(yaml, {"station_data","nav_streams"});
-
-	
-	// Unique list of host names.
-	std::vector<std::string> hosts;
 	for (auto nav : {false, true})
 	{
 		YAML::Node* streamNode_ptr;
 		if (nav == false)	streamNode_ptr = &obsStreamNode;
 		else				streamNode_ptr = &navStreamNode;
-		
+
 		map<string, string> ntripStreams;
 		for (auto streamUrl : *streamNode_ptr)
 		{
 			string streamUrl_str = streamUrl.as<string>();
 			string fullUrl = streamUrl_str;
 
-			tryAddRootToPath(streamRoot, fullUrl);
+			tryAddRootToPath(stream_root, fullUrl);
 			if (fullUrl.front() == '/')
 				fullUrl.erase(fullUrl.begin()); // in case of full urls given in station_data.streams
+
 			while (fullUrl.back() == '/')
 				fullUrl.pop_back();				// in case of terminating '/'
+
 			std::size_t slashPos = fullUrl.find_last_of("/");	// find first 4 characters after last '/'
 			string hostname = fullUrl.substr(0,slashPos+1);		// e.g. http://user:pass@auscors.ga.gov.au:2101/BCEP00BKG0 --> BCEP
 
-			if( std::find(hosts.begin(), hosts.end(), hostname) == hosts.end() )
-			{
-				hosts.push_back( hostname );
-			}
+			hosts.insert(hostname);
 		}
 	}
 
 	std::multimap<std::string,std::vector<std::string>> hostMap;
-	
 
-#ifndef	ENABLE_UNIT_TESTS
+
 	NtripSocket::startClients();
-#endif	
-	for( auto host : hosts )
+	for (auto host : hosts)
 	{
 		NtripSourceTable sourceTable(host);
+
 		sourceTable.getSourceTable();
-		hostMap.insert({host,sourceTable.getStreamMounts()});	
+
+		hostMap.insert({host, sourceTable.getStreamMounts()});
 	}
-	
+
 	for (auto nav : {false, true})
 	{
 		YAML::Node* streamNode_ptr;
 		if (nav == false)	streamNode_ptr = &obsStreamNode;
 		else				streamNode_ptr = &navStreamNode;
-		
+
 		map<string, string> ntripStreams;
 		for (auto streamUrl : *streamNode_ptr)
 		{
 			string streamUrl_str = streamUrl.as<string>();
 			string fullUrl = streamUrl_str;
 
-			tryAddRootToPath(streamRoot, fullUrl);
+			tryAddRootToPath(stream_root, fullUrl);
 			if (fullUrl.front() == '/')
 				fullUrl.erase(fullUrl.begin()); // in case of full urls given in station_data.streams
+
 			while (fullUrl.back() == '/')
 				fullUrl.pop_back();				// in case of terminating '/'
+
 			std::size_t slashPos = fullUrl.find_last_of("/");	// find first 4 characters after last '/'
-			string id		= fullUrl.substr(slashPos + 1, 4);		// e.g. http://user:pass@auscors.ga.gov.au:2101/BCEP00BKG0 --> BCEP
-			string hostname = fullUrl.substr(0,slashPos + 1);		// e.g. http://user:pass@auscors.ga.gov.au:2101/BCEP00BKG0 --> BCEP
-			string mount	= fullUrl.substr(slashPos+1, fullUrl.length()-slashPos+1);
+			string id		= fullUrl.substr(slashPos + 1,	4);					// e.g. http://user:pass@auscors.ga.gov.au:2101/BCEP00BKG0 --> BCEP
+			string hostname = fullUrl.substr(0,				slashPos + 1);		// e.g. http://user:pass@auscors.ga.gov.au:2101/BCEP00BKG0 --> BCEP
+			string mount	= fullUrl.substr(slashPos + 1,	fullUrl.length() - slashPos+1);
+
 			bool foundMount = false;
 			auto host = hostMap.find(hostname);
 			if (host != hostMap.end())
@@ -1505,7 +1723,7 @@ bool ACSConfig::parse(
 				if (std::find(mounts.begin(), mounts.end(), mount) != mounts.end())
 					foundMount = true;
 			}
-			
+
 			if (foundMount)
 			{
 				ntripStreams[id] = fullUrl;
@@ -1513,7 +1731,7 @@ bool ACSConfig::parse(
 			else
 			{
 				URL url = URL::parse(fullUrl);
-				BOOST_LOG_TRIVIAL(warning) 
+				BOOST_LOG_TRIVIAL(warning)
 						<< "Stream, " << url.sanitised() << " not found in sourcetable, invalid host/mount combination.\n";
 			}
 		}
@@ -1525,52 +1743,40 @@ bool ACSConfig::parse(
 				//this stream was already added, dont re-add
 				continue;
 			}
-
-	
+			
 			auto ntripStream_ptr = std::make_shared<NtripRtcmStream>(streamUrl);
 			ntripRtcmMultimap.insert({id, ntripStream_ptr}); // for network (internet) tracing
-	
-			
+
 			if (record_rtcm)
 			{
 				NtripRtcmStream& downloadStream = *ntripStream_ptr;
 				string filename;
 				if (nav)		filename = nav_rtcm_filename;
 				else			filename = obs_rtcm_filename;
-				
-				replaceString(filename, "<STATION>", id);	
-				
+
+				replaceString(filename, "<STATION>", id);
+
 				downloadStream.rtcm_filename = filename;
 				downloadStream.createRtcmFile();
 			}
-			
+
 			if (nav == false)		{	obsStreamMultimap.insert({id, std::move(ntripStream_ptr)});		}
-			else					{	navStreamMultimap.insert({id, std::move(ntripStream_ptr)});		}			
+			else					{	navStreamMultimap.insert({id, std::move(ntripStream_ptr)});		}
 			streamDOAMap[streamUrl] = false;
 		}
 	}
 
 
-	
+
 
 	boost::filesystem::path root_stations_path(root_stations_dir);
 
 	if (boost::filesystem::is_directory(root_stations_path))
 	{
-		for (auto& rnxfile : rnxfiles)
-		{
-			addDataFile(rnxfile, "RINEX", "OBS");
-		}
-
-		for (auto& rtcmfile : obs_rtcmfiles)
-		{
-			addDataFile(rtcmfile, "RTCM", "OBS");
-		}
-		
-		for (auto& rtcmfile : nav_rtcmfiles)
-		{
-			addDataFile(rtcmfile, "RTCM", "NAV");
-		}		
+		for (auto& rnxfile			: rnxfiles)			{	addDataFile(rnxfile,		"RINEX",	"OBS");			}	
+		for (auto& rtcmfile			: obs_rtcmfiles)	{	addDataFile(rtcmfile,		"RTCM",		"OBS");			}	
+		for (auto& rtcmfile			: nav_rtcmfiles)	{	addDataFile(rtcmfile,		"RTCM",		"NAV");			}
+		for (auto& pseudoobsfile	: pseudoobs_files)	{	addDataFile(pseudoobsfile,	"SP3",		"PSEUDO");		}
 
 		if (obsStreamMultimap.empty())
 		{
@@ -1579,28 +1785,32 @@ bool ACSConfig::parse(
 			<< root_stations_dir;
 		}
 	}
-	
-	string ouputStreamRoot = "";
-	trySetFromYaml(ouputStreamRoot,	yaml,{"output_streams", "stream_root"});
 
-	auto outStreamNode = stringsToYamlObject(yaml, {"output_streams","stream_label"});
+	string ouputStreamRoot = "";
+	trySetFromYaml(ouputStreamRoot,	{yaml, ""}, {"output_streams", "stream_root"});
 	
+	replaceTags(ouputStreamRoot);
+
+	auto [outStreamNode, outStreamString] = stringsToYamlObject({yaml, ""}, {"output_streams", "stream_label"});
+
 	for (auto outLabelYaml : outStreamNode)
 	{
 		string outLabel = outLabelYaml.as<string>();
-		auto outStreamsYaml = stringsToYamlObject(yaml, {"output_streams",outLabel});
-		
+		auto outStreamsYaml = stringsToYamlObject({yaml, ""}, {"output_streams", outLabel});
+
 		bool addOutStream = false;
 		string fullUrl = "";
-		trySetFromYaml(fullUrl,outStreamsYaml,{"streams"});
+		trySetFromYaml(fullUrl, outStreamsYaml, {"streams"});
 		tryAddRootToPath(ouputStreamRoot, fullUrl);
-		auto messageNodes = stringsToYamlObject(outStreamsYaml, {"messages"});
+		auto [messagesNode, messagesString] = stringsToYamlObject(outStreamsYaml, {"messages"});
+
 		auto ntripOutStream_ptr = std::make_shared<NtripBroadcaster::NtripUploadClient>(fullUrl);
 		NtripBroadcaster::NtripUploadClient& outStreamOb = *ntripOutStream_ptr.get();
-		for (auto outMessage : messageNodes)
-		{ 
+
+		for (auto outMessage : messagesNode)
+		{
 			string messStr = outMessage.as<string>();
-			try 
+			try
 			{
 				int messNum = (int)(std::stod(messStr));
 				RtcmMessageType mess = RtcmMessageType::_from_integral(messNum);
@@ -1609,22 +1819,24 @@ bool ACSConfig::parse(
 			catch (std::exception& e)
 			{
 				BOOST_LOG_TRIVIAL(error) << "Error defining output stream message for label : " << outLabel;
-				exit(1);                
+				exit(1);
 			}
-			addOutStream = true;    
+
+			addOutStream = true;
 		}
-		if( addOutStream )
+
+		if (addOutStream)
 			outStreamManager.ntripUploadStreams.insert({outLabel, std::move(ntripOutStream_ptr)});
 	}
-	
+
 
 #	ifndef ENABLE_MONGODB
 	if	( output_mongo_measurements
 		||output_mongo_metadata
 		||output_mongo_states)
 	{
-		std::cout << std::endl << "Error: Mongodb output requested by config but this is a non-Mongodb binary." << std::endl;
-		std::cout << std::endl << "Mongodb can be enabled by building with $ cmake -D ENABLE_MONGODB=ON .." << std::endl;
+		std::cout << std::endl << "Error: Mongodb output requested by config but this is a non-Mongodb binary."	<< std::endl;
+		std::cout << std::endl << "Mongodb can be enabled by building with $ cmake -D ENABLE_MONGODB=ON .."		<< std::endl;
 		exit(1);
 	}
 #	endif
@@ -1632,11 +1844,79 @@ bool ACSConfig::parse(
 #	ifndef ENABLE_UNIT_TESTS
 	if (process_tests)
 	{
-		std::cout << std::endl << "Error: Tests requested by config but this is a non-test binary." << std::endl;
-		std::cout << std::endl << "Tests can be enabled by building with $ cmake -DENABLE_UNIT_TESTS=ON .." << std::endl;
+		std::cout << std::endl << "Error: Tests requested by config but this is a non-test binary."				<< std::endl;
+		std::cout << std::endl << "Tests can be enabled by building with $ cmake -DENABLE_UNIT_TESTS=ON .."		<< std::endl;
 		exit(1);
 	}
 #	endif
 
+	std::cout << std::endl << "Default configuration values:\n\n";
+
+	
+	if (commandOpts.count("yaml-defaults"))
+	{
+		vector<string> yamlStack;
+		
+		for (auto& [defaultStack, defaultVal] : yamlDefaults)
+		{
+			size_t pos_start = 0;
+			size_t pos_end;
+			
+			string token;
+			vector<string> tokens;
+		
+			while ((pos_end = defaultStack.find(":", pos_start)) != string::npos) 
+			{
+				token = defaultStack.substr(pos_start, pos_end - pos_start);
+				pos_start = pos_end + 1;
+				tokens.push_back(token);
+			}
+			
+			for (int i = 0; i < tokens.size(); i++)
+			{
+				while	( (i + 1 > yamlStack.size())
+						||(tokens[i] != yamlStack[i]))
+				{
+					if		(i + 1 > yamlStack.size())
+					{
+						//need to add a new one
+						yamlStack.push_back(tokens[i]);
+						
+						std::cout << tokens[i] << ":";
+						
+						if (i + 1 < tokens.size())
+						{
+							//new line and start indenting again
+							std::cout << "\n";
+							i = 0;
+						}
+					}
+					else if	(tokens[i] != yamlStack[i])
+					{
+						yamlStack.pop_back();
+					}
+				}
+				std::cout << "    ";
+			}
+			std::cout << "\t" << defaultVal << std::endl;
+		}
+	}
 	return true;
+}
+
+
+void dumpConfig(
+	Trace& trace)
+{
+	trace << "+ RAW CONFIG" << std::endl;
+
+	std::ifstream config(acsConfig.configFilename);
+
+	string str;
+	while (std::getline(config, str))
+	{
+		trace << str << std::endl;
+	}
+
+	trace << "- RAW CONFIG" << std::endl;
 }

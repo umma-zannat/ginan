@@ -4,7 +4,7 @@
 
 input_files:
 
-    root_input_directory: ginan/examples/products/
+    root_input_directory: products/
 
     atxfiles:   [ igs14_2045_plus.atx                           ]    # required
     snxfiles:   [ meta_gather_20210721.snx                               ]    # required
@@ -13,10 +13,11 @@ input_files:
 
 station_data:
 
-    stream_root: "http://user:pass@auscors.ga.gov.au:2101/"
+    stream_root: "https://<USER>:<PASS>@ntrip.data.gnss.ga.gov.au/"
         
     nav_streams:
         - SSRA00CNE0 #orbits, clocks and bias
+        - SSRA01IGS0 #orbits, clocks and bias
         - BCEP00BKG0
 
     obs_streams:
@@ -27,13 +28,13 @@ station_data:
 output_files:
 
     root_output_directory:          <CONFIG>/
-
+ 
     output_trace:                   true
     trace_level:                    3
     trace_directory:                ./
-    trace_filename:                 <CONFIG>-<STATION>_<YYYY><DDD><HH>.TRACE
-    trace_rotate_period:            1
-    trace_rotate_period_units:      day
+    trace_filename:                 <CONFIG>-<STATION>_<LOGTIME>.TRACE
+    trace_rotate_period:            1   # 6
+    trace_rotate_period_units:      day # hours
 
     output_residuals:               true
 
@@ -48,10 +49,19 @@ output_files:
     summary_directory:              ./
     summary_filename:               <CONFIG>-<YYYY><DDD><HH>.SUM
 
-    output_mongo_measurements:      false
-    output_mongo_states:            false
-    output_mongo_metadata:          false
-    delete_mongo_history:           false
+    #output_mongo_measurements:      true
+    #output_mongo_states:            true
+    #output_mongo_metadata:          true
+    #delete_mongo_history:           true
+    
+    output_clocks:    true
+
+ssr_corrections:
+    calculate_ssr:    true
+    update_interval:  10
+    ssr_ephemeris:    PRECISE_APC
+    upload_to_caster: true
+    sync_epochs:      false
 
 
 output_options:
@@ -67,12 +77,13 @@ processing_options:
 
     #start_epoch:               2019-07-18 23:39:00
     #end_epoch:                 2017-03-29 23:59:30
-    #max_epochs:                 660        #0 is infinite
+    #max_epochs:                 600        #0 is infinite
     epoch_interval:             1          #seconds
     wait_next_epoch:            31
     wait_all_stations:          1
 
-    ppp_ephemeris:              ssr_apc     # broadcast  ssr_apc  ssr_com  precise
+    ppp_ephemeris:              ssr         # broadcast  ssr  precise
+    validity_interval_factor:   18.0         # multiplied by UDI to get the validity interval for SSR messages
 
     process_modes:
         user:                   true
@@ -81,7 +92,7 @@ processing_options:
         rts:                    false
         ionosphere:             false
         unit_tests:             false
-
+ 
     process_sys:
         gps:            true
         glo:            false
@@ -99,6 +110,8 @@ processing_options:
     raim:               true
     antexacs:           true
     
+    delete_old_ephemerides:     true
+
     sat_pcv:            true
 
     cycle_slip:
@@ -150,15 +163,11 @@ default_filter_parameters:
             estimated:          true
             sigma:              [100.0]
             proc_noise:         [0] #stations static
-            #apriori:                                   # taken from other source, rinex file etc.
-            #frame:              xyz #ned
-            #proc_noise_model:   Gaussian
 
         clk:
             estimated:          true
             sigma:              [0]
             proc_noise:         [10]
-            #proc_noise_model:   Gaussianex1X_pea_network
 
         clk_rate:
             estimated:          false
@@ -170,21 +179,18 @@ default_filter_parameters:
             sigma:              [60]
             proc_noise:         [0]
             #proc_noise_dt:      day
-            #proc_noise_model:   RandomWalk
 
         trop:
             estimated:          true
             sigma:              [0.1]
             proc_noise:         [0.0001] #0.1 mm/sqrt(s)
             proc_noise_dt:      second
-            #proc_noise_model:   RandomWalk
 
         trop_grads:
             estimated:          true
             sigma:              [1]
             proc_noise:         [0.01]
             proc_noise_dt:      second
-            #proc_noise_model:   RandomWalk
 
     satellites:
 
@@ -193,7 +199,6 @@ default_filter_parameters:
             sigma:              [0]
             proc_noise:         [1]
             #proc_noise_dt:      min
-            #proc_noise_model:   RandomWalk
 
         clk_rate:
             estimated:          false
@@ -235,7 +240,6 @@ override_filter_parameters:
         #    pos:
         #        sigma:              [60]
         #        proc_noise:         [0]
-                ##proc_noise_model:   Gaussian
             #clk:
                 #sigma:              [0.01]
 
@@ -245,7 +249,7 @@ override_filter_parameters:
             #exclude: true
         #ANKR:
             #exclude: true
-                #network_estimated:  false
+                #estimated:  false
 
     satellites:
 
@@ -254,7 +258,6 @@ override_filter_parameters:
             #srp:
                 #sigma:              [0.01]
                 #proc_noise:         [0.001]
-                ##proc_noise_model:   RandomWalk
 
         ### Block Type Overrides
         #GPS-IIR-A:

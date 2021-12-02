@@ -4,7 +4,11 @@
 map<KFKey, Amb_Sec>	AmbSecMap;	/* Ambiguity Section Map */
 map<KFKey, short>	AmbSecInd;	/* Current index for Ambiguity Section Map */
 
-void start_new_sect(Trace& trace, SatSys sat, string sta, GTime time)
+void start_new_sect(
+	Trace& trace,
+	SatSys sat,
+	string sta,
+	GTime time)
 {
 	tracepdeex(3, trace, "\n%s, Starting new section for %s - %s ", time.to_string(0), sat.id().c_str(), sta);
 	Amb_Sec& sect = StatAmbMap_list[sat.sys][sta].SignList[sat].curr_sect;
@@ -35,8 +39,8 @@ void start_new_sect(Trace& trace, SatSys sat, string sta, GTime time)
 	}
 
 	if (    sect.sec_num > 0
-			&&  timediff(sect.sec_fin, sect.sec_ini) > 600.0
-			&& (  sect.sec_am1 > -99999
+			&& (   sect.sec_fin - sect.sec_ini) > 600
+			&&	(  sect.sec_am1 > -99999
 				|| sect.sec_am2 > -99999) )
 	{
 		KFKey writKey = { KF::AMBIGUITY, sat, sta, sect.sec_num};
@@ -54,7 +58,10 @@ void start_new_sect(Trace& trace, SatSys sat, string sta, GTime time)
 }
 
 /* Print ambigities and residuals on a trace file */
-void Netwrk_trace_out(Trace& trace, double arelev, string recv)
+void Netwrk_trace_out(
+	Trace& trace,
+	double arelev, 
+	string recv)
 {
 	int trclvl = 3;
 	int week;
@@ -82,9 +89,8 @@ void Netwrk_trace_out(Trace& trace, double arelev, string recv)
 		for ( auto& [rec, staamb] : StatAmbMap_list[sys] )
 		{
 
-			if (staamb.SignList.size() == 0) continue;
-
-			if (!recv.empty() && rec != recv) continue;
+			if (staamb.SignList.empty())		continue;
+			if (!recv.empty() && rec != recv)	continue;
 
 			tow = time2gpst(staamb.update, &week);
 
@@ -101,9 +107,7 @@ void Netwrk_trace_out(Trace& trace, double arelev, string recv)
 			for ( auto& [sat, sigamb] : staamb.SignList )
 			{
 				if (sigamb.outage) 			continue;
-
 				if (sigamb.elev < arelev) 	continue;
-
 				if (sigamb.nfreq < 2) 		continue;
 
 				int pivt;
@@ -150,9 +154,6 @@ void Netwrk_trace_out(Trace& trace, double arelev, string recv)
 					stanwlf++;
 				}
 
-				double NLref = sigamb.ref[0];
-				double WLref = sigamb.ref[1];
-
 				Amb_Sec& sect = sigamb.curr_sect;
 
 				if (sigamb.state > 0)
@@ -162,7 +163,7 @@ void Netwrk_trace_out(Trace& trace, double arelev, string recv)
 						if (sect.sec_am1 == -99999.0) sect.sec_am1 = ambNLfix;
 						else if (sect.sec_am1 != ambNLfix)
 						{
-							tracepdeex(2, trace, "\n#ARES_SEC WARNING: Inconsisten NL for section %s %s at %s, %d -> %d",
+							tracepdeex(2, trace, "\n#ARES_SEC WARNING: Inconsistent NL for section %s %s at %s, %d -> %d",
 									rec, sat.id().c_str(), staamb.update.to_string(0), sect.sec_am1, ambNLfix);
 							sect.sec_am1 = ambNLfix;
 						}
@@ -173,7 +174,7 @@ void Netwrk_trace_out(Trace& trace, double arelev, string recv)
 						if (sect.sec_am2 == -99999.0) sect.sec_am2 = ambWLfix;
 						else if (sect.sec_am2 != ambWLfix)
 						{
-							tracepdeex(2, trace, "\n#ARES_SEC WARNING: Inconsisten WL for section %s %s at %s, %d -> %d",
+							tracepdeex(2, trace, "\n#ARES_SEC WARNING: Inconsistent WL for section %s %s at %s, %d -> %d",
 									rec, sat.id().c_str(), staamb.update.to_string(0), sect.sec_am2, ambWLfix);
 							sect.sec_am2 = ambWLfix;
 						}
@@ -233,28 +234,31 @@ void Netwrk_trace_out(Trace& trace, double arelev, string recv)
 			week, tow, ntotVal, ntotWLf, ntotNLf, ntotPiv, satpiv.size());
 }
 
-int net_sect_out ( Trace& trace )
+int net_sect_out( 
+	Trace& trace)
 {
 	int nsec = 0;
 
 	for (auto& [sys, act] : sys_solve)
-		for (auto& [rec, staamb] : StatAmbMap_list[sys] )
-			for (auto& [sat, sigamb] : staamb.SignList)
-			{
-				if (act == false)
-				{
-					continue;
-				}
+	for (auto& [rec, staamb] : StatAmbMap_list[sys] )
+	for (auto& [sat, sigamb] : staamb.SignList)
+	{
+		if (act == false)
+		{
+			continue;
+		}
 
-				/* saving ambiguity section data, it could be used for fix and hold...*/
-				Amb_Sec& sect = sigamb.curr_sect;
+		/* saving ambiguity section data, it could be used for fix and hold...*/
+		Amb_Sec& sect = sigamb.curr_sect;
 
-				if (timediff(sect.sec_fin, sect.sec_ini) > 600.0 && (sect.sec_am1 > -99999 || sect.sec_am2 > -99999))
-				{
-					KFKey sectKey = { KF::AMBIGUITY, sat, rec, sect.sec_num};
-					AmbSecMap[sectKey] = sect;
-				}
-			}
+		if (  (sect.sec_fin - sect.sec_ini) > 600
+			&&(  sect.sec_am1 > -99999 
+			  || sect.sec_am2 > -99999))
+		{
+			KFKey sectKey = { KF::AMBIGUITY, sat, rec, sect.sec_num};
+			AmbSecMap[sectKey] = sect;
+		}
+	}
 
 	for (auto& [key, sect] : AmbSecMap)
 	{
@@ -268,90 +272,87 @@ int net_sect_out ( Trace& trace )
 	return 0;
 }
 
-int Netwrk_iono_out ( Trace& trace, StationList& stations)
+int Netwrk_iono_out(
+	Trace&		trace,
+	StationMap&	stations)
 {
-	for (auto& rec_ptr : stations)
+	for (auto& [id, rec] : stations)
+	for (auto& obs : rec.obsList)
 	{
-		auto& rec = *rec_ptr;
+		if (obs.ionExclude) 																										continue;
+		if (!sys_solve[obs.Sat.sys]) 																								continue;
+		if (StatAmbMap_list[obs.Sat.sys].find(rec.id)					== StatAmbMap_list[obs.Sat.sys].end()) 						continue;
+		if (StatAmbMap_list[obs.Sat.sys][rec.id].SignList.find(obs.Sat)	== StatAmbMap_list[obs.Sat.sys][rec.id].SignList.end()) 	continue;
 
-		for (auto& obs : rec.obsList)
+		SignAmbg& sigamb = StatAmbMap_list[obs.Sat.sys][rec.id].SignList[obs.Sat];
+
+		if (sigamb.state < 6)
 		{
-			if (obs.ionExclude) 																										continue;
-
-			if (!sys_solve[obs.Sat.sys]) 																								continue;
-
-			if (StatAmbMap_list[obs.Sat.sys].find(rec.id) == StatAmbMap_list[obs.Sat.sys].end()) 										continue;
-
-			if (StatAmbMap_list[obs.Sat.sys][rec.id].SignList.find(obs.Sat) == StatAmbMap_list[obs.Sat.sys][rec.id].SignList.end()) 	continue;
-
-			SignAmbg& sigamb = StatAmbMap_list[obs.Sat.sys][rec.id].SignList[obs.Sat];
-
-			if (sigamb.state < 6)
-			{
-				obs.ionExclude = 1;
-				continue;
-			}
-
-			double lam1 = 0;
-			double lam2 = 0;
-			E_FType f1 = F1;
-			E_FType f2 = F2;
-
-			switch (obs.Sat.sys)
-			{
-				case E_Sys::QZS:
-				case E_Sys::GPS:
-					lam1 = CLIGHT / FREQ1;
-					lam2 = CLIGHT / FREQ2;
-					break;
-
-				case E_Sys::GAL:
-					lam1 = CLIGHT / FREQ1;
-					lam2 = CLIGHT / FREQ5;
-					f2 = F5;
-					break;
-
-				case E_Sys::CMP:
-					lam1 = CLIGHT / FREQ1_CMP;
-					lam2 = CLIGHT / FREQ2_CMP;
-					break;
-			}
-
-			if (lam1 == 0)
-				continue;
-
-			S_LC lc		= getLC(obs, obs.satStat_ptr->lc_new, f1, f2);
-			double WL_amb = sigamb.fix.WL12;
-			double NL_amb = sigamb.fix.NL12;
-			double WL_bia = satpiv[obs.Sat].satbias_fix.WL12;
-			double NL_bia = satpiv[obs.Sat].satbias_fix.NL12;
-			double WL_var = satpiv[obs.Sat].satbias_fix.WL12var;
-			double NL_var = satpiv[obs.Sat].satbias_fix.NL12var;
-			double GF_phs = -lc.GF_Phas_m;
-			double varL = 2 * obs.Sigs.begin()->second.phasVar;
-
-			double c1 = lam1 * lam1 / (lam2 * lam2 - lam1 * lam1);
-			obs.STECtype = 2;
-			//obs.STECsmth = c1*(GF_phs + (lam1-lam2)*NL_amb + lam2*WL_amb);
-			//obs.STECsmvr = c1*c1*varL;
-			obs.STECsmth = c1 * (GF_phs + (lam1 - lam2) * (NL_amb + NL_bia) - lam2 * WL_amb + (lam1 + lam2) * WL_bia);
-			obs.STECsmvr = c1 * c1 * (varL + (lam1 - lam2) * (lam1 - lam2) * NL_bia + (lam1 + lam2) * (lam1 + lam2) * WL_bia);
+			obs.ionExclude = 1;
+			continue;
 		}
+
+		double lam1 = 0;
+		double lam2 = 0;
+		E_FType f1 = F1;
+		E_FType f2 = F2;
+
+		switch (obs.Sat.sys)
+		{
+			case E_Sys::QZS:
+			case E_Sys::GPS:
+				lam1 = CLIGHT / FREQ1;
+				lam2 = CLIGHT / FREQ2;
+				break;
+
+			case E_Sys::GAL:
+				lam1 = CLIGHT / FREQ1;
+				lam2 = CLIGHT / FREQ5;
+				f2 = F5;
+				break;
+
+			case E_Sys::CMP:
+				lam1 = CLIGHT / FREQ1_CMP;
+				lam2 = CLIGHT / FREQ2_CMP;
+				break;
+		}
+
+		if (lam1 == 0)
+			continue;
+
+		S_LC lc		= getLC(obs, obs.satStat_ptr->lc_new, f1, f2);
+		double WL_amb = sigamb.fix.WL12;
+		double NL_amb = sigamb.fix.NL12;
+		double WL_bia = satpiv[obs.Sat].satbias_fix.WL12;
+		double NL_bia = satpiv[obs.Sat].satbias_fix.NL12;
+		double WL_var = satpiv[obs.Sat].satbias_fix.WL12var;
+		double NL_var = satpiv[obs.Sat].satbias_fix.NL12var;
+		double GF_phs = -lc.GF_Phas_m;
+		double varL = 2 * obs.Sigs.begin()->second.phasVar;
+
+		double c1 = lam1 * lam1 / (lam2 * lam2 - lam1 * lam1);
+		obs.STECtype = 2;
+		//obs.STECsmth = c1*(GF_phs + (lam1-lam2)*NL_amb + lam2*WL_amb);
+		//obs.STECsmvr = c1*c1*varL;
+		obs.STECsmth = c1 * (GF_phs + (lam1 - lam2) * (NL_amb + NL_bia) - lam2 * WL_amb + (lam1 + lam2) * WL_bia);
+		obs.STECsmvr = c1 * c1 * (varL + (lam1 - lam2) * (lam1 - lam2) * NL_bia + (lam1 + lam2) * (lam1 + lam2) * WL_bia);
 	}
 
 	return 0;
 }
 
-double update_out_bias(SatSys sat, E_AmbTyp ambtyp, double rawbia)
+double update_out_bias(
+	SatSys sat, 
+	E_AmbTyp ambtyp, 
+	double rawbia)
 {
-
 	auto& satamb = satpiv[sat];
 
 	if (satamb.bias_out.find(ambtyp) == satamb.bias_out.end())
 	{
 		satamb.bias_out[ambtyp].numsamp = 0;
 		satamb.bias_out[ambtyp].intlevl = 0;
-		satamb.bias_out[ambtyp].outbias = 0.0;
+		satamb.bias_out[ambtyp].outbias = 0;
 	}
 
 	satamb.bias_out[ambtyp].rawbias = rawbia;
@@ -464,10 +465,10 @@ int Satelt_bias_out(
 			if (acsConfig.ssrOpts.calculate_ssr)
 			{
 				nav.satNavMap[sat].ssrOut.ssrPhasBias.canExport		= false;
-				nav.satNavMap[sat].ssrOut.ssrPhasBias.bias	[def1]	= L1bias;
-				nav.satNavMap[sat].ssrOut.ssrPhasBias.var	[def1]	= L1var;
-				nav.satNavMap[sat].ssrOut.ssrPhasBias.bias	[def2]	= L2bias;
-				nav.satNavMap[sat].ssrOut.ssrPhasBias.var	[def2]	= L2var;
+				nav.satNavMap[sat].ssrOut.ssrPhasBias.codeBias_map[def1].bias		= L1bias;
+				nav.satNavMap[sat].ssrOut.ssrPhasBias.codeBias_map[def1].var		= L1var;
+				nav.satNavMap[sat].ssrOut.ssrPhasBias.codeBias_map[def2].bias		= L2bias;
+				nav.satNavMap[sat].ssrOut.ssrPhasBias.codeBias_map[def2].var		= L2var;
 				nav.satNavMap[sat].ssrOut.ssrPhasBias.isSet			= true;
 			}
 
@@ -480,7 +481,7 @@ int Satelt_bias_out(
 
 void Netwrk_ARoutput(
 	Trace&			trace,
-	StationList&	stations,
+	StationMap&		stations,
 	GTime			time,
 	bool			ionout,
 	double			biaupdt,

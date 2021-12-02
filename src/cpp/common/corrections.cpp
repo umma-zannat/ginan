@@ -4,11 +4,11 @@
 #include "observations.hpp"
 #include "streamTrace.hpp"
 #include "acsConfig.hpp"
-#include "constants.h"
+#include "constants.hpp"
 #include "satStat.hpp"
 #include "algebra.hpp"
-#include "gTime.hpp"
 #include "common.hpp"
+#include "gTime.hpp"
 #include "enums.h"
 
 
@@ -31,7 +31,7 @@ void obsVariances(
 
 		double el = obs.satStat_ptr->el;
 		if (el == 0)
-			el = PI/4;
+			el = PI/8;
 
 		double elevationScaling = 1;
 		switch (receiverOpts.error_model)
@@ -352,7 +352,7 @@ double nmf(
 * args   : gtime_t t        I   time
 *          double *pos      I   receiver position {lat,lon,h} (rad,m)
 *          double *azel     I   azimuth/elevation angle {az,el} (rad)
-*          double *mapfw    IO  wet mapping function (NULL: not output)
+*          double *mapfw    IO  wet mapping function (nullptr: not output)
 * return : dry mapping function
 * note   : see ref [5] (NMF) and [9] (GMF)
 *          original JGR paper of [5] has bugs in eq.(4) and (5). the corrected
@@ -365,10 +365,6 @@ double tropmapf(
 	const double	azel[],
 	double*			mapfw)
 {
-#ifdef IERS_MODEL
-	const double ep[] = {2000, 1, 1, 12, 0, 0};
-	double mjd, lat, lon, hgt, zd, gmfh, gmfw;
-#endif
 // 	trace(4, "tropmapf: pos=%10.6f %11.6f %6.1f azel=%5.1f %4.1f\n",
 // 	      pos[0]*R2D,
 // 	      pos[1]*R2D,
@@ -385,21 +381,5 @@ double tropmapf(
 		return 0;
 	}
 
-#ifdef IERS_MODEL
-	mjd = 51544.5 + (timediff(time, epoch2time(ep))) / 86400;
-	lat = pos[0];
-	lon = pos[1];
-	hgt = pos[2] - geoidh(pos); /* height in m (mean sea level) */
-	zd  = PI / 2 - azel[1];
-
-	/* call GMF */
-	gmf_(&mjd, &lat, &lon, &hgt, &zd, &gmfh, &gmfw);
-
-	if (mapfw)
-		*mapfw = gmfw;
-
-	return gmfh;
-#else
 	return nmf(time, pos, azel, mapfw); /* NMF */
-#endif
 }

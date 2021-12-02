@@ -3,7 +3,6 @@
 
 #include "navigation.hpp"
 #include "acsConfig.hpp"
-#include "constants.h"
 #include "algebra.hpp"
 #include "satSys.hpp"
 #include "gTime.hpp"

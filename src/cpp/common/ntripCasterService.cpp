@@ -1,4 +1,7 @@
+
 #include "ntripCasterService.hpp"
+#include "acsConfig.hpp"
+
 
 
 void NtripCasterService::startPerformanceMonitoring()
@@ -21,7 +24,7 @@ void NtripCasterService::startPerformanceMonitoring()
 	}
 	else
 	{
-		tsync.time = system_clock::to_time_t(system_clock::now());
+		tsync.time = system_clock::to_time_t(system_clock::now());	//todo aaron, yuk
 	}
 	double tgap = acsConfig.epoch_interval;    
 	
@@ -93,8 +96,8 @@ void NtripCasterService::makeTraceFiles()
 
 		BOOST_LOG_TRIVIAL(debug)
 		<< "\tCreating trace file for stream " << id;
-		std::ofstream trace(path_trace,std::ofstream::out | std::ofstream::ate);
 		
+		std::ofstream trace(path_trace,std::ofstream::out | std::ofstream::ate);
 		
 		if (!trace)
 		{
@@ -104,13 +107,16 @@ void NtripCasterService::makeTraceFiles()
 		else
 		{
 			// Trace file head
-			trace << "station    : " << id << std::endl;
-			trace << "start_epoch: " << acsConfig.start_epoch << std::endl;
-			trace << "end_epoch  : " << acsConfig.end_epoch   << std::endl;
-			trace << "trace_level: " << acsConfig.trace_level << std::endl;
-			trace << "pea_version: " << PEA_COMMIT_VERSION    << std::endl;
-		} 
-		trace.close();
+			trace << "station    : " << id						<< std::endl;
+			trace << "start_epoch: " << acsConfig.start_epoch	<< std::endl;
+			trace << "end_epoch  : " << acsConfig.end_epoch		<< std::endl;
+			trace << "trace_level: " << acsConfig.trace_level	<< std::endl;
+			trace << "pea_version: " << GINAN_COMMIT_VERSION	<< std::endl;
+		}
+		
 		traceFiles.insert({id,path_trace});
 	}
+	
+	FileLog::path_log = acsConfig.log_filename;
+	replaceString(FileLog::path_log, "<LOGTIME>", logtime);
 }

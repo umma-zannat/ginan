@@ -1,6 +1,7 @@
 #include <boost/log/trivial.hpp>
 
 #include "rtcmEncoder.hpp"
+#include "constants.hpp"
 
 using std::pair;
 
@@ -47,33 +48,33 @@ void RtcmEncoder::Encoder::encodeWriteMessageToBuffer(
 
 void RtcmEncoder::CustomEndcoder::encodeTimeStampRTCM()
 {
-    // Custom message code, for crcsi maximum length 4096 bits or 512 bytes.
-    unsigned int messCode = +RtcmMessageType::CUSTOM;
-    unsigned int messType = +E_RTCMSubmessage::TIMESTAMP;
-    
-    boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
-    
-    // Number of seconds since 1/1/1970, long is 64 bits and all may be used.
-    long int seconds = (now - boost::posix_time::from_time_t(0)).total_seconds();
-    
-    //Number of fractional seconds, The largest this can be is 1000 which is 10 bits unsigned. 
-    boost::posix_time::ptime now_mod_seconds	= boost::posix_time::from_time_t(seconds);
-    auto subseconds	= now - now_mod_seconds;
-    int milli_sec = subseconds.total_milliseconds();
-    
-    unsigned int* var = (unsigned int*) &seconds;
-    
-    int i = 0;
-    //int byteLen = ceil((12.0+8.0+64.0+10.0)/8.0);
-    int byteLen = 12;
-    unsigned char buf[byteLen];
-    i = setbituInc(buf, i, 12,		messCode);
-    i = setbituInc(buf, i, 8,		messType);
-    i = setbituInc(buf, i, 32,		var[0]);
-    i = setbituInc(buf, i, 32,		var[1]);
-    i = setbituInc(buf, i, 10, (int)milli_sec);
-    
-    encodeWriteMessageToBuffer(buf, byteLen);
+	// Custom message code, for crcsi maximum length 4096 bits or 512 bytes.
+	unsigned int messCode = +RtcmMessageType::CUSTOM;
+	unsigned int messType = +E_RTCMSubmessage::TIMESTAMP;
+	
+	boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
+	
+	// Number of seconds since 1/1/1970, long is 64 bits and all may be used.
+	long int seconds = (now - boost::posix_time::from_time_t(0)).total_seconds();
+	
+	//Number of fractional seconds, The largest this can be is 1000 which is 10 bits unsigned. 
+	boost::posix_time::ptime now_mod_seconds	= boost::posix_time::from_time_t(seconds);
+	auto subseconds	= now - now_mod_seconds;
+	int milli_sec = subseconds.total_milliseconds();
+	
+	unsigned int* var = (unsigned int*) &seconds;
+	
+	int i = 0;
+	//int byteLen = ceil((12.0+8.0+64.0+10.0)/8.0);
+	int byteLen = 12;
+	unsigned char buf[byteLen];
+	i = setbituInc(buf, i, 12,		messCode);
+	i = setbituInc(buf, i, 8,		messType);
+	i = setbituInc(buf, i, 32,		var[0]);
+	i = setbituInc(buf, i, 32,		var[1]);
+	i = setbituInc(buf, i, 10, (int)milli_sec);
+	
+	encodeWriteMessageToBuffer(buf, byteLen);
 }
 
 void RtcmEncoder::SSREncoder::encodeSsr(bool useSSROut)
@@ -111,7 +112,7 @@ void RtcmEncoder::SSREncoder::encodeSsrComb(
 		}
 		else
 		{
-			if (satNav.ssr.ssrEph_map.size() == 0)
+			if (satNav.ssr.ssrEph_map.empty())
 			{
 				continue;
 			}
@@ -168,10 +169,12 @@ void RtcmEncoder::SSREncoder::encodeSsrComb(
 
 		if (ssrClkMap.find(t0) != ssrClkMap.end())
 		{  
-			auto s_ClkMap = ssrClkMap[t0];
-			auto s_Comb = ssrCombMap[t0];
+			auto s_ClkMap	= ssrClkMap [t0];
+			auto s_Comb		= ssrCombMap[t0];
+			
 			vector<SatSys> obsToRem;
-			for (auto&[Sat,ssrEph] : s_EphMap )
+			
+			for (auto&[Sat,ssrEph] : s_EphMap)
 			{
 				if (s_ClkMap.find(Sat) != s_ClkMap.end())
 				{  
@@ -183,13 +186,14 @@ void RtcmEncoder::SSREncoder::encodeSsrComb(
 					obsToRem.push_back(Sat);
 				}
 			}
+			
 			for (auto Sat : obsToRem)
 			{
 				s_EphMap.erase(Sat);
 				s_ClkMap.erase(Sat);
 			}
 			
-			if ( s_EphMap.size() != 0 )
+			if (s_EphMap.empty() == false)
 			{
 				ssrOrbMap[t0] = s_EphMap;
 			}
@@ -198,7 +202,7 @@ void RtcmEncoder::SSREncoder::encodeSsrComb(
 				ssrOrbMap.erase(t0);
 			}
 			
-			if( s_ClkMap.size() != 0 )
+			if (s_ClkMap.empty() == false)
 			{
 				ssrClkMap[t0] = s_ClkMap;
 			}
@@ -211,7 +215,7 @@ void RtcmEncoder::SSREncoder::encodeSsrComb(
 			break;
 		}
 		
-		if ( foundComb )
+		if (foundComb)
 			it = ssrOrbMap.begin();
 		else
 			it++;
@@ -238,18 +242,9 @@ void RtcmEncoder::SSREncoder::encodeSsrComb(
 		int nj = 0;
 		int offp = 0;
 		unsigned int messCode = 0;
-		if (targetSys == +E_Sys::GPS) 
-		{
-			messCode = +RtcmMessageType::GPS_SSR_COMB_CORR;
-			np=6; ni= 8; nj= 0; offp=  0;
-			bitLen = 68+numSat*205;
-		}
-		if (targetSys == +E_Sys::GAL)
-		{
-			messCode = +RtcmMessageType::GAL_SSR_COMB_CORR;
-			np=6; ni=10; nj= 0; offp=  0;
-			bitLen = 68+numSat*207;
-		}
+		
+		if		(targetSys == +E_Sys::GPS) 		{	messCode = +RtcmMessageType::GPS_SSR_COMB_CORR;		np=6; ni= 8; nj= 0; offp=  0;	bitLen = 68+numSat*205;		}
+		else if (targetSys == +E_Sys::GAL)		{	messCode = +RtcmMessageType::GAL_SSR_COMB_CORR;		np=6; ni=10; nj= 0; offp=  0;	bitLen = 68+numSat*207;		}
 		
 		int byteLen = ceil(bitLen/8.0);
 		unsigned char buf[byteLen];
@@ -335,7 +330,7 @@ void RtcmEncoder::SSREncoder::encodeSsrPhase(
 		}
 		
 		if	(  ssrPhasBias.t0.time	== 0 
-			|| ssrPhasBias.iod		== -1 )
+			|| ssrPhasBias.iod		== -1)
 		{
 			continue;
 		}
@@ -355,7 +350,7 @@ void RtcmEncoder::SSREncoder::encodeSsrPhase(
 		int totalNbias = 0;
 		for (auto& [Sat,ssrPhasBias] : s_PBMap)
 		{
-			totalNbias += ssrPhasBias.bias.size();
+			totalNbias += ssrPhasBias.codeBias_map.size();
 		}
 		
 		if (totalNbias == 0)
@@ -408,24 +403,22 @@ void RtcmEncoder::SSREncoder::encodeSsrPhase(
 			
 			int d;
 														i = setbituInc(buf,i,np,Sat.prn);
-			d = ssrPhasBias.bias.size();				i = setbituInc(buf,i,5,	d);
+			d = ssrPhasBias.codeBias_map.size();		i = setbituInc(buf,i,5,	d);
 			d = (int)round(ssrPhase.yawAngle*256);		i = setbituInc(buf,i,9,	d);
 			d = (int)round(ssrPhase.yawRate*8192);		i = setbitsInc(buf,i,8,	d);
 			
-			for (auto& [obCode, bias] : ssrPhasBias.bias)
+			for (auto& [obsCode, entry] : ssrPhasBias.codeBias_map)
 			{
-				SSRPhaseCh ssrPhaseCh = ssrPhasBias.ssrPhaseChs[obCode];
+				SSRPhaseCh ssrPhaseCh = ssrPhasBias.ssrPhaseChs[obsCode];
 				
-				//BOOST_LOG_TRIVIAL(debug) << "Phase, obCode : " << obCode << std::endl;
+				//BOOST_LOG_TRIVIAL(debug) << "Phase, obsCode : " << obsCode << std::endl;
 				//BOOST_LOG_TRIVIAL(debug) << "E_sys         : " << sys << std::endl;
 				//BOOST_LOG_TRIVIAL(debug) << "mCodes_gps.size() : " << mCodes_gps.size() << std::endl;
 				//print_map( mCodes_gps.left, " E_ObsCode <--> RTCM ", BOOST_LOG_TRIVIAL(debug) );
 				
 				int rtcm_code = 0;
-				if ( targetSys == +E_Sys::GPS )
-					rtcm_code = mCodes_gps.left.at(obCode);
-				else if ( targetSys == +E_Sys::GAL )
-					rtcm_code = mCodes_gal.left.at(obCode); 
+				if		( targetSys == +E_Sys::GPS )		rtcm_code = mCodes_gps.left.at(obsCode);		//todo aaron, crash heaven, needs else, try
+				else if ( targetSys == +E_Sys::GAL )		rtcm_code = mCodes_gal.left.at(obsCode); 
 				
 				//BOOST_LOG_TRIVIAL(debug) << "rtcm_code      : " << rtcm_code << std::endl;
 				
@@ -433,9 +426,9 @@ void RtcmEncoder::SSREncoder::encodeSsrPhase(
 														i = setbituInc(buf,i,1,	ssrPhaseCh.signalIntInd);
 														i = setbituInc(buf,i,2,	ssrPhaseCh.signalWidIntInd);
 														i = setbituInc(buf,i,4,	ssrPhaseCh.signalDisconCnt);
-				d = (int)round(bias/0.0001);			i = setbitsInc(buf,i,20,d);
+				d = (int)round(entry.bias / 0.0001);	i = setbitsInc(buf,i,20,d);
 				
-				traceSsrPhasB(Sat, obCode, ssrPhasBias);   
+				traceSsrPhasB(Sat, obsCode, ssrPhasBias);   
 			}
 		} 
 		
@@ -448,7 +441,7 @@ void RtcmEncoder::SSREncoder::encodeSsrPhase(
 		
 		i = setbituInc(buf,i,bitl,0);
 		
-		encodeWriteMessageToBuffer(buf,byteLen);
+		encodeWriteMessageToBuffer(buf, byteLen);
 	}
 }
 
@@ -504,7 +497,7 @@ void RtcmEncoder::SSREncoder::encodeSsrCode(
 		for (auto s_it = s_CBMap.begin(); s_it != s_CBMap.end(); s_it++)
 		{
 			SSRCodeBias ssrCodeBias = s_it->second;
-			totalNbias += ssrCodeBias.bias.size();
+			totalNbias += ssrCodeBias.codeBias_map.size();
 		}
 		
 		if (totalNbias == 0)
@@ -551,21 +544,21 @@ void RtcmEncoder::SSREncoder::encodeSsrCode(
 		for (auto& [Sat, ssrCodeBias] : s_CBMap)
 		{
 			i = setbituInc(buf, i, np, Sat.prn);
-			unsigned int nbias = ssrCodeBias.bias.size();
+			unsigned int nbias = ssrCodeBias.codeBias_map.size();
 
 			i = setbituInc(buf,i,5,nbias);
 			
-			for (auto& [obCode, bias] : ssrCodeBias.bias)
+			for (auto& [obsCode, entry] : ssrCodeBias.codeBias_map)
 			{
 				int rtcm_code = 0;
-				if		( targetSys == +E_Sys::GPS )	{	rtcm_code = mCodes_gps.left.at(obCode);		}
-				else if ( targetSys == +E_Sys::GAL )	{	rtcm_code = mCodes_gal.left.at(obCode);		}
+				if		( targetSys == +E_Sys::GPS )	{	rtcm_code = mCodes_gps.left.at(obsCode);		}
+				else if ( targetSys == +E_Sys::GAL )	{	rtcm_code = mCodes_gal.left.at(obsCode);		}
 				
 
 														i = setbituInc(buf, i, 5,		rtcm_code);
-				int d = (int)round(bias / 0.01);		i = setbitsInc(buf, i, 14,	d);
+				int d = (int)round(entry.bias / 0.01);	i = setbitsInc(buf, i, 14,	d);
 
-				traceSsrCodeB(Sat, obCode, ssrCodeBias);                  
+				traceSsrCodeB(Sat, obsCode, ssrCodeBias);                  
 			}
 		}
 		
