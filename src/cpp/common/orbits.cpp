@@ -1,4 +1,6 @@
 
+//#pragma GCC optimize ("O0")
+
 #include <algorithm>
 #include <chrono>
 #include <string>
@@ -13,7 +15,7 @@ using std::string;
 #include "navigation.hpp"
 #include "acsConfig.hpp"
 #include "constants.hpp"
-#include "preceph.hpp"
+#include "ephemeris.hpp"
 #include "algebra.hpp"
 #include "orbits.hpp"
 #include "satSys.hpp"

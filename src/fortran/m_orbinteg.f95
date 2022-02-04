@@ -8,18 +8,18 @@ MODULE m_orbinteg
 !  Module for orbit integration
 !  Numerical integration of Equation of Motion and Variational Equations 
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
-! Created:	5 October 2017
+! Author :  Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
+! Created:  5 October 2017
 ! ----------------------------------------------------------------------
 
 
       IMPLICIT NONE
-      !SAVE 			
+      !SAVE                   
   
-	  
+        
 Contains
-	  
-	  
+        
+        
 SUBROUTINE orbinteg (INfname, VEQmode, orbC, veqSmatrix, veqPmatrix, is_backwards)
 
 
@@ -30,17 +30,17 @@ SUBROUTINE orbinteg (INfname, VEQmode, orbC, veqSmatrix, veqPmatrix, is_backward
 !  Orbit Integration: Numerical integration of Equation of Motion and Variational Equations
 ! ----------------------------------------------------------------------
 ! Input arguments:
-! - INfname: 	Input cofiguration file name for the orbit parameterization 
-! - VEQmode:	VEQmode = 0 :: Variational Equations integration is not performed
-! 				VEQmode = 1 :: Variational Equations integration is performed
+! - INfname:      Input cofiguration file name for the orbit parameterization 
+! - VEQmode:      VEQmode = 0 :: Variational Equations integration is not performed
+!                       VEQmode = 1 :: Variational Equations integration is performed
 !
 ! Output arguments:
-! - orbC: 		Satellite orbit array in ICRF including the following per epoch:
+! - orbC:         Satellite orbit array in ICRF including the following per epoch:
 !               - Modified Julian Day number (including the fraction of the day) 
-!				- Seconds since 00h 
-!				- Position vector (m)
-!				- Velocity vector (m/sec)
-! - veqSmatrix:	State trasnition matrix obtained from the Variational Equations solution based on numerical integration methods
+!                       - Seconds since 00h 
+!                       - Position vector (m)
+!                       - Velocity vector (m/sec)
+! - veqSmatrix:   State trasnition matrix obtained from the Variational Equations solution based on numerical integration methods
 ! - veqPmatrix: Sensitivity matrix obtained from the Variational Equations solution based on numerical integration methods
 ! ----------------------------------------------------------------------
 ! Note 1:
@@ -48,14 +48,14 @@ SUBROUTINE orbinteg (INfname, VEQmode, orbC, veqSmatrix, veqPmatrix, is_backward
 ! refer to the time system defined by the global variable TIME_SCALE in the module mdl_param.f03
 ! according to the input parameterization file 
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
+! Author :  Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
 !
-! Created:	5 October 2017
+! Created:  5 October 2017
 !
 ! Chnages:  22-05-2019  Tzupang Tseng: compute the beta angle for setting the integration step size for the eclipsed satellites    
 ! ----------------------------------------------------------------------
-	  
-	  
+        
+        
       USE mdl_precision
       USE mdl_num
       USE m_integrEQM
@@ -66,12 +66,12 @@ SUBROUTINE orbinteg (INfname, VEQmode, orbC, veqSmatrix, veqPmatrix, is_backward
 !      USE m_betainfo
       IMPLICIT NONE
 
-	  
+        
 ! ----------------------------------------------------------------------
 ! Dummy arguments declaration
 ! ----------------------------------------------------------------------
 ! IN
-      CHARACTER (LEN=100), INTENT(IN)  :: INfname				
+      CHARACTER (LEN=100), INTENT(IN)  :: INfname                       
       INTEGER (KIND = prec_int2), INTENT(IN) :: VEQmode 
       logical :: is_backwards
 ! ----------------------------------------------------------------------
@@ -85,30 +85,33 @@ SUBROUTINE orbinteg (INfname, VEQmode, orbC, veqSmatrix, veqPmatrix, is_backward
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: Smatrix, Pmatrix 
       REAL (KIND = prec_d) :: MJDo
       REAL (KIND = prec_d), DIMENSION(3) :: ro, vo
-      REAL (KIND = prec_d), DIMENSION(6) :: Zo_icrf
+!       REAL (KIND = prec_d), DIMENSION(6) :: Zo_icrf
       REAL (KIND = prec_d) :: arc
       INTEGER (KIND = prec_int2) :: integID
       REAL (KIND = prec_d) :: step
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d) :: to_sec     
       REAL (KIND = prec_d) :: t_sec     
-      INTEGER (KIND = prec_int8) :: Nepochs, i, j
+      INTEGER (KIND = prec_int8) :: Nepochs, i
+!       , j
       INTEGER (KIND = prec_int8) :: sz1, sz2 
-      INTEGER (KIND = prec_int2) :: AllocateStatus, DeAllocateStatus  
-	  REAL (KIND = prec_d) :: mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC
-	  REAL (KIND = prec_d) :: dt_TT_TAI, dt_TAI_UTC, dt_TAI_GPS
-      DOUBLE PRECISION EOP_cr(7)
-      DOUBLE PRECISION CRS2TRS(3,3), TRS2CRS(3,3), d_CRS2TRS(3,3), d_TRS2CRS(3,3)
-      REAL (KIND = prec_d) :: r_TRS(3), v_TRS(3)
-      REAL (KIND = prec_d) :: r_CRS(3), v_CRS(3)
-      REAL (KIND = prec_d) :: v_TRS_1(3), v_TRS_2(3), v_CRS_1(3), v_CRS_2(3)	  
+      INTEGER (KIND = prec_int2) :: AllocateStatus
+!       , DeAllocateStatus  
+        REAL (KIND = prec_d) :: mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC
+        REAL (KIND = prec_d) :: dt_TT_TAI, dt_TAI_UTC, dt_TAI_GPS
+!       DOUBLE PRECISION EOP_cr(7)
+!       DOUBLE PRECISION CRS2TRS(3,3), TRS2CRS(3,3), d_CRS2TRS(3,3), d_TRS2CRS(3,3)
+!       REAL (KIND = prec_d) :: r_TRS(3), v_TRS(3)
+!       REAL (KIND = prec_d) :: r_CRS(3), v_CRS(3)
+!       REAL (KIND = prec_d) :: v_TRS_1(3), v_TRS_2(3), v_CRS_1(3), v_CRS_2(3)    
 ! ----------------------------------------------------------------------
-      INTEGER IY, IM, ID, J_flag
-      DOUBLE PRECISION DJM0, sec, FD, Sec0
-	  INTEGER (KIND = prec_int8) :: Nparam
+!       INTEGER IY, IM, ID, J_flag
+!       DOUBLE PRECISION sec, FD, Sec0
+!       ,DJM0, 
+        INTEGER (KIND = prec_int8) :: Nparam
 
-      REAL (KIND = prec_d) :: Xmatrix(6)
-      REAL (KIND = prec_d) :: beta0
+!       REAL (KIND = prec_d) :: Xmatrix(6)
+!       REAL (KIND = prec_d) :: beta0
       logical found
 
 ! ----------------------------------------------------------------------
@@ -118,7 +121,7 @@ Call prm_main (INfname, VeqMode == mVEQ)
 ! ----------------------------------------------------------------------
 
 ! ----------------------------------------------------------------------
-! Temp																		! ----------------------------------------------------------------------
+! Temp                                                                                                            ! ----------------------------------------------------------------------
 SVEC_Zo = SVEC_Zo_ESTIM
 !print *, "orbinteg: SVEC_Zo = ", SVEC_Zo
 !Bias_accel_glb = Bias_accel_aposteriori
@@ -252,17 +255,17 @@ CALL time_TT (mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC)
 Call time_TT_sec (mjd , dt_TT_TAI, dt_TAI_UTC, dt_TAI_GPS)
 !print *,"dt_TT_TAI, dt_TAI_UTC, dt_TAI_GPS", dt_TT_TAI, dt_TAI_UTC, dt_TAI_GPS
 
-! Test the TIME_SCALE global variable in mdl_param.f03	
+! Test the TIME_SCALE global variable in mdl_param.f03      
 If (yml_time_scale == GPS_time) then
-	mjd = mjd_GPS
-	t_sec = t_sec - (dt_TT_TAI + dt_TAI_GPS)
+      mjd = mjd_GPS
+      t_sec = t_sec - (dt_TT_TAI + dt_TAI_GPS)
 Else if (yml_time_scale == UTC_time) then
-	mjd = mjd_UTC		
-	t_sec = t_sec - (dt_TT_TAI + dt_TAI_UTC)
+      mjd = mjd_UTC           
+      t_sec = t_sec - (dt_TT_TAI + dt_TAI_UTC)
 Else if (yml_time_scale == TAI_time) then
-	mjd = mjd_TAI
-	t_sec = t_sec - (dt_TT_TAI)	
-End If	
+      mjd = mjd_TAI
+      t_sec = t_sec - (dt_TT_TAI)   
+End If      
 !print *, "TIME_SCALE ", TIME_SCALE
 !print *, "(dt_TT_TAI + dt_TAI_GPS) ", (dt_TT_TAI + dt_TAI_GPS)
 !print *, "t_sec ", t_sec
@@ -271,17 +274,17 @@ End If
 !t_sec = (mjd - INT(mjd)) * (24.D0 * 3600.D0)
 ! Seconds since 00h
 If (t_sec >= 86400.D0) Then
-	t_sec = t_sec - INT(t_sec / 86400.D0) * 86400.D0
+      t_sec = t_sec - INT(t_sec / 86400.D0) * 86400.D0
 End IF
 
 ! Time scale change in orbit matrix and VEQ matrices 
 orbC(i,1) = mjd
 orbC(i,2) = t_sec
 If (VEQmode == 1) Then
-	veqSmatrix(i,1) = mjd
-	veqSmatrix(i,2) = t_sec
-	veqPmatrix(i,1) = mjd
-	veqPmatrix(i,2) = t_sec
+      veqSmatrix(i,1) = mjd
+      veqSmatrix(i,2) = t_sec
+      veqPmatrix(i,1) = mjd
+      veqPmatrix(i,2) = t_sec
 End IF
  
 End Do

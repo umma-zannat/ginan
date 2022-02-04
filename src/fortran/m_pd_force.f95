@@ -299,8 +299,8 @@ vSun = 0.d0
 
 ! ----------------------------------------------------------------------
 ! Planetary/Lunar orbital perturbations
+! we have to calculate Sun and Moon positions anyway. so the condition is embedded lower down.
 ! ----------------------------------------------------------------------
-If (yml_planetary_perturbations_enabled) Then
 
 ! Julian Day Number of the input epoch
 JD = mjd + 2400000.5D0
@@ -327,9 +327,11 @@ DO NTARG_body = 1 , 11
   
 ! ----------------------------------------------------------------------
 ! Point-mass perturbations vector due to the selected celestial body
+If (yml_planetary_perturbations_enabled) Then
       CALL force_gm3rd (rbody, rsat_icrf, GMbody , a_perturb)
 ! Overall (sum) planetary pertrubation acceleration vector
 	  aPlanets_icrf = aPlanets_icrf + a_perturb
+end if
 ! ----------------------------------------------------------------------
 
 ! ----------------------------------------------------------------------
@@ -348,6 +350,7 @@ DO NTARG_body = 1 , 11
    END IF
 END DO  
 	  
+If (yml_planetary_perturbations_enabled) Then
 ! ----------------------------------------------------------------------
 ! Indirect J2 effect
 ! ----------------------------------------------------------------------
@@ -380,7 +383,7 @@ CALL matrix_Rr (TRS2CRS, a_iJ2 , a_iJ2_icrf)
 Fplanets_icrf = aPlanets_icrf + a_iJ2_icrf
 ! ----------------------------------------------------------------------
 
-ELSE If (.not. yml_planetary_perturbations_enabled) Then
+else If (.not. yml_planetary_perturbations_enabled) Then
 Fplanets_icrf = (/ 0.D0, 0.0D0, 0.0D0 /)
 End IF	  
 ! ----------------------------------------------------------------------

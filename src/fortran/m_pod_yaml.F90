@@ -32,6 +32,7 @@ module pod_yaml
    type (type_dictionary), pointer :: srp_dict, srp_parameters_dict, integ_dict, time_scale_dict, srp_mode_dict
    type (type_dictionary), pointer :: gravity_dict, gravity_model_dict, planets_dict, tides_dict, rel_dict, non_grav_dict
    type (type_dictionary), pointer :: overrides_dict, pulse_dict, constellations_dict
+   type (type_list), pointer :: prn_list
    logical yml_ext_orbit_enabled, yml_estimate_params, yml_write_sp3_velocities, yml_write_partial_velocities
    logical yml_veq_integration, yml_pulses
    logical yml_gps_constellation, yml_gal_constellation, yml_glo_constellation, yml_bds_constellation, yml_qzss_constellation
@@ -99,6 +100,13 @@ module pod_yaml
    real*8        yml_Zo(6), yml_pulse_offset, yml_pulse_interval
    character(512) yml_pod_data_state_vector
 
+   type :: prn_selection
+       character(10) prn_name
+   end type
+
+   type (prn_selection) :: yml_include_prns(500), yml_exclude_prns(500)
+   integer*4      yml_include_prn_count, yml_exclude_prn_count
+
    character(512) yml_orbit_filename, yml_ext_orbit_filename, yml_satsinex_filename, yml_leapsecond_filename, yml_eop_filename
    character(512) yml_gravity_filename, yml_ephemeris_header, yml_ephemeris_data_file, yml_ocean_tides_file, yml_erp_filename
    character(512) yml_ic_filename, yml_output_dir, cmd
@@ -128,6 +136,7 @@ module pod_yaml
       real*8  emp_init_values(max_emp_parameters)
       integer*2 ecom_parameters_used, emp_parameters_used
       logical veq_enabled, eqm_enabled, arc_enabled, state_vector_enabled
+      character(2048) integ_header ! for output to screen
    end type
 
    type :: override
@@ -222,6 +231,7 @@ module pod_yaml
 subroutine get_yaml(yaml_filepath)
 
    character (*) yaml_filepath
+   integer   idx, i
    logical   show_mesg
 
    nullify(root_dict)
@@ -260,6 +270,9 @@ subroutine get_yaml(yaml_filepath)
    yml_glo_constellation = .true.
    yml_bds_constellation = .true.
    yml_qzss_constellation = .true.
+
+   yml_include_prn_count = 0
+   yml_exclude_prn_count = 0
 
    write(*,*) 'YAML version:   ',yaml_commit_id,' (',yaml_branch_name,' branch)'
 
@@ -302,15 +315,15 @@ subroutine get_yaml(yaml_filepath)
           yml_pod_data_initial_day = 0
           yml_pod_data_initial_seconds = 0.0d0
       end if
-      call new_prn_override(yml_pod_data_prn)
+      idx = new_prn_override(yml_pod_data_prn)
       read(yml_pod_data_state_vector, *, IOSTAT=ios_keyy) yml_Zo
-      yml_prn_overrides(prn_override_count)%integ%xpos = yml_Zo(1)
-      yml_prn_overrides(prn_override_count)%integ%ypos = yml_Zo(2)
-      yml_prn_overrides(prn_override_count)%integ%zpos = yml_Zo(3)
-      yml_prn_overrides(prn_override_count)%integ%xvel = yml_Zo(4)
-      yml_prn_overrides(prn_override_count)%integ%yvel = yml_Zo(5)
-      yml_prn_overrides(prn_override_count)%integ%zvel = yml_Zo(6)
-      yml_prn_overrides(prn_override_count)%integ%state_vector_enabled = .true.
+      yml_prn_overrides(idx)%integ%xpos = yml_Zo(1)
+      yml_prn_overrides(idx)%integ%ypos = yml_Zo(2)
+      yml_prn_overrides(idx)%integ%zpos = yml_Zo(3)
+      yml_prn_overrides(idx)%integ%xvel = yml_Zo(4)
+      yml_prn_overrides(idx)%integ%yvel = yml_Zo(5)
+      yml_prn_overrides(idx)%integ%zvel = yml_Zo(6)
+      yml_prn_overrides(idx)%integ%state_vector_enabled = .true.
    end if
 
    pod_options_dict = root_dict%get_dictionary("pod_options", .true., my_error_p);
@@ -379,7 +392,27 @@ subroutine get_yaml(yaml_filepath)
                    yml_gal_constellation, yml_glo_constellation, yml_bds_constellation, &
                    yml_qzss_constellation)
       end if
-      
+      prn_list = pod_options_dict%get_list("prn_inclusions", .false., my_error_p)
+      if (associated(prn_list)) then
+           yml_include_prn_count = get_prns(prn_list, my_error, yml_include_prns)
+           if (yml_include_prn_count > 0) then
+               write (*,*) "limiting to list of satellites:"
+               do i = 1, yml_include_prn_count
+                  write (*,*) trim(yml_include_prns(i)%prn_name)
+               end do
+           end if
+      end if
+      prn_list = pod_options_dict%get_list("prn_exclusions", .false., my_error_p)
+      if (associated(prn_list)) then
+           yml_exclude_prn_count = get_prns(prn_list, my_error, yml_exclude_prns)
+           if (yml_exclude_prn_count > 0) then
+               write (*,*) "excluding list of satellites:"
+               do i = 1, yml_exclude_prn_count
+                  write (*,*) trim(yml_exclude_prns(i)%prn_name)
+               end do
+           end if
+      end if
+
       time_scale_dict = pod_options_dict%get_dictionary("time_scale", .true., my_error_p)
 
       if (.not.associated(time_scale_dict)) then
@@ -636,6 +669,40 @@ subroutine get_yaml(yaml_filepath)
 
 end subroutine get_yaml
 
+function get_prns(list, error, yml_prns)
+   type (type_list) :: list
+   type (type_error) :: error
+   type (type_list_item), pointer :: item
+   class (type_scalar), pointer :: scalar_item
+   class (type_node), pointer :: node
+   type (prn_selection) :: yml_prns(*), my_prn
+
+   integer*4 get_prns
+
+   get_prns = 0
+   item => list%first
+
+   do while (associated(item))
+       nullify(scalar_item)
+       select type (node=>item%node)
+           class is (type_scalar)
+               scalar_item => node
+           class default
+               error%message = trim(node%path) // ' must be a scalar.'
+       end select
+       if (associated (scalar_item)) then
+           my_prn%prn_name = trim (scalar_item%string)
+           get_prns = get_prns + 1
+           yml_prns(get_prns:get_prns) = my_prn
+           item => item%next
+       else
+           nullify (item)
+       end if
+   end do
+
+   return
+end function get_prns
+       
 subroutine get_constellations(dict, error, gps, gal, glo, bds, qzss)
    type (type_dictionary) :: dict
    type (type_error) :: error
@@ -1671,7 +1738,7 @@ subroutine get_orbitarcs(dict, error, determination, prediction, backwards)
    return
 end subroutine get_orbitarcs
 
-subroutine new_prn_override(prn)
+integer function new_prn_override(prn)
    character(*) prn
    integer mutex_success, thread_get_mutex
    ! actually a pointer to a C mutex object
@@ -1684,6 +1751,7 @@ subroutine new_prn_override(prn)
    call thread_lock(mutex)
 
    prn_override_count = prn_override_count+1
+   new_prn_override = prn_override_count
    yml_prn_overrides(prn_override_count)%name = TRIM(prn)
    yml_prn_overrides(prn_override_count)%integ%eqm_enabled = .false.
    yml_prn_overrides(prn_override_count)%integ%veq_enabled = .false.
@@ -1691,9 +1759,10 @@ subroutine new_prn_override(prn)
    yml_prn_overrides(prn_override_count)%integ%state_vector_enabled = .false.
    yml_prn_overrides(prn_override_count)%integ%emp_parameters_used = 0
    yml_prn_overrides(prn_override_count)%integ%ecom_parameters_used = 0
+   yml_prn_overrides(prn_override_count)%integ%integ_header = ""
 
    call thread_unlock(mutex)
    call thread_release_mutex(mutex)
-end subroutine new_prn_override
+end function new_prn_override
 
 end module pod_yaml

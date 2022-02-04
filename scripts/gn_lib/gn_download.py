@@ -33,13 +33,27 @@ def gen_uncomp_filename(comp_filename):
     return uncomp_file
 
 
-def gen_prod_filename(dt,pref,suff,f_type,wkly_file=False):
+
+def gen_prod_filename(dt,pref,suff,f_type,wkly_file=False,repro3=False):
     '''
     Generate a product filename based on the inputs
     '''
     gpswk, gpswkD = dt2gpswk(dt,both=True)
     
-    if (pref == 'igs') & (f_type == 'snx') & wkly_file:
+    if repro3:
+        if f_type == 'erp':
+            f = f'{pref.upper()}0R03FIN_{dt.year}{dt.strftime("%j")}0000_01D_01D_{f_type.upper()}.{f_type.upper()}.gz'
+        elif f_type == 'clk':
+            f = f'{pref.upper()}0R03FIN_{dt.year}{dt.strftime("%j")}0000_01D_30S_{f_type.upper()}.{f_type.upper()}.gz'
+        elif f_type == 'bia':
+            f = f'{pref.upper()}0R03FIN_{dt.year}{dt.strftime("%j")}0000_01D_01D_OSB.{f_type.upper()}.gz'
+        elif f_type == 'sp3':
+            f = f'{pref.upper()}0R03FIN_{dt.year}{dt.strftime("%j")}0000_01D_05M_ORB.{f_type.upper()}.gz'
+        elif f_type == 'snx':
+            f = f'{pref.upper()}0R03FIN_{dt.year}{dt.strftime("%j")}0000_01D_01D_SOL.{f_type.upper()}.gz'
+        elif f_type == 'rnx':
+            f=f'BRDC00{pref.upper()}_R_{dt.year}{dt.strftime("%j")}0000_01D_MN.rnx.gz'
+    elif (pref == 'igs') & (f_type == 'snx') & wkly_file:
         f = f'{pref}{str(dt.year)[2:]}P{gpswk}.{f_type}.Z'
     elif (pref == 'igs') & (f_type == 'snx'):
         f = f'{pref}{str(dt.year)[2:]}P{gpswkD}.{f_type}.Z'
@@ -303,7 +317,7 @@ def download_most_recent(dest, f_type, ftps=None, ac='any', dwn_src='cddis', f_d
 
 
 
-def download_prod(dates, dest, ac='igs', suff='', f_type='sp3', dwn_src='cddis', ftps=False, f_dict=False, wkly_file=False):
+def download_prod(dates, dest, ac='igs', suff='', f_type='sp3', dwn_src='cddis', ftps=False, f_dict=False, wkly_file=False, repro3=False):
     '''
     Function used to get the product file/s from download server of choice, default: CDDIS
 
@@ -314,6 +328,9 @@ def download_prod(dates, dest, ac='igs', suff='', f_type='sp3', dwn_src='cddis',
     f_type - file type to download (e.g. clk, cls, erp, sp3, sum, default = sp3)
     dwn_src - Download Source (e.g. cddis, ga)
     ftps - Optionally input active ftps connection object
+    wkly_file - optionally grab the weekly file rather than the daily
+    repro3 - option to download the REPRO3 version of the file
+
     '''
 
     # Convert input to list of datetime dates (if not already)
@@ -351,7 +368,9 @@ def download_prod(dates, dest, ac='igs', suff='', f_type='sp3', dwn_src='cddis',
             
             if dwn_src=='cddis':
 
-                if (ac=='igs') and (f_typ=='erp'):
+                if repro3:
+                    f, gpswk = gen_prod_filename(dt, pref=ac, suff=suff, f_type=f_typ, repro3=True)
+                elif (ac=='igs') and (f_typ=='erp'):
                     f, gpswk = gen_prod_filename(dt, pref=ac, suff='7', f_type=f_typ, wkly_file=True)
                 elif f_typ=='snx':
                     mr_file, ftps, gpswk = find_mr_file(dt, f_typ, ac, ftps)
@@ -366,6 +385,8 @@ def download_prod(dates, dest, ac='igs', suff='', f_type='sp3', dwn_src='cddis',
                     if gpswk != p_gpswk:
                         ftps.cwd('/')
                         ftps.cwd(f'gnss/products/{gpswk}')
+                        if repro3:
+                            ftps.cwd(f'repro3')
 
                     if f_typ == 'rnx':
                         ftps.cwd('/')
@@ -397,7 +418,17 @@ def download_prod(dates, dest, ac='igs', suff='', f_type='sp3', dwn_src='cddis',
 
 
 
-def download_pea_prods(dest, most_recent=True, dates=None, ac='igs', out_dict=False, trop_vmf3=False, brd_typ='igs', snx_typ='igs', clk_sel='clk'):
+def download_pea_prods(
+    dest, 
+    most_recent=True, 
+    dates=None, 
+    ac='igs', 
+    out_dict=False, 
+    trop_vmf3=False, 
+    brd_typ='igs', 
+    snx_typ='igs', 
+    clk_sel='clk', 
+    repro3=False):
     '''
     Download necessary pea product files for date/s provided
     '''
@@ -474,6 +505,8 @@ def download_pea_prods(dest, most_recent=True, dates=None, ac='igs', out_dict=Fa
             url = 'https://peanpod.s3-ap-southeast-2.amazonaws.com/pea/examples/EX03/products/gpt_25.grd'
             check_n_download_url(url,dwndir=dest)
     
+    if repro3:
+        snx_typ = ac
     standards = ['sp3','erp',clk_sel]
     ac_typ_dict = {ac_sel:[] for ac_sel in [ac,brd_typ,snx_typ]}
     for typ in standards:
@@ -488,6 +521,8 @@ def download_pea_prods(dest, most_recent=True, dates=None, ac='igs', out_dict=Fa
     for ac in ac_typ_dict:
         if most_recent:
             f_dict_update = download_prod(dates=dt_list, dest=dest, ac=ac, f_type=ac_typ_dict[ac], dwn_src='cddis', f_dict=True, ftps=ftps)
+        elif repro3:
+            f_dict_update = download_prod(dates=dt_list, dest=dest, ac=ac, f_type=ac_typ_dict[ac], dwn_src='cddis', f_dict=True, repro3=True)
         else:
             f_dict_update = download_prod(dates=dt_list, dest=dest, ac=ac, f_type=ac_typ_dict[ac], dwn_src='cddis', f_dict=True)
         f_dict.update(f_dict_update)

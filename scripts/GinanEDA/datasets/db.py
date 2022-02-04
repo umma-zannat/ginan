@@ -1,7 +1,7 @@
 from dash import html
 from pymongo import MongoClient
 import numpy as np
-
+import pymongo
 MONGO_URL = None
 MONGO_DB = None
 MONGO_CL = None
@@ -194,16 +194,19 @@ def get_series(collection, state, site, sat, x1, x2):
     y_ =[]
     sat_=[]
     site_=[]
-    print(pipeline)
+    # print(pipeline)
     for i in req:
-        x1 = np.array(i['x'])
-        x2 = np.array(i['y'])
+        x1_ = np.array(i['x'])
+        x2_ = np.array(i['y'])
         # print(len(x1), len(x2))
         # print(x1)
         # idx = np.argsort(x1)
         # print(i['_id']['sat'])
-        x_.append(x1)
-        y_.append(x2)
+        if (x1 == "Epoch"):
+            x_.append(x1_.astype('datetime64[s]'))
+        else:
+            x_.append(x1_)
+        y_.append(x2_)
         sat_.append(i['_id']['sat'])
         site_.append(i['_id']['site'])
     return site_, sat_, x_, y_
@@ -267,6 +270,7 @@ def get_series_xyz(collection, state, site, sat, x1, x2, x3):
                 'Site':1
             }}
         )
+    pipeline.append(req_sort)
     pipeline.append(req_group)
     pipeline.append(req_sort2)
     req = MONGO_CL[collection].aggregate(pipeline)
@@ -281,11 +285,11 @@ def get_series_xyz(collection, state, site, sat, x1, x2, x3):
         x3 = np.array(i['z'])
         # print(len(x1), len(x2))
         # print(x1)
-        idx = np.argsort(x1)
+        # idx = np.argsort(x1)
         # print(i['_id']['sat'])
-        x_.append(x1[idx])
-        y_.append(x2[idx])
-        z_.append(x3[idx])
+        x_.append(x1)
+        y_.append(x2)
+        z_.append(x3)
         sat_.append(i['_id']['sat'])
         site_.append(i['_id']['site'])
     return site_, sat_, x_, y_, z_

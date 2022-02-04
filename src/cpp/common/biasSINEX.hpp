@@ -5,8 +5,8 @@
 #include "acsConfig.hpp"
 #include "algebra.hpp"
 #include "satSys.hpp"
-#include "gTime.hpp"
 #include "common.hpp"
+#include "gTime.hpp"
 #include "enums.h"
 
 
@@ -67,16 +67,19 @@ struct bias_io_opt
 };
 
 
-int read_bias_SINEX(
+int readBiasSinex(
 	string& file);
 
 void inpt_hard_bias(
-	Trace&		trace,
-	Obs&		obs, 
-	E_ObsCode	obscode, 
-	double*		bias, 
-	double*		var,
-	bias_io_opt	opt);
+	Trace& 			trace,	
+	GTime			time,
+	string			id,
+	SatSys			sys,
+	E_ObsCode 		obsCode,
+	double* 		bias,	
+	double* 		var,	
+	bias_io_opt 	opt,	
+	SatNav*			satNav_ptr = nullptr);
 
 
 
@@ -93,7 +96,7 @@ void outp_bias(
 	double		updat, 
 	E_MeasType	measType);
 
-int write_bias_SINEX(
+int writeBiasSinex(
 	Trace&		trace,
 	GTime		time,
 	string&		biasfile,

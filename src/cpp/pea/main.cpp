@@ -1,4 +1,5 @@
 
+// #pragma GCC optimize ("O0")
 
 #include <sys/time.h>
 #include <algorithm>
@@ -12,9 +13,9 @@
 #include "omp.h"
 
 using namespace std::literals::chrono_literals;
+using std::this_thread::sleep_for;
 using std::chrono::system_clock;
 using std::chrono::time_point;
-using std::this_thread::sleep_for;
 using std::string;
 
 #include <boost/log/utility/setup/console.hpp>
@@ -23,18 +24,20 @@ using std::string;
 
 
 #include "ntripCasterService.hpp"
-#include "acsNtripBroadcast.hpp"
 #include "minimumConstraints.hpp"
+#include "acsNtripBroadcast.hpp"
 #include "networkEstimator.hpp"
 #include "peaCommitVersion.h"
+#include "writeRinexNav.hpp"
+#include "writeRinexObs.hpp"
 #include "algebraTrace.hpp"
 #include "rtsSmoothing.hpp"
 #include "ntripSocket.hpp"
 #include "corrections.hpp"
 #include "streamTrace.hpp"
-#include "writeRinex.hpp"
 #include "writeClock.hpp"
 #include "GNSSambres.hpp"
+#include "instrument.hpp"
 #include "acsConfig.hpp"
 #include "acsStream.hpp"
 #include "testUtils.hpp"
@@ -45,7 +48,6 @@ using std::string;
 #include "station.hpp"
 #include "summary.hpp"
 #include "antenna.hpp"
-#include "preceph.hpp"
 #include "satStat.hpp"
 #include "fileLog.hpp"
 #include "common.hpp"
@@ -61,7 +63,7 @@ using std::string;
 
 
 nav_t		nav		= {};
-int			epoch	= 0;
+int			epoch	= 1;
 GTime		tsync	= GTime::noTime();
 
 
@@ -86,15 +88,29 @@ bool fileChanged(
 		return false;
 	}
 
-	auto writeTime = boost::filesystem::last_write_time(filename);
-	auto& readTime = acsConfig.configModifyTimeMap[filename];
-	if (readTime == writeTime)
-	{
-		return false;
-	}
-	readTime = writeTime;
+	auto modifyTime = boost::filesystem::last_write_time(filename);
 	
-	return true;
+	auto it = acsConfig.configModifyTimeMap.find(filename);
+	if (it == acsConfig.configModifyTimeMap.end())
+	{
+		//the first time this file has been read, 
+		//update then return true
+		acsConfig.configModifyTimeMap[filename] = modifyTime;
+		
+		return true;
+	}
+	
+	auto& [dummy, readTime] = *it;
+	if (readTime != modifyTime)
+	{
+		//has a different modification time, update then return true
+		readTime = modifyTime;
+	
+		return true;
+	}
+	
+	//has been read with this time before
+	return false;
 }
 
 void removeInvalidFiles(
@@ -155,7 +171,7 @@ void reloadInputFiles()
 
 	removeInvalidFiles(acsConfig.orbfiles);
 	removeInvalidFiles(acsConfig.sp3files);
-	if (acsConfig.orbfiles.size() > 0)
+	if (acsConfig.orbfiles.empty() == false)
 	{
 		bool updated = false;
 
@@ -256,7 +272,7 @@ void reloadInputFiles()
 		BOOST_LOG_TRIVIAL(info)
 		<< "Loading BSX file " << bsxfile;
 
-		read_bias_SINEX(bsxfile);
+		readBiasSinex(bsxfile);
 	}
 
 	removeInvalidFiles(acsConfig.ionfiles);
@@ -299,7 +315,7 @@ void reloadInputFiles()
 }
 
 void createNewTraceFile(
-	const string&				id,
+	const string				id,
 	boost::posix_time::ptime	logptime,
 	string  					new_path_trace,
 	string& 					old_path_trace,
@@ -347,19 +363,7 @@ void createNewTraceFile(
 	}
 }
 
-GTime roundTime(
-	GTime	in,
-	int		period)
-{
-	GTime logtime = in;
-	//round to nearest chunk by integer arithmetic
-	long int roundTime = logtime.time;
-	roundTime /= period;
-	roundTime *= period;
-	logtime.time = roundTime;
-	
-	return logtime;
-}
+map<string, string> fileNames;
 
 /** Create new empty trace files only when required when the filename is changed
  */
@@ -367,23 +371,30 @@ void createTracefiles(
 	map<string, Station>&	stationMap,
 	Network&				net)
 {
+	string dummyStr;
 	GTime logtime = tsync.roundTime(acsConfig.trace_rotate_period);
 	
 	boost::posix_time::ptime	logptime	= boost::posix_time::from_time_t(logtime.time);
-// 	boost::posix_time::ptime	noptime		= boost::posix_time::not_a_date_time;
 	
 	if (acsConfig.output_trace)
 	for (auto& [id, rec] : stationMap)
 	{
 		createNewTraceFile(id,			logptime,	acsConfig.trace_filename,							rec.traceFilename,						true,	acsConfig.output_config);
 	}
-	
-	if (acsConfig.output_rinex_obs)
+
+	if	(	acsConfig.output_trop_sinex
+		&&	acsConfig.process_user)
 	for (auto& [id, rec] : stationMap)
 	{
-		createNewTraceFile(id,			logptime,	acsConfig.rinex_obs_filename,						rec.rinexOutput.fileName,				false, false);
+		createNewTraceFile(id,			logptime,	acsConfig.trop_sinex_filename,						rec.tropFilename,						false,	false);
+		
+		if	(  acsConfig.process_rts
+			&& acsConfig.pppOpts.rts_lag)
+		{
+			createNewTraceFile(id,		logptime,	acsConfig.trop_sinex_filename + SMOOTHED_SUFFIX,	rec.rtsTropFilename,					false,	false);
+		}
 	}
-
+	
 	if	(  acsConfig.output_trace
 		&& acsConfig.process_rts
 		&& acsConfig.pppOpts.rts_lag)
@@ -406,42 +417,116 @@ void createTracefiles(
 		createNewTraceFile(net.id,		logptime,	acsConfig.summary_filename,							net.traceFilename,						true,	acsConfig.output_config);
 	}
 
-	if (acsConfig.output_clocks)
+	if (acsConfig.output_log)
 	{
-		createNewTraceFile(net.id,		logptime,	acsConfig.clocks_filename,							net.clockFilename,						false,	false);
+		createNewTraceFile("",			logptime,	acsConfig.log_filename,								FileLog::path_log,						false,	false);
+	}
+	
+	if	( acsConfig.output_trop_sinex
+		&&acsConfig.process_network)
+	{	
+		createNewTraceFile(net.id,		logptime,	acsConfig.trop_sinex_filename,						net.tropFilename,						false,	false);
+		
+		if	( acsConfig.process_rts
+			&&acsConfig.netwOpts.rts_lag)
+		{
+			createNewTraceFile(net.id,	logptime,	acsConfig.trop_sinex_filename + SMOOTHED_SUFFIX,	net.rtsTropFilename,					false,	false);
+		}
 	}
 
-	if (acsConfig.output_biasSINEX)
+	if (acsConfig.output_rinex_obs)
+	for (auto& [id, rec] : stationMap)
 	{
-		createNewTraceFile(net.id,		logptime,	acsConfig.biasSINEX_filename,						net.biasSINEXFilename,					false,	false);
+		auto filenameMap = getSysOutputFilenames(acsConfig.rinex_obs_filename,	tsync, id);
+		for (auto& [filename, dummy] : filenameMap)
+		{
+			createNewTraceFile(id,		logptime,	filename,											fileNames[filename],					false,	false);
+		}
+	}
+
+	if (acsConfig.output_rinex_nav)
+	{
+		auto filenameMap = getSysOutputFilenames(acsConfig.rinex_nav_filename,	tsync);
+		for (auto& [filename, dummy] : filenameMap)
+		{
+			createNewTraceFile("",		logptime,	filename,											fileNames[filename],					false,	false);
+		}
 	}
 
 	if (acsConfig.output_orbits)
 	{
-		createNewTraceFile(net.id,		logptime,	acsConfig.orbits_filename,							net.orbitsFilename,						false,	false);
+		auto filenameMap = getSysOutputFilenames(acsConfig.orbits_filename,		tsync);
+		for (auto& [filename, dummy] : filenameMap)
+		{
+			createNewTraceFile(net.id,	logptime,	filename,											fileNames[filename],					false,	false);
+		}
 	}
 
-	if	( acsConfig.process_rts
-		&&acsConfig.netwOpts.rts_lag
-		&&acsConfig.output_clocks)
+	if (acsConfig.output_clocks)
 	{
-		createNewTraceFile(net.id,		logptime,	acsConfig.clocks_filename + SMOOTHED_SUFFIX,		net.rtsClockFilename,					false,	false);
-	}
+		auto filenameMap = getSysOutputFilenames(acsConfig.clocks_filename,		tsync);
+		for (auto& [filename, dummy] : filenameMap)
+		{
+			createNewTraceFile(net.id,	logptime,	filename,											fileNames[filename],					false,	false);
+		}
 
-	if (acsConfig.output_log )
-	{	
-		createNewTraceFile("",			logptime,	acsConfig.log_filename,								FileLog::path_log,						false,	false);
+		if	(  acsConfig.process_rts
+			&& acsConfig.netwOpts.rts_lag)
+		for (auto& [filename, dummy] : filenameMap)
+		{
+			createNewTraceFile(net.id, 	logptime,	filename + SMOOTHED_SUFFIX, 						fileNames[filename + SMOOTHED_SUFFIX],	false,	false);
+		}
 	}
 
 	for (auto& [id, upStream_ptr] : outStreamManager.ntripUploadStreams)
 	{
 		NtripBroadcaster::NtripUploadClient& upStream = *upStream_ptr;
 		upStream.ntripTrace.level_trace = level_trace;
-		
 		createNewTraceFile(id + "-UP",	logptime,	acsConfig.trace_filename,							upStream.traceFilename,					true,	acsConfig.output_config);
 	}
 }
 
+void avoidCollisoins(
+	StationMap&		stationMap)
+{
+	for (auto& [id, rec] : stationMap)
+	{
+		auto trace = getTraceFile(rec);
+		
+		acsConfig.getRecOpts(id);
+		
+		//prepare and connect navigation objects to the observations
+		for (auto& obs : rec.obsList)
+		{
+			obs.satNav_ptr					= &nav.satNavMap[obs.Sat];
+			obs.satNav_ptr->eph_ptr 		= seleph<Eph>	(trace, tsync, obs.Sat, -1, nav);
+			obs.satNav_ptr->geph_ptr 		= seleph<Geph>	(trace, tsync, obs.Sat, -1, nav);
+			obs.satNav_ptr->pephList_ptr	= &nav.pephMap[obs.Sat];
+			obs.mount 						= rec.id;
+			updatenav(obs);
+
+			obs.satStat_ptr					= &rec.rtk.satStatMap[obs.Sat];
+
+			acsConfig.getSatOpts(obs.Sat);
+		}
+		
+		// if the vmf3 option has been selected:
+		if	(acsConfig.tropOpts.vmf3dir.empty() == false)
+		{
+			BOOST_LOG_TRIVIAL(debug)
+			<< "VMF3 option chosen";
+			
+			double ep[6];
+			time2epoch(tsync, ep);
+			
+			double jd = ymdhms2jd(ep);
+
+			// read vmf3 grid information
+			rec.vmf3.m = 1;
+			udgrid(acsConfig.tropOpts.vmf3dir.c_str(), rec.vmf3.vmf3g, jd, rec.mjd0, rec.vmf3.m);
+		}
+	}
+}
 
 void initialiseStation(
 	string		id,
@@ -516,11 +601,6 @@ void mainOncePerEpochPerStation(
 	<< "\tRead " << rec.obsList.size()
 	<< " observations for station " << rec.id;
 
-	removeUnprocessed(rec.obsList);
-	
-	obsVariances(rec.obsList);
-
-	
 	//calculate statistics
 	{
 		if (rec.firstEpoch	== GTime::noTime())		{	rec.firstEpoch	= rec.obsList.front().time;		}
@@ -541,39 +621,46 @@ void mainOncePerEpochPerStation(
 		}
 	}
 
-	sinexPerEpochPerStation(tsync, rec);
-
-	/* linear combinations */
-	for (auto& obs : rec.obsList)
+	if (acsConfig.process_preprocessor)
 	{
-		obs.satStat_ptr->lc_pre = obs.satStat_ptr->lc_new;
-		obs.satStat_ptr->lc_new = {};
-	}
-	obs2lcs		(trace,	rec.obsList);
-
-	/* cycle slip/clock jump detection and repair */
-
-	detectslips	(trace,	rec.obsList);
-	detectjump	(trace,	rec.obsList, acsConfig.elevation_mask, rec.cj);
-
-	for (auto& obs			: rec.obsList)
-	for (auto& [ft, Sig]	: obs.Sigs)
-	{
-		if (obs.satStat_ptr->sigStatMap[ft].slip.any)
-		{
-			rec.slipCount++;
-			break;
-		}
-	}
-
-	GTime prevTime = rec.rtk.sol.time;
-
-	//do a spp on the observations
-	sppos(trace, rec.obsList, rec.rtk.sol);
+		removeUnprocessed(rec.obsList);
+		
+		obsVariances(rec.obsList);
 	
-	if (prevTime.time != 0)
-	{
-		rec.rtk.tt = rec.rtk.sol.time - prevTime;
+		sinexPerEpochPerStation(tsync, rec);
+
+		/* linear combinations */
+		for (auto& obs : rec.obsList)
+		{
+			obs.satStat_ptr->lc_pre = obs.satStat_ptr->lc_new;
+			obs.satStat_ptr->lc_new = {};
+		}
+		obs2lcs		(trace,	rec.obsList);
+
+		/* cycle slip/clock jump detection and repair */
+
+		detectslips	(trace,	rec.obsList);
+		detectjump	(trace,	rec.obsList, acsConfig.elevation_mask, rec.cj);
+
+		for (auto& obs			: rec.obsList)
+		for (auto& [ft, Sig]	: obs.Sigs)
+		{
+			if (obs.satStat_ptr->sigStatMap[ft].slip.any)
+			{
+				rec.slipCount++;
+				break;
+			}
+		}
+
+		GTime prevTime = rec.rtk.sol.time;
+
+		//do a spp on the observations
+		sppos(trace, rec.obsList, rec.rtk.sol);
+		
+		if (prevTime.time != 0)
+		{
+			rec.rtk.tt = rec.rtk.sol.time - prevTime;
+		}
 	}
 
 	if (acsConfig.process_ionosphere)
@@ -658,8 +745,7 @@ void mainOncePerEpochPerStation(
 
 	if (acsConfig.output_rinex_obs)
 	{
-		rec.rinexOutput.snx = rec.snx;
-		recordRinexObservations(rec.rinexOutput, rec.obsList);
+		writeRinexObs(rec.id, rec.snx, tsync, rec.obsList);
 	}
 }
 
@@ -671,103 +757,112 @@ void mainPerEpochPostProcessingAndOutputs(
 	
 	auto netTrace = getTraceFile(net);
 
-	// Output clock product body part
-	if	(acsConfig.output_clocks)
+	if	( acsConfig.process_user
+		&&acsConfig.output_trop_sinex)
+	for (auto& [id, rec]	: stationMap)
 	{
-		outputClocks(net.clockFilename, acsConfig.clocks_receiver_source, acsConfig.clocks_satellite_source, tsync, net.kfState, &stationMap);
+		KFState dummy;
+		outputTropSinex(rec.tropFilename, tsync, stationMap,	dummy, id);
 	}
 	
 	if	( acsConfig.process_ppp
 		||acsConfig.process_network)
 	{
+		// Output clock product body part
+		if	(acsConfig.output_clocks)
+		{
+			auto filenameSysMap = getSysOutputFilenames(acsConfig.clocks_filename, tsync);
+
+			for (auto [filename, sysMap] : filenameSysMap)
+			{
+				outputClocks(filename, acsConfig.clocks_receiver_source, acsConfig.clocks_satellite_source, tsync, sysMap, net.kfState, &stationMap);
+			}
+		}
 	
 		if	( acsConfig.output_AR_clocks == false
 			||ARsol_ready() == false)
 		{
 			net.kfState.outputStates(netTrace);
 		}
-	}
 
-
-	if (acsConfig.process_network)
-	{
 #		ifdef ENABLE_MONGODB
 		if (acsConfig.output_mongo_states)
 		{
 			mongoStates(net.kfState);
 		}
 #		endif
-	}
 
-	if (acsConfig.process_ppp)
-	{
-#		ifdef ENABLE_MONGODB
-		if (acsConfig.output_mongo_states)
-		{
-			mongoStates(net.kfState);
-			outputApriori(stationMap);
-		}
-#		endif
 		/* Instantaneous AR */
-		KF_ARcopy = net.kfState;
-
-		networkAmbigResl(netTrace, stationMap, KF_ARcopy);
-
-		if (acsConfig.output_AR_clocks  && ARsol_ready())
+		if (acsConfig.output_AR_clocks)
 		{
-			KF_ARcopy.outputStates(netTrace);
-		}
+			KFState KF_ARcopy = net.kfState;
 
-#		ifdef ENABLE_MONGODB
-		if (acsConfig.output_mongo_states)
-		{
-			mongoStates(KF_ARcopy, "_AR");
-		}
-#		endif
+			networkAmbigResl(netTrace, stationMap, KF_ARcopy);
 
-		if (acsConfig.output_AR_clocks && ARsol_ready())
-		{
-			outputClocks(net.clockFilename, E_Ephemeris::KALMAN, E_Ephemeris::KALMAN, tsync, KF_ARcopy, &stationMap);
-		}
-	}
+			if (ARsol_ready())
+			{
+				KF_ARcopy.outputStates(netTrace);
+			}
 
-	if	( acsConfig.process_network
-		||acsConfig.process_ppp)
-	{
-		if	( (acsConfig.process_rts)
-			&&(acsConfig.netwOpts.rts_lag > 0)
-			&&(epoch >= acsConfig.netwOpts.rts_lag))
-		{
-			KFState rts = RTS_Process(net.kfState, false, &stationMap, net.clockFilename);
-		}
-	}
-	
-	if (acsConfig.ssrOpts.calculate_ssr)
-	{
-		std::set<SatSys> sats;	// List of satellites visible in this epoch
-		for (auto& [id, rec]	: stationMap)
-		for (auto& obs			: rec.obsList)
-		{
-			sats.insert(obs.Sat);
-		}
+#			ifdef ENABLE_MONGODB
+			if (acsConfig.output_mongo_states)
+			{
+				mongoStates(KF_ARcopy, "_AR");
+			}
+#			endif
 		
-		calcSsrCorrections(netTrace, net.kfState, sats, tsync);
+			if (ARsol_ready())
+			{
+				auto filenameSysMap = getSysOutputFilenames(acsConfig.clocks_filename, tsync);
 
-		if (acsConfig.ssrOpts.upload_to_caster)
-			outStreamManager.sendMessages(true);
-		else
-			rtcmEncodeToFile(epoch);
+				for (auto [filename, sysMap] : filenameSysMap)
+				{
+					outputClocks(filename, E_Ephemeris::KALMAN, E_Ephemeris::KALMAN, tsync, sysMap, KF_ARcopy, &stationMap);
+				}
+			}
+		}
+
+		if	(  acsConfig.process_rts
+			&& acsConfig.netwOpts.rts_lag > 0 
+			&& epoch >= acsConfig.netwOpts.rts_lag)
+		{
+			KFState rts = RTS_Process(net.kfState, false, &stationMap, net.clockFilename, net.tropFilename);
+		}
+	
+		if (acsConfig.ssrOpts.calculate_ssr)
+		{
+			std::set<SatSys> sats;	// List of satellites visible in this epoch
+			for (auto& [id, rec]	: stationMap)
+			for (auto& obs			: rec.obsList)
+			{
+				sats.insert(obs.Sat);
+			}
+			
+			calcSsrCorrections(netTrace, net.kfState, sats, tsync);
+
+			if (acsConfig.ssrOpts.upload_to_caster)
+				outStreamManager.sendMessages(true);
+			else
+				rtcmEncodeToFile(epoch);
+		}
 	}
 	
 	if (acsConfig.output_orbits)
 	{
-		outputSp3(net.orbitsFilename, acsConfig.orbits_data_source, tsync);
+		outputSp3(tsync, acsConfig.orbits_data_source, &net.kfState);
 	}
 
 	if (acsConfig.output_persistance)
 	{
 		outputPersistanceNav();
 	}
+	
+#	ifdef ENABLE_MONGODB
+	if (acsConfig.output_mongo_states)
+	{
+		outputApriori(stationMap);
+	}
+#	endif
 	
 	writeNetworkTraces(stationMap);
 }
@@ -777,20 +872,23 @@ void mainOncePerEpoch(
 	StationMap&		stationMap,
 	GTime			tsync)
 {
-	TestStack ts("1/Ep");
-	
-	auto netTrace = getTraceFile(net);
-	
-	netTrace << std::endl << "------=============== Epoch " << epoch << " =============-----------" << std::endl;
+	Instrument	instrument	("1/Ep");
+	TestStack	ts			("1/Ep");
 	
 	//load any changes from the config
 	acsConfig.parse();
+	
+	avoidCollisoins(stationMap);
 	
 	//reload any new or modified files
 	reloadInputFiles();
 
 	createTracefiles(stationMap, net);
-
+	
+	auto netTrace = getTraceFile(net);
+	
+	netTrace << std::endl << "------=============== Epoch " << epoch << " =============-----------" << std::endl;
+	
 	//initialise mongo if not already done
 #	ifdef ENABLE_MONGODB
 	{
@@ -834,18 +932,12 @@ void mainOncePerEpoch(
 		<< "Epoch " << epoch << " has no observations";
 	}
 	
-		
-	
 #	ifdef ENABLE_MONGODB
 	if (acsConfig.output_mongo_measurements)
 	{
 		mongoMeasSatStat_all(stationMap);
 	}
 #	endif
-	
-	
-	
-	
 
 	if (acsConfig.ssrOpts.calculate_ssr)
 	{
@@ -855,6 +947,11 @@ void mainOncePerEpoch(
 	if (acsConfig.process_ppp)
 	{
 		PPP(netTrace, stationMap, net.kfState, nav.gptg, nav.orography);
+	}
+
+	if (acsConfig.output_rinex_nav)
+	{
+		writeRinexNav();
 	}
 
 	if (acsConfig.process_network)
@@ -877,17 +974,16 @@ void mainOncePerEpoch(
 		cullOldEphs(tsync);
 		cullOldSSRs(tsync);
 	}
+
+	if (acsConfig.check_plumbing)
+	{
+		plumber();
+	}
 	
 	mainPerEpochPostProcessingAndOutputs(net, stationMap);
 	
 	TestStack::saveData();
 	TestStack::testStatus();
-	
-	
-	if (acsConfig.check_plumbing)
-	{
-		plumber();
-	}
 }
 
 void mainPostProcessing(
@@ -895,7 +991,13 @@ void mainPostProcessing(
 	map<string, Station>&	stationMap)
 {
 	auto netTrace = getTraceFile(net);
-
+	
+	KFState KF_ARcopy;
+	if (acsConfig.output_AR_clocks)
+	{
+		KF_ARcopy = net.kfState;
+	}
+	
 	if	(  acsConfig.process_ionosphere
 		&& acsConfig.output_ionex)
 	{
@@ -923,7 +1025,7 @@ void mainPostProcessing(
 	{
 		sinexPostProcessing(tsync, stationMap, net.kfState);
 	}
-
+	
 	if (acsConfig.output_persistance)
 	{
 		BOOST_LOG_TRIVIAL(info)
@@ -947,7 +1049,7 @@ void mainPostProcessing(
 			<< std::endl
 			<< "---------------PROCESSING PPP WITH RTS------------------------- " << std::endl;
 
-			RTS_Process(rec.rtk.pppState,	true, &stationMap);
+			RTS_Process(rec.rtk.pppState,	true, &stationMap, "",					rec.rtsTropFilename);
 		}
 
 		if (acsConfig.netwOpts.rts_lag < 0)
@@ -956,7 +1058,7 @@ void mainPostProcessing(
 			<< std::endl
 			<< "---------------PROCESSING NETWORK WITH RTS--------------------- " << std::endl;
 
-			RTS_Process(net.kfState,		true, &stationMap, net.rtsClockFilename);
+			RTS_Process(net.kfState,		true, &stationMap, net.rtsClockFilename, net.rtsTropFilename);
 		}
 
 		if (acsConfig.ionFilterOpts.rts_lag < 0)
@@ -969,7 +1071,7 @@ void mainPostProcessing(
 		}
 	}
 
-	if (acsConfig.output_biasSINEX)
+	if (acsConfig.output_bias_sinex)
 	{
 		bias_io_opt biaopt;
 		biaopt.OSB_biases = acsConfig.ambrOpts.writeOSB;
@@ -980,7 +1082,7 @@ void mainPostProcessing(
 		biaopt.COD_biases = true;
 		biaopt.PHS_biases = true;
 
-		write_bias_SINEX(netTrace, tsync, net.biasSINEXFilename, biaopt);
+		writeBiasSinex(netTrace, tsync, net.biasSINEXFilename, biaopt);
 	}
 
 	if 	(  acsConfig.ambrOpts.WLmode != +E_ARmode::OFF
@@ -990,45 +1092,10 @@ void mainPostProcessing(
 	}
 
 	TestStack::printStatus(true);
+	Instrument::printStatus();
 
 	outputSummaries(netTrace, stationMap);
 }
-
-void avoidCollisoins(
-	Station&	rec)
-{
-	//prepare and connect navigation objects to the observations
-	for (auto& obs : rec.obsList)
-	{
-		obs.satNav_ptr					= &nav.satNavMap[obs.Sat];
-		obs.satNav_ptr->eph_ptr 		= seleph<Eph>	(tsync, obs.Sat, -1, nav);
-		obs.satNav_ptr->geph_ptr 		= seleph<Geph>	(tsync, obs.Sat, -1, nav);
-		obs.satNav_ptr->pephList_ptr	= &nav.pephMap[obs.Sat];
-		obs.mount 						= rec.id;
-		updatenav(obs);
-
-		obs.satStat_ptr					= &rec.rtk.satStatMap[obs.Sat];
-
-		acsConfig.getSatOpts(obs.Sat);
-	}
-	
-	// if the vmf3 option has been selected:
-	if	(acsConfig.tropOpts.vmf3dir.empty() == false)
-	{
-		BOOST_LOG_TRIVIAL(debug)
-		<< "VMF3 option chosen";
-		
-		double ep[6];
-		time2epoch(tsync, ep);
-		
-		double jd = ymdhms2jd(ep);
-
-		// read vmf3 grid information
-		rec.vmf3.m = 1;
-		udgrid(acsConfig.tropOpts.vmf3dir.c_str(), rec.vmf3.vmf3g, jd, rec.mjd0, rec.vmf3.m);
-	}
-}
-
 
 int main(
 	int		argc, 
@@ -1057,6 +1124,8 @@ int main(
 	{
 		addFileLog();
 	}
+	
+	exitOnErrors();
 
 	TestStack::openData();
 
@@ -1067,6 +1136,7 @@ int main(
 	// Ensure the output directories exist
 	for (auto& directory : {
 								acsConfig.log_directory,
+								acsConfig.rtcm_directory,
 								acsConfig.ionex_directory,
 								acsConfig.sinex_directory,
 								acsConfig.trace_directory,
@@ -1076,8 +1146,10 @@ int main(
 								acsConfig.ppp_sol_directory,
 								acsConfig.summary_directory,
 								acsConfig.testOpts.directory,
-								acsConfig.biasSINEX_directory,
 								acsConfig.rinex_obs_directory,
+								acsConfig.rinex_nav_directory,
+								acsConfig.trop_sinex_directory,
+								acsConfig.bias_sinex_directory,
 								acsConfig.persistance_directory,
 								acsConfig.pppOpts.rts_directory,
 								acsConfig.netwOpts.rts_directory,
@@ -1085,10 +1157,10 @@ int main(
 								acsConfig.ionFilterOpts.rts_directory
 							})
 	{
-		if (directory.empty() == false)
-		{
-			boost::filesystem::create_directories(directory);
-		}
+		if (directory == "./")	continue;
+		if (directory.empty())	continue;
+		
+		boost::filesystem::create_directories(directory);
 	}
 
 	BOOST_LOG_TRIVIAL(info)
@@ -1161,16 +1233,11 @@ int main(
 		for (int prn = 1; prn <= NSATGPS; prn++)	{	SatSys s(E_Sys::GPS, prn);	nav.satNavMap[s];	}
 		for (int prn = 1; prn <= NSATGLO; prn++)	{	SatSys s(E_Sys::GLO, prn);	nav.satNavMap[s];	}
 		for (int prn = 1; prn <= NSATGAL; prn++)	{	SatSys s(E_Sys::GAL, prn);	nav.satNavMap[s];	}
-		for (int prn = 1; prn <= NSATCMP; prn++)	{	SatSys s(E_Sys::CMP, prn);	nav.satNavMap[s];	}	
+		for (int prn = 1; prn <= NSATCMP; prn++)	{	SatSys s(E_Sys::BDS, prn);	nav.satNavMap[s];	}	
 	}
 
 	BOOST_LOG_TRIVIAL(debug)
 	<< "\tCreating trace files ";
-
-	if (acsConfig.output_ppp_sol)
-	{
-		std::ofstream(acsConfig.ppp_sol_filename);
-	}
 
 	Network net;
 	{
@@ -1228,9 +1295,9 @@ int main(
 	//============================================================================
 
 	// Read the observations for each station and do stuff
-	bool	complete					= false;					///< When all input files are empty the processing is deemed complete - run until then, or until something else breaks the loop
-	int		loopEpochs					= 1;						///< A count of how many loops of epoch_interval this loop used up (usually one, but may be more if skipping epochs)
-	auto	nextNominalLoopStartTime	= system_clock::now();		///< The time the next loop is expected to start - if it doesnt start until after this, it may be skipped
+	bool	complete					= false;							///< When all input files are empty the processing is deemed complete - run until then, or until something else breaks the loop
+	int		loopEpochs					= 0;								///< A count of how many loops of epoch_interval this loop used up (usually one, but may be more if skipping epochs)
+	auto	nextNominalLoopStartTime	= system_clock::now() + 10s;		///< The time the next loop is expected to start - if it doesnt start until after this, it may be skipped
 	while (complete == false)
 	{
 		if (tsync != GTime::noTime())
@@ -1274,8 +1341,9 @@ int main(
 			//remove any dead streams
 			for (auto iter = obsStreamMultimap.begin(); iter != obsStreamMultimap.end(); )
 			{
-				ObsStream& obsStream = *iter->second;
-
+				auto& [dummy, obsStream_ptr]	= *iter;
+				auto& obsStream					= *obsStream_ptr;
+				
 				if (obsStream.isDead())
 				{
 					BOOST_LOG_TRIVIAL(info)
@@ -1318,8 +1386,8 @@ int main(
 
 				auto& rec = stationMap[id];
 
-				if	( (rec.obsList.size() > 0)
-					&&(rec.obsList.front().time == tsync))
+				if	( (rec.obsList.empty()		== false)
+					&&(rec.obsList.front().time	== tsync))
 				{
 					//already have observations for this epoch.
 					continue;
@@ -1330,16 +1398,27 @@ int main(
 
 				if (rec.obsList.empty())
 				{
-					//failed to get observations, try again later
-					repeat = true;
-					sleep_for(1ms);
+					//failed to get observations
+					if (obsStream.obsWaitCode == +E_ObsWaitCode::NO_DATA_WAIT)
+					{
+						// try again later
+						repeat = true;
+						sleep_for(1ms);
+					}
+					
 					continue;
 				}
 				
 				if (tsync == GTime::noTime())
 				{
-					tsync					= rec.obsList.front().time;
+					tsync.time				= ((int) (rec.obsList.front().time / acsConfig.epoch_interval)) * acsConfig.epoch_interval;
 					acsConfig.start_epoch	= boost::posix_time::from_time_t(tsync);
+					
+					if (tsync + 0.5 < rec.obsList.front().time)
+					{
+						repeat = true;
+						continue;	
+					}
 				}
 
 				stationCount++;
@@ -1365,8 +1444,6 @@ int main(
 				{
 					initialiseStation(id, rec);
 				}
-
-				avoidCollisoins(rec);
 				
 				rec.ready = true;
 			}
@@ -1377,8 +1454,8 @@ int main(
 	
 				auto& pseudoRec = stationMap[id];
 				
-				if	( (pseudoRec.obsList.size() > 0)
-					&&(pseudoRec.obsList.front().time == tsync))
+				if	( (pseudoRec.pseudoObsList.empty()		== false)
+					&&(pseudoRec.pseudoObsList.front().time	== tsync))
 				{
 					//already have observations for this epoch.
 					continue;
@@ -1394,8 +1471,14 @@ int main(
 				
 				if (tsync == GTime::noTime())
 				{
-					tsync					= pseudoRec.pseudoObsList.front().time;
+					tsync.time				= ((int)(pseudoRec.pseudoObsList.front().time / acsConfig.epoch_interval)) * acsConfig.epoch_interval;
 					acsConfig.start_epoch	= boost::posix_time::from_time_t(tsync);
+					
+					if (tsync + 0.5 < pseudoRec.pseudoObsList.front().time)
+					{
+						repeat = true;
+						continue;	
+					}
 				}
 			}
 		}
@@ -1462,8 +1545,13 @@ int main(
 		auto loopExcessDuration = loopStopTime - (nextNominalLoopStartTime + std::chrono::milliseconds((int)(acsConfig.wait_all_stations * 1000)));
 		int excessLoops			= loopExcessDuration / std::chrono::milliseconds((int)(acsConfig.wait_next_epoch * 1000));
 
-		if (excessLoops < 0)		{	excessLoops = 0;																								}
-		if (excessLoops > 0)		{	BOOST_LOG_TRIVIAL(warning) << std::endl << "Excessive time elapsed, skipping " << excessLoops << " epochs";		}
+		if (excessLoops < 0)		{	excessLoops = 0;	}
+		if (excessLoops > 0)	
+		{
+			BOOST_LOG_TRIVIAL(warning) << std::endl 
+			<< "Excessive time elapsed, skipping " << excessLoops 
+			<< " epochs. Configuration 'wait_next_epoch' is " << acsConfig.wait_next_epoch;	
+		}
 
 		loopEpochs = 1 + excessLoops;
 	}
@@ -1501,5 +1589,5 @@ int main(
 	BOOST_LOG_TRIVIAL(info)
 	<< "PEA finished";
 
-	return(EXIT_SUCCESS);
+	return EXIT_SUCCESS;
 }

@@ -4,9 +4,16 @@
 // Needed as StationMap is a kind of typedef.
 #include "station.hpp"
 
+#include <vector>
 #include <string>
+#include <map>
 
+using std::vector;
 using std::string;
+using std::pair;
+using std::map;
+
+#include "enums.h"
 
 struct GTime;
 struct KFState;
@@ -17,11 +24,12 @@ void tryPrepareFilterPointers(
 	StationMap*		stationMap_ptr);
 
 void outputClocks(
-	string			filename,
-	E_Ephemeris		clkDataRecSrc,
-	E_Ephemeris		clkDataSatSrc,
-	GTime			tsync,	
-	KFState&		kfState,
-	StationMap*		stationMap_ptr);
+	string				filename,
+	E_Ephemeris			clkDataRecSrc,
+	E_Ephemeris			clkDataSatSrc,
+	GTime&				time,
+	map<E_Sys, bool>&	sysMap,
+	KFState&			kfState,
+	StationMap*			stationMap_ptr);
 
 #endif

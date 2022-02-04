@@ -1,3 +1,6 @@
+
+//#pragma GCC optimize ("O0")
+
 #include <boost/log/trivial.hpp>
 
 #include "rtcmEncoder.hpp"
@@ -402,10 +405,10 @@ void RtcmEncoder::SSREncoder::encodeSsrPhase(
 			SSRPhase ssrPhase = ssrPhasBias.ssrPhase;
 			
 			int d;
-														i = setbituInc(buf,i,np,Sat.prn);
-			d = ssrPhasBias.codeBias_map.size();		i = setbituInc(buf,i,5,	d);
-			d = (int)round(ssrPhase.yawAngle*256);		i = setbituInc(buf,i,9,	d);
-			d = (int)round(ssrPhase.yawRate*8192);		i = setbitsInc(buf,i,8,	d);
+																i = setbituInc(buf,i,np,Sat.prn);
+			d = ssrPhasBias.codeBias_map.size();				i = setbituInc(buf,i,5,	d);
+			d = (int)round(ssrPhase.yawAngle	*256	/PI);	i = setbituInc(buf,i,9,	d);
+			d = (int)round(ssrPhase.yawRate		*8192	/PI);	i = setbitsInc(buf,i,8,	d);
 			
 			for (auto& [obsCode, entry] : ssrPhasBias.codeBias_map)
 			{

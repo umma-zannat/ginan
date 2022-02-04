@@ -8,20 +8,20 @@ SUBROUTINE force_sum (mjd, t_sec, rsat, vsat, SFx, SFy, SFz, integr_stage)
 !  Satellite acceleration components based on the considered force model 
 ! ----------------------------------------------------------------------
 ! Input arguments:
-! - mjd:			Modified Julian Day number (including the fraction of the day) in Terrestrial Time (TT)
-! - t_sec:			Seconds since the start of the day 00h 
-! - rsat:			Satellite Position vector (m)   in inertial frame (ICRF)
-! - vsat:			Satellite Velocity vector (m/s) in inertial frame (ICRF)
+! - mjd:            Modified Julian Day number (including the fraction of the day) in Terrestrial Time (TT)
+! - t_sec:          Seconds since the start of the day 00h 
+! - rsat:           Satellite Position vector (m)   in inertial frame (ICRF)
+! - vsat:           Satellite Velocity vector (m/s) in inertial frame (ICRF)
 ! 
 ! Output arguments:
-! - fx,fy,fz:		Acceleration's cartesian components (m)
+! - fx,fy,fz:       Acceleration's cartesian components (m)
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
-! Created:	9 October 2017
+! Author :  Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
+! Created:  9 October 2017
 ! ----------------------------------------------------------------------
 ! Last modified:
 ! - Dr. Thomas Papanikolaou, 3 October 2018:
-!	Empirical forces of bias & cycle per revolution accelerations have been added 
+!   Empirical forces of bias & cycle per revolution accelerations have been added 
 !
 ! Changes: 03-12-2018 Dr. Tzupang Tseng: Added the models of solar radiation
 !                                        pressure, earth radiation pressure 
@@ -32,7 +32,7 @@ SUBROUTINE force_sum (mjd, t_sec, rsat, vsat, SFx, SFy, SFz, integr_stage)
 !      The satellite attitude models have now been integrated into POD through
 !   the "attitude.f03 subroutine" obtained from the conversion of the 
 !   "GNSS yaw-attitude program" to subroutine 
-! - Last modified:	17 August 2020, Dr. Thomas Papanikolaou, Velocity pulses added  
+! - Last modified:  17 August 2020, Dr. Thomas Papanikolaou, Velocity pulses added  
 ! ----------------------------------------------------------------------
 
 
@@ -73,8 +73,8 @@ SUBROUTINE force_sum (mjd, t_sec, rsat, vsat, SFx, SFy, SFz, integr_stage)
 ! Local variables declaration
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d), DIMENSION(3) :: rsat_icrf, vsat_icrf, rsat_itrf, vsat_itrf, v_TRS_1, v_TRS_2
-	  DOUBLE PRECISION EOP_cr(7)
-      DOUBLE PRECISION CRS2TRS(3,3), TRS2CRS(3,3), d_CRS2TRS(3,3), d_TRS2CRS(3,3)	  
+      DOUBLE PRECISION EOP_cr(7)
+      DOUBLE PRECISION CRS2TRS(3,3), TRS2CRS(3,3), d_CRS2TRS(3,3), d_TRS2CRS(3,3)     
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d), DIMENSION(3) :: SF, SFgrav, SFnongrav, SFemp
       REAL (KIND = prec_q), DIMENSION(3) :: Fgrav_itrf , Fgrav_icrf, Fplanets_icrf, Ftides_icrf, Frelativity_icrf
@@ -85,14 +85,14 @@ SUBROUTINE force_sum (mjd, t_sec, rsat, vsat, SFx, SFy, SFz, integr_stage)
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_q) :: GMearth, aEarth
       INTEGER (KIND = prec_int8) :: n_max, m_max
-      INTEGER(KIND = 4)          :: satsvn
+!       INTEGER(KIND = 4)          :: satsvn
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_q), DIMENSION(3) :: aPlanets_icrf, a_perturb, a_iJ2, a_iJ2_icrf
       DOUBLE PRECISION  JD, Zbody(6)
       INTEGER  NTARG, NCTR, NTARG_body
       REAL (KIND = prec_q), DIMENSION(3) :: rbody
       REAL (KIND = prec_q) :: GMbody
-      REAL (KIND = prec_q), DIMENSION(3) :: rSun, rMoon, rMoon_ITRS, rSun_ITRS		
+      REAL (KIND = prec_q), DIMENSION(3) :: rSun, rMoon, rMoon_ITRS, rSun_ITRS      
       REAL (KIND = prec_q) :: GM_moon, GM_sun
       REAL (KIND = prec_q) :: C20, Re
 ! ----------------------------------------------------------------------
@@ -100,27 +100,29 @@ SUBROUTINE force_sum (mjd, t_sec, rsat, vsat, SFx, SFy, SFz, integr_stage)
       REAL (KIND = prec_d) :: xp, yp
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_q), DIMENSION(5,5) :: dCnm_solid1, dSnm_solid1
-      REAL (KIND = prec_q), DIMENSION(3,3) :: dCnm_solid2, dSnm_solid2	
+      REAL (KIND = prec_q), DIMENSION(3,3) :: dCnm_solid2, dSnm_solid2  
       REAL (KIND = prec_q) :: dC20_perm
       REAL (KIND = prec_q) :: dC21_pse, dS21_pse, dC21_poc, dS21_poc
       INTEGER (KIND = prec_int8) :: sz_tides  
       INTEGER (KIND = prec_int8) :: i , j 
       REAL (KIND = prec_q) :: ax, ay, az
       REAL (KIND = prec_q), DIMENSION(3) :: a_tides, a_solidtides, a_ocean 
-      REAL (KIND = prec_q), DIMENSION(3) :: a_solid1, a_solid2, a_pse, a_poc
-      REAL (KIND = prec_q), DIMENSION(:,:), ALLOCATABLE :: dCnm_tides, dSnm_tides		
-      REAL (KIND = prec_q), DIMENSION(:,:), ALLOCATABLE :: dCnm_ocean, dSnm_ocean		
+!       REAL (KIND = prec_q), DIMENSION(3) :: a_solid1, a_solid2, a_pse, a_poc
+      REAL (KIND = prec_q), DIMENSION(:,:), ALLOCATABLE :: dCnm_tides, dSnm_tides       
+      REAL (KIND = prec_q), DIMENSION(:,:), ALLOCATABLE :: dCnm_ocean, dSnm_ocean       
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_q), DIMENSION(6) :: Zsat_GCRS, Zearth_GCRS
       REAL (KIND = prec_q), DIMENSION(3) :: vSun
       REAL (KIND = prec_q), DIMENSION(3) :: a_Schwarzschild, a_LenseThirring, a_deSitter
 ! ----------------------------------------------------------------------
-      INTEGER (KIND = prec_int2) :: AllocateStatus, DeAllocateStatus
+      INTEGER (KIND = prec_int2) :: AllocateStatus
+!       , DeAllocateStatus
       CHARACTER (LEN=30) :: fmt_line
       INTEGER (KIND = prec_int2) :: ios
       CHARACTER (LEN=1) :: GNSSid
       INTEGER (KIND = prec_int4) :: PRN_no
-      INTEGER :: eclpf, srpid
+      INTEGER ::  srpid
+!       eclpf,
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_q) :: beta_ppn, gama_ppn
       REAL (KIND = prec_q) :: c_light
@@ -128,8 +130,9 @@ SUBROUTINE force_sum (mjd, t_sec, rsat, vsat, SFx, SFy, SFz, integr_stage)
       REAL (KIND = prec_d) :: PD_EMP_r(3,3), PD_EMP_v(3,3)
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: PD_EMP_param
 ! ----------------------------------------------------------------------
-      REAL (KIND = prec_q) :: phi,lamda,radius
-      REAL (KIND = prec_q), DIMENSION(3) :: a_solidtides_icrf, a_ocean_icrf 
+!       REAL (KIND = prec_q) :: phi,radius
+!       ,lamda
+!       REAL (KIND = prec_q), DIMENSION(3) :: a_solidtides_icrf, a_ocean_icrf 
 ! ----------------------------------------------------------------------
       CHARACTER (LEN=100) :: filename
       CHARACTER (LEN=1000) :: writeline
@@ -139,7 +142,7 @@ SUBROUTINE force_sum (mjd, t_sec, rsat, vsat, SFx, SFy, SFz, integr_stage)
       CHARACTER (LEN=5)  :: BDSorbtype
       INTEGER (KIND = 4) :: eclipsf
       REAL (KIND = prec_d) :: beta, Mangle, Yangle(2)
-	  REAL (KIND = prec_d) , Dimension(3) :: eBX_nom, eBX_ecl
+      REAL (KIND = prec_d) , Dimension(3) :: eBX_nom, eBX_ecl
       INTEGER (KIND = prec_int2) :: Frame_EmpiricalForces
       REAL (KIND = prec_d) :: Yawangle
 ! ----------------------------------------------------------------------
@@ -148,19 +151,20 @@ SUBROUTINE force_sum (mjd, t_sec, rsat, vsat, SFx, SFy, SFz, integr_stage)
       REAL (KIND = prec_d), DIMENSION(3) :: SFpulses
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: PD_pulses_param
 
-      REAL (KIND = prec_d) :: Fpulse (3)
+!       REAL (KIND = prec_d) :: Fpulse (3)
       REAL (KIND = prec_d) :: PD_pulse_r(3,3), PD_pulse_v(3,3)
       !REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: PD_pulse_param
-      REAL (KIND = prec_d), DIMENSION(3,1) :: PD_pulse_param
-      INTEGER (KIND = prec_int8) :: PULSE_param, N_PULSE_param
-      INTEGER (KIND = prec_int2) :: dir_pulse
-      REAL (KIND = prec_d), DIMENSION(3) :: delta_v
-      REAL (KIND = prec_d) :: mjd_ti_pulse, ti_sec_pulse
-      INTEGER (KIND = prec_int8) :: i1, i2, i_dir
-      INTEGER (KIND = prec_int8) :: N_PULSE_epochs
+!       REAL (KIND = prec_d), DIMENSION(3,1) :: PD_pulse_param
+!       INTEGER (KIND = prec_int8) :: PULSE_param, N_PULSE_param
+!       INTEGER (KIND = prec_int2) :: dir_pulse
+!       REAL (KIND = prec_d), DIMENSION(3) :: delta_v
+!       REAL (KIND = prec_d) :: mjd_ti_pulse
+!       , ti_sec_pulse
+!       INTEGER (KIND = prec_int8) :: i1, i2, i_dir
+!       INTEGER (KIND = prec_int8) :: N_PULSE_epochs
 ! ----------------------------------------------------------------------
 
-	
+    
 ! ----------------------------------------------------------------------
 ! Global variables used
 ! ----------------------------------------------------------------------
@@ -200,7 +204,7 @@ vSun = 0.d0
 ! ----------------------------------------------------------------------
 If (FMOD_GRAVFIELD > 0 .OR. yml_planetary_perturbations_enabled .OR. yml_tidal_effects_enabled .OR. yml_rel_effects_enabled ) Then
 
-CALL EOP (mjd, EOP_cr, CRS2TRS, TRS2CRS, d_CRS2TRS, d_TRS2CRS)	  
+CALL EOP (mjd, EOP_cr, CRS2TRS, TRS2CRS, d_CRS2TRS, d_TRS2CRS)    
 
 ! EOP data corrected at computation epoch 
 ! Polar motion coordinates
@@ -235,10 +239,10 @@ If (.not. yml_gravity_enabled) then
 ! Setting to Zero
 fx = 0.0D0
 fy = 0.0D0
-fz = 0.0D0	  
+fz = 0.0D0    
 Fgrav_icrf = (/ fx, fy, fz /)
 
-Else 	  
+Else      
 
 If (FMOD_GRAVFIELD == 0) Then
 
@@ -267,8 +271,8 @@ End If
 
 ! ----------------------------------------------------------------------
 ! Planetary/Lunar orbital perturbations
+! we need sun and moon positions anyway so test is lower down
 ! ----------------------------------------------------------------------
-If (yml_planetary_perturbations_enabled) Then
 
 ! Julian Day Number of the input epoch
 JD = mjd + 2400000.5D0
@@ -283,36 +287,38 @@ DO NTARG_body = 1 , 11
    !IF (NTARG_body /= 3 .and. &
    !(NTARG_body==2 .or. NTARG_body==5 .or. NTARG_body==10 .or. NTARG_body==11) ) THEN 
    !print *,"NTARG_body", NTARG_body !IF (NTARG_body/=3 .and. NTARG_body/=1 .and. ) THEN 
-		
+        
 ! Celestial body's (NTARG) Cartesian coordinates w.r.t. Center body (NCTR)
       NTARG = NTARG_body
       CALL  PLEPH ( JD, NTARG, NCTR, Zbody )
-	  
+      
 ! Cartesian coordinates of the celestial body in meters: KM to M
-	  rbody(1) = Zbody(1) * 1000.D0
-	  rbody(2) = Zbody(2) * 1000.D0
-	  rbody(3) = Zbody(3) * 1000.D0
+      rbody(1) = Zbody(1) * 1000.D0
+      rbody(2) = Zbody(2) * 1000.D0
+      rbody(3) = Zbody(3) * 1000.D0
 
 ! GM gravity constants of the solar system bodies
       GMbody = GMconst(NTARG)
  
+If (yml_planetary_perturbations_enabled) Then
 ! ----------------------------------------------------------------------
 ! Point-mass perturbations vector due to the selected celestial body
       CALL force_gm3rd (rbody, rsat_icrf, GMbody , a_perturb)
 ! Overall (sum) planetary pertrubation acceleration vector
-	  aPlanets_icrf = aPlanets_icrf + a_perturb
+      aPlanets_icrf = aPlanets_icrf + a_perturb
 ! ----------------------------------------------------------------------
+end if
 
 ! ----------------------------------------------------------------------
 ! Sun
       if (NTARG == 11) then
-	  rSun = rbody
-	  vSun = (/ Zbody(4), Zbody(5), Zbody(6) /) * 1000.D0 ! KM/sec to m/sec	  
+      rSun = rbody
+      vSun = (/ Zbody(4), Zbody(5), Zbody(6) /) * 1000.D0 ! KM/sec to m/sec   
       GM_sun = GMbody     
 ! ----------------------------------------------------------------------
 ! Moon
       else if (NTARG == 10) then
-	  rMoon = rbody
+      rMoon = rbody
       GM_moon = GMbody
       end if
 ! ----------------------------------------------------------------------
@@ -359,6 +365,7 @@ end if
    END IF
 END DO
  
+If (yml_planetary_perturbations_enabled) Then
   
 ! ----------------------------------------------------------------------
 ! Indirect J2 effect
@@ -399,10 +406,10 @@ ELSE If (.not. yml_planetary_perturbations_enabled) then
 
 Fplanets_icrf = (/ 0.D0, 0.0D0, 0.0D0 /)
 
-End IF	  
+End IF    
 ! ----------------------------------------------------------------------
 
-
+a_solidtides = 0.d0
 ! ----------------------------------------------------------------------
 ! Tidal effects
 ! ----------------------------------------------------------------------
@@ -435,7 +442,7 @@ CALL tide_perm (dC20_perm)
 if (GFM_tide == 'zero_tide') then
    dCnm_solid1(2+1,0+1) = dCnm_solid1(2+1,0+1) - dC20_perm
    !dCnm_solid2(2+1,0+1) = dCnm_solid2(2+1,0+1) - dC20_perm
-end if	  
+end if    
 ! ----------------------------------------------------------------------
 
 
@@ -475,7 +482,7 @@ ALLOCATE (dSnm_tides(sz_tides,sz_tides), STAT = AllocateStatus)
          PRINT *, "Error: Allocatable Array: dSnm_tides | Nmax:", sz_tides
 !         STOP "*** Not enough memory ***"
       END IF  
-	  
+      
 dCnm_tides = dCnm_solid1
 dSnm_tides = dSnm_solid1
 
@@ -508,7 +515,7 @@ a_ocean = (/ 0.D0, 0.0D0, 0.0D0 /)
 If (BTEST(yml_tidal_effects, ocean - one)) Then 
       CALL tides_ocean(OCEAN_Nmax, OCEAN_Mmax, mjd, ut1_utc, dCnm_ocean, dSnm_ocean)
       ! Acceleration cartesian components
-	  CALL force_tides(rsat_itrf, GMearth, aEarth, OCEAN_Nmax, OCEAN_Mmax, dCnm_ocean, dSnm_ocean, ax,ay,az)	  
+      CALL force_tides(rsat_itrf, GMearth, aEarth, OCEAN_Nmax, OCEAN_Mmax, dCnm_ocean, dSnm_ocean, ax,ay,az)      
       a_ocean (1) = ax
       a_ocean (2) = ay
       a_ocean (3) = az
@@ -535,9 +542,9 @@ Ftides_icrf = (/ 0.D0, 0.0D0, 0.0D0 /)
 End IF
 ! End of Tidal effects
 ! ----------------------------------------------------------------------
-
+if (yml_tidal_effects_enabled) then
 IF (abs(a_solidtides(1))>1.D0 .OR. abs(a_solidtides(2))>1.D0 .OR. abs(a_solidtides(3))>1.D0) THEN
-print *," "
+print *,"bad solidtides! "
 print *,"PRN", PRN
 print *,"mjd ", mjd
 print *,"a_solidtides ", a_solidtides
@@ -560,7 +567,7 @@ print *,"mjd ", mjd
 STOP
 END IF 
 !print *,"a_ocean      ", a_ocean
-
+end if
 
 ! ----------------------------------------------------------------------
 ! Relativistic effects
@@ -577,7 +584,7 @@ Zearth_GCRS = -1.0D0 * (/ rSun(1),rSun(2),rSun(3) , vSun(1),vSun(2),vSun(3) /)
 ! Schwarzschild terms
 CALL rel_schwarzschild (Zsat_GCRS, Zearth_GCRS, GMearth, beta_ppn, gama_ppn, c_light, a_Schwarzschild)
 
-! Lense-Thirring effects	  
+! Lense-Thirring effects      
 CALL rel_LenseThirring (Zsat_GCRS, Zearth_GCRS,  GMearth, gama_ppn, c_light , a_LenseThirring)
 !FIXME: why call function if you are going to ignore the result?
 a_LenseThirring = (/ 0.D0, 0.0D0, 0.0D0 /)
@@ -623,7 +630,7 @@ READ (PRN, fmt_line , IOSTAT=ios) GNSSid, PRN_no
 PRN_GNSS = PRN
 !CALL attitude (mjd, rsat_icrf, vsat_icrf, rSun, PRN_GNSS, satblk, BDSorbtype, &
 !                     eclipsf, beta, Mangle, Yangle, eBX_nom, eBX_ecl)
-BLKsat = BLKTYP					 
+BLKsat = BLKTYP                  
 CALL attitude (mjd, rsat_icrf, vsat_icrf, rSun, PRN_GNSS, BLKsat, & 
                      eclipsf, beta, Mangle, Yangle, eBX_nom, eBX_ecl)
 ! ----------------------------------------------------------------------
@@ -657,7 +664,7 @@ Fsrp_icrf = (/ fx, fy, fz /)
 
 Else
 
-	Fsrp_icrf = (/ 0.D0, 0.0D0, 0.0D0 /)
+    Fsrp_icrf = (/ 0.D0, 0.0D0, 0.0D0 /)
 End IF
 
 ! ----------------------------------------------------------------------
@@ -706,7 +713,7 @@ CALL pd_empirical (rsat_icrf, vsat_icrf, GMearth, Yawangle,Frame_EmpiricalForces
                    SFemp, PD_EMP_r, PD_EMP_v, PD_EMP_param)
        
 Else
-	SFemp = (/ 0.0D0, 0.0D0, 0.0D0 /)
+    SFemp = (/ 0.0D0, 0.0D0, 0.0D0 /)
 End IF
 ! ----------------------------------------------------------------------
 
@@ -717,7 +724,7 @@ End IF
 IF (yml_pulses) Then
 CALL pulses_force (rsat_icrf, vsat_icrf, mjd, t_sec, integr_stage, SFpulses, PD_pulse_r, PD_pulse_v, PD_pulses_param) 
 Else 
-	SFpulses = (/ 0.0D0, 0.0D0, 0.0D0 /)
+    SFpulses = (/ 0.0D0, 0.0D0, 0.0D0 /)
 End IF
 ! ----------------------------------------------------------------------
 
@@ -726,7 +733,7 @@ End IF
 ! Acceleration sum of the force model
 ! ----------------------------------------------------------------------
 !SF = Fgrav_icrf + Fplanets_icrf + Ftides_icrf + Frelativity_icrf + Fsrp_icrf
-SF = SFgrav + SFnongrav + SFemp + SFpulses 		
+SF = SFgrav + SFnongrav + SFemp + SFpulses      
 SFx = SF(1) 
 SFy = SF(2)
 SFz = SF(3)

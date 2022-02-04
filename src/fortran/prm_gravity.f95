@@ -7,12 +7,12 @@ SUBROUTINE prm_gravity (PRMfname)
 ! Purpose:
 !  Read/Set the parameterization regarding the Earth gravity field
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-!			Cooperative Research Centre for Spatial Information, Australia
-! Created:	5 April 2018
+! Author :  Dr. Thomas Papanikolaou
+!                 Cooperative Research Centre for Spatial Information, Australia
+! Created:  5 April 2018
 ! ----------------------------------------------------------------------
-	  
-	  
+        
+        
       USE mdl_precision
       USE mdl_num
       USE mdl_param
@@ -28,7 +28,7 @@ SUBROUTINE prm_gravity (PRMfname)
 ! Dummy arguments declaration
 ! ----------------------------------------------------------------------
 ! IN
-      CHARACTER (LEN=100), INTENT(IN) :: PRMfname				
+      CHARACTER (LEN=100), INTENT(IN) :: PRMfname                       
 ! OUT
 
 ! ----------------------------------------------------------------------
@@ -55,7 +55,7 @@ SUBROUTINE prm_gravity (PRMfname)
       REAL (KIND = prec_q), DIMENSION(:,:), ALLOCATABLE :: sCnm
       REAL (KIND = prec_q), DIMENSION(:,:), ALLOCATABLE :: sSnm  
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=300) :: filename	   
+      CHARACTER (LEN=300) :: filename        
       INTEGER (KIND = prec_int2) :: AllocateStatus,DeAllocateStatus
 ! ----------------------------------------------------------------------
       INTEGER (KIND = prec_int8) :: i, read_i
@@ -63,8 +63,8 @@ SUBROUTINE prm_gravity (PRMfname)
       INTEGER (KIND = prec_int2) :: ios_line, ios_key, ios_data
       INTEGER (KIND = prec_int2) :: space_i
       CHARACTER (LEN=7) :: Format1, Format2, Format3
-      CHARACTER (LEN=500) :: line_ith	  
-      CHARACTER (LEN=150) :: word1_ln, word_i, t0	  
+      CHARACTER (LEN=500) :: line_ith       
+      CHARACTER (LEN=150) :: word1_ln, word_i, t0       
 ! ----------------------------------------------------------------------
 
 
@@ -74,7 +74,7 @@ if (.not. yaml_found) then
 ! ----------------------------------------------------------------------
 
 ! ----------------------------------------------------------------------
-      UNIT_IN = 9  												
+      UNIT_IN = 9                                                                         
       Format1 = '(A)'
       Format2 = '(F)'
       Format3 = '(I100)'
@@ -102,7 +102,7 @@ i = i + 1
 ! End of file
          IF (ios_line < 0) THEN
 !            PRINT *, "End of file, i=", i
-            EXIT		
+            EXIT        
          END IF
 ! ----------------------------------------------------------------------
 
@@ -129,8 +129,8 @@ READ (line_ith, * , IOSTAT=ios_data) word1_ln  ! 1st word
 ! Gravity Field
 !IF (word1_ln == "Gravity_field") THEN
 !   READ ( line_ith, FMT = * , IOSTAT=ios_key ) word_i, ForceMod 
-	!FMOD_GRAV(1) = ForceMod
-	!print *,"ForceMod", ForceMod
+      !FMOD_GRAV(1) = ForceMod
+      !print *,"ForceMod", ForceMod
 !END IF
 ! ----------------------------------------------------------------------
 
@@ -138,10 +138,10 @@ READ (line_ith, * , IOSTAT=ios_data) word1_ln  ! 1st word
 ! Earth Gravity Field
 ! ----------------------------------------------------------------------
 ! Gravity Field model options:
-! 0. Central gravity field (Keplerian orbit only)	: gravity_model = 0
-! 1. Static global gravity field model     		    : gravity_model = 1
-! 2. Time-variable global gravity field model 		: gravity_model = 2
-! 3. IERS conventional geopotential model 			: gravity_model = 3
+! 0. Central gravity field (Keplerian orbit only)     : gravity_model = 0
+! 1. Static global gravity field model                    : gravity_model = 1
+! 2. Time-variable global gravity field model         : gravity_model = 2
+! 3. IERS conventional geopotential model                   : gravity_model = 3
 IF (word1_ln == "gravity_model") THEN
    READ ( line_ith, FMT = * , IOSTAT=ios_key ) word_i, gfc_opt 
    FMOD_GRAVFIELD = 1
@@ -163,18 +163,18 @@ END IF
 ! Degree truncation limit (Spherical harmonics expansion series)
 IF (word1_ln == "degree_max") THEN
    READ ( line_ith, FMT = * , IOSTAT=ios_key ) word_i, Nmax 
-	Ntrunc = Nmax
+      Ntrunc = Nmax
    yml_gravity_max_degree = Nmax
 END IF
 
 ! Degree truncation limit for the time-variable coefficients (case: gfc_opt=2)
 IF (word1_ln == "degree_max_timevar") THEN
    READ ( line_ith, FMT = * , IOSTAT=ios_key ) word_i, Nmax 
-	Ntrunc_tv = Nmax
+      Ntrunc_tv = Nmax
    yml_gravity_time_max_degree = Nmax
 END IF
-	  
-! ----------------------------------------------------------------------	
+        
+! ----------------------------------------------------------------------      
 
 
 
@@ -219,17 +219,17 @@ end if
       if (yml_gravity_model == STATIC_MODEL) then 
           CALL gfc1 (yml_gravity_filename, yml_gravity_max_degree, sigma_shc, GM_gfc,&
                   ae_gfc, Nmax_gfc, tide_gfc, Cnm, Snm, sCnm, sSnm)
-		  
-      else if (yml_gravity_model == TIME_MODEL) then 	  
-		  mjd_t = MJD_to ! Module mdl_param.f03
+              
+      else if (yml_gravity_model == TIME_MODEL) then    
+              mjd_t = MJD_to ! Module mdl_param.f03
           CALL gfc2 (yml_gravity_filename,yml_gravity_max_degree,sigma_shc, mjd_t, &
                   yml_gravity_time_max_degree, GM_gfc, ae_gfc, Nmax_gfc, tide_gfc, Cnm, Snm, sCnm, sSnm)
-		  
-      else if (yml_gravity_model == IERS_MODEL) then 	  
-		  mjd_t = MJD_to ! Module mdl_param.f03
+              
+      else if (yml_gravity_model == IERS_MODEL) then    
+              mjd_t = MJD_to ! Module mdl_param.f03
           CALL gfc3_iers (yml_gravity_filename, yml_gravity_max_degree, sigma_shc,&
                   mjd_t, GM_gfc, ae_gfc, Nmax_gfc, tide_gfc, Cnm, Snm, sCnm, sSnm)
-		  
+              
       end if
 ! ----------------------------------------------------------------------
 
@@ -240,7 +240,7 @@ GFM_ae = ae_gfc
 GFM_degmax = Nmax_gfc
 GFM_tide = tide_gfc
 
-! Truncation maximum degree and order 	  
+! Truncation maximum degree and order       
 ! Nmax
 IF (yml_gravity_max_degree == -1) THEN
    GFM_Nmax = Nmax_gfc
@@ -255,11 +255,11 @@ ALLOCATE (GFM_Snm(GFM_Nmax+1,GFM_Nmax+1), STAT = AllocateStatus)
 GFM_Cnm  = Cnm
 GFM_Snm  = Snm
 
-IF (sigma_shc /= 0) THEN	  
-  	ALLOCATE (GFM_sCnm(GFM_Nmax+1,GFM_Nmax+1), STAT = AllocateStatus)
-   	ALLOCATE (GFM_sSnm(GFM_Nmax+1,GFM_Nmax+1), STAT = AllocateStatus)
-	GFM_sCnm = sCnm
-	GFM_sSnm = sSnm
+IF (sigma_shc /= 0) THEN        
+      ALLOCATE (GFM_sCnm(GFM_Nmax+1,GFM_Nmax+1), STAT = AllocateStatus)
+      ALLOCATE (GFM_sSnm(GFM_Nmax+1,GFM_Nmax+1), STAT = AllocateStatus)
+      GFM_sCnm = sCnm
+      GFM_sSnm = sSnm
 END IF
 
 END IF

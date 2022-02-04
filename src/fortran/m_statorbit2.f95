@@ -148,7 +148,6 @@ Do i = 1 , Nepochs
       IF (delta_t < dt_limit) then
          ! Counter of the common epochs
          Nepochs_delta = Nepochs_delta + 1 
-      ELSE
       End if
    End Do
 End Do
@@ -177,6 +176,7 @@ if (AllocateStatus .ne. 0) then
         call report('FATAL', pgrm_name, 'statorbit2', mesg, 'src/fortran/m_statorbit2.f95', 1)
 end if
 ALLOCATE (orbdiff(Nepochs_delta,sz2+8), STAT = AllocateStatus)
+!print *, "orbdiff allocated to size: ", Nepochs_delta, ",",sz2 + 8
 if (AllocateStatus .ne. 0) then
         write(mesg, *) "Not enough memory - failed to allocate orbdiff, dimensions (", &
                 Nepochs_delta, ",", sz2+8, ")"

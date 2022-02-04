@@ -1,4 +1,6 @@
 
+// #pragma GCC optimize ("O0")
+
 #include "observations.hpp"
 #include "streamTrace.hpp"
 #include "corrections.hpp"
@@ -20,6 +22,7 @@ int Ipp_in_range(GTime time, double *Ion_pp)
 		case E_IonoModel::SPHERICAL_HARMONICS:	return Ipp_check_sphhar(time,Ion_pp);
 		case E_IonoModel::SPHERICAL_CAPS:		return Ipp_check_sphcap(time,Ion_pp);
 		case E_IonoModel::BSPLINE:				return Ipp_check_bsplin(time,Ion_pp);
+		case E_IonoModel::NONE:					return 0;
 	}
 	return 0;
 }
@@ -170,11 +173,11 @@ void write_receivr_measr(
 
 	tracepdeex(2,stecfile,"\n#IONO_MEAS  week       tow        sta  sat  Iono. meas  Iono. var.  state  # layers");
 
-	if (nlayer<=0) 
+	if (nlayer <=0 ) 
 		tracepdeex(2,stecfile,"  Sta. ECEF X    Sta. ECEF Y    Sta. ECEF Z    Sat. ECEF X    Sat. ECEF Y    Sat. ECEF Z\n");
 	else 
 	{
-		for (int j=0; j<nlayer; j++) 
+		for (int j = 0; j < nlayer; j++) 
 			tracepdeex(2,stecfile,"   height   IPP lat.  IPP lon.  Slant F.");
 		
 		tracepdeex(2,stecfile,"\n");

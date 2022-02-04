@@ -1,3 +1,6 @@
+
+// #pragma GCC optimize ("O0")
+
 #include <iostream>
 #include <vector>
 #include <list>
@@ -107,7 +110,7 @@ void minimum(
 	}
 
 	//use a state transition to initialise elements
-	kfStateTrans.stateTransition(trace, GTime::noTime());
+	kfStateTrans.stateTransition(trace, kfStateStations.time);
 
 	KFMeas combinedMeas = kfStateTrans.combineKFMeasList(measList);
 
@@ -128,12 +131,26 @@ void minimum(
 			W(i) = 0;
 		}
 	}
-	MatrixXd TWT	= T.transpose() * W.asDiagonal() * T;
-	MatrixXd Tdash	= TWT.inverse() * T.transpose() * W.asDiagonal();
+	
+	MatrixXd TW		= T.transpose() * W.asDiagonal();
+	MatrixXd TWT	= TW * T;
+	
+	auto QQ = TWT.bottomRightCorner(TWT.rows()-1, TWT.cols()-1).triangularView<Eigen::Upper>().adjoint();
+	LDLT<MatrixXd> solver;
+	solver.compute(QQ);
+	if (solver.info() != Eigen::ComputationInfo::Success)
+	{
+		std::cout << "Mincon borked." << std::endl;
+		return;
+	}
 
-	//clear the top row as it will have failed due to zero variances before the inverse
-	Tdash.row(0).setZero();
-
+	MatrixXd Tdash = solver.solve(TW.bottomRows(TW.rows()-1));
+	if (solver.info() != Eigen::ComputationInfo::Success)
+	{
+		std::cout << "Mincon borked!" << std::endl;
+		return;
+	}
+	
 	//perform kalman filtering using pseudo elements
 	{
 		KFState&	kfState = kfStateStations;
@@ -141,7 +158,7 @@ void minimum(
 		KFMeas pseudoMeas;
 		int rows = kfStateTrans.x.rows() - 1;
 		pseudoMeas.V = - kfStateTrans.x.bottomRows(rows);
-		pseudoMeas.A = Tdash.bottomRows	(rows);
+		pseudoMeas.A = Tdash;
 		pseudoMeas.R = MatrixXd::Zero	(rows, rows);
 		pseudoMeas.obsKeys.resize		(rows);
 
@@ -156,19 +173,20 @@ void minimum(
 			spitFilterToFile(kfState, E_SerialObject::FILTER_MINUS, kfState.rts_forward_filename);
 		}
 
-		MatrixXd Pp;
-		VectorXd xp;
-		VectorXd dx;
+		MatrixXd Pp = kfState.P;
+		VectorXd xp = kfState.x;
+		VectorXd dx = kfState.dx;
 
-		bool pass = kfState.kFilter(std::cout, pseudoMeas, xp, Pp, dx);
+		bool pass = kfState.kFilter(std::cout, pseudoMeas, xp, Pp, dx, 0, kfState.x.rows(), 0, pseudoMeas.V.rows());
 
 		if (pass == false)
 		{
 			trace << "FILTER FAILED" << std::endl;
 		}
 
-		kfState.x = xp;
-		kfState.P = Pp;
+		kfState.x	= xp;
+		kfState.P	= Pp;
+		kfState.dx	= dx;
 
 		if (kfState.rts_filename.empty() == false)
 		{

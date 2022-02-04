@@ -10,6 +10,7 @@ using std::map;
 #include "eigenIncluder.hpp"
 
 #include "linearCombo.hpp"
+#include "common.hpp"
 #include "acsQC.hpp"
 #include "enums.h"
 
@@ -47,30 +48,28 @@ struct IonoStat
 	double	extionovar	= 0;
 };
 
-struct MWSlip
+struct QC
 {
-	double	mean	= 0;
-	double	sigma	= 0;
-	int		num		= 0;
-};
-
-/** Object containing persistant status parameters of individual satellites
-*/
-struct SatStat : IonoStat
-{
-	double  	phw				= 0;					///< Phase windup (cycle)
-	double  	mapWet			= 0;					///< troposphere wet mapping function
-	double  	mapWetGrads[2]	= {};					///< troposphere wet mapping function
-	Vector3d	e				= Vector3d::Zero();		///< Line-of-sight unit vector
-
-	MWSlip		mwSlip		= {};		///<
-	MWSlip		emwSlip		= {};		///<
+	Average		mwSlip		= {};		///<
+	Average		emwSlip		= {};		///<
 	int			amb[3]		= {}; 		///< repaired integer cycle slip
 	double		mw			= 0;		///< MW-LC (m)
 	double		gf			= 0;
 	flt_t		flt			= {};		///< cycle slip repair filter
 	lc_t		lc_pre		= {};		///< lc information
 	lc_t		lc_new		= {};		///< lc information
+};
+
+
+/** Object containing persistant status parameters of individual satellites
+*/
+struct SatStat : IonoStat, QC
+{
+	double  	phw				= 0;					///< Phase windup (cycle)
+	double  	mapWet			= 0;					///< troposphere wet mapping function
+	double  	mapWetGrads[2]	= {};					///< troposphere wet mapping function
+	Vector3d	e				= Vector3d::Zero();		///< Line-of-sight unit vector
+
 
 	double		dIono		= 0;      	///< TD ionosphere residual
 	double		sigmaIono	= 0;      	///< TD ionosphere residual noise

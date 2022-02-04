@@ -1,5 +1,5 @@
 
-#pragma GCC optimize ("O0")
+// #pragma GCC optimize ("O0")
 
 #include <iostream>
 #include <random>
@@ -23,8 +23,7 @@
 
 void artificialSlip(
 		Trace&	trace,		///<
-		Obs&	obs,		///<
-		lc_t&	lcBase,		///<
+		Obs&	obs,		///< lc_t&	lcBase,		///<
 		char*	strprefix)	///<
 {
 	int lv = 3;
@@ -725,8 +724,6 @@ void lamnda()
 
 }
 
-#endif
-
 #include <fstream>
 
 
@@ -961,7 +958,6 @@ void getAcceleration(
 // 	std::cout << "\na: " << acc.transpose();
 }
 
-#if 0
 void orbitTests()
 {
 
@@ -1179,43 +1175,43 @@ void orbitTests()
 
 
 
-#include <malloc.h>
+// #include <malloc.h>
 
-size_t bucket = 0;
-
-static void* plumber_hook(size_t size, const void* caller);
-static void* plumber_hook(size_t size, const void* caller)
-{
-	void*	result;
-	
-	/* Restore all old hooks */
-	/* Call recursively */
-	__malloc_hook		= 0;
-	{
-		result = malloc(size);
-	}
-	__malloc_hook		= plumber_hook;
-
-	bucket += size;
-	
-	return result;
-}
-
-
-template<typename T>
-size_t plumberTest(T& t)
-{
-	//begin plumbing
-	bucket = 0;
-		
-	__malloc_hook	= plumber_hook;
-	{
-		T newT = t;
-	}
-	__malloc_hook	= 0;
-	
-	return bucket;
-}
+// size_t bucket = 0;
+// 
+// static void* plumber_hook(size_t size, const void* caller);
+// static void* plumber_hook(size_t size, const void* caller)
+// {
+// 	void*	result;
+// 	
+// 	/* Restore all old hooks */
+// 	/* Call recursively */
+// 	__malloc_hook		= 0;
+// 	{
+// 		result = malloc(size);
+// 	}
+// 	__malloc_hook		= plumber_hook;
+// 
+// 	bucket += size;
+// 	
+// 	return result;
+// }
+// 
+// 
+// template<typename T>
+// size_t plumberTest(T& t)
+// {
+// 	//begin plumbing
+// 	bucket = 0;
+// 		
+// 	__malloc_hook	= plumber_hook;
+// 	{
+// 		T newT = t;
+// 	}
+// 	__malloc_hook	= 0;
+// 	
+// 	return bucket;
+// }
 
 #include "snx.hpp"
 #include "acsNtripBroadcast.hpp"
@@ -1223,27 +1219,29 @@ size_t plumberTest(T& t)
 
 void plumber()
 {
-	static map<string, size_t>	plumberMap;
-	
-	size_t New;
-	string v;
-	
-	printf("Checking plumbing:\n");
-	v = "nav";			New = plumberTest(nav			);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
-	v = "ephMap";		New = plumberTest(nav.ephMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
-	v = "gephMap";		New = plumberTest(nav.gephMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
-	v = "sephMap";		New = plumberTest(nav.sephMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
-	v = "pephMap";		New = plumberTest(nav.pephMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
-	v = "pclkMap";		New = plumberTest(nav.pclkMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
-	v = "satNavMap";	New = plumberTest(nav.satNavMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
-	v = "tecMap";		New = plumberTest(nav.tecMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
-	v = "pcMap";		New = plumberTest(nav.pcMap		);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
-	
-	printf("\n");
+// 	static map<string, size_t>	plumberMap;
+// 	
+// 	size_t New;
+// 	string v;
+// 	
+// 	printf("Checking plumbing:\n");
+// 	v = "nav";			New = plumberTest(nav			);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
+// 	v = "ephMap";		New = plumberTest(nav.ephMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
+// 	v = "gephMap";		New = plumberTest(nav.gephMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
+// 	v = "sephMap";		New = plumberTest(nav.sephMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
+// 	v = "pephMap";		New = plumberTest(nav.pephMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
+// 	v = "pclkMap";		New = plumberTest(nav.pclkMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
+// 	v = "satNavMap";	New = plumberTest(nav.satNavMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
+// 	v = "tecMap";		New = plumberTest(nav.tecMap	);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
+// 	v = "pcMap";		New = plumberTest(nav.pcMap		);	printf("%15s has %15ld drops added, %15ld in bucket\n", v.c_str(), (New - plumberMap[v]), New); 	plumberMap[v] = New;
+// 	
+// 	printf("\n");
 }
 
 void doDebugs()
 {
+// 	basicIntegrator();
+// 	exit(0);
 	
 // 	orbitTests();
 // 	exit(0);

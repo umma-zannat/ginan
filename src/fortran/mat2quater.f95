@@ -26,6 +26,7 @@
 ! 0.6695807158758448 ) ! q3
 !
 ! ----------------------------------------------------------------------
+
 subroutine mat2quater(xmat,quater)
 implicit none
 double precision , dimension(3,3) :: xmat

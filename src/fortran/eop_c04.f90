@@ -46,6 +46,7 @@ SUBROUTINE eop_c04 (filename,mjd , eop)
       INTEGER (KIND = prec_int8) :: i, read_i, len_line
       CHARACTER (LEN=100) :: Format_eop
       CHARACTER (LEN=170) :: line_ith, eop_line 
+      CHARACTER :: first
       INTEGER (KIND = prec_int8) :: year,month,day, mjd_day
       REAL (KIND = prec_d) :: xp,yp,UT1_UTC,LOD,dX,dY, xErr,yErr,UT1_UTC_Err,LOD_Err,dX_Err,dY_Err
       LOGICAL found
@@ -85,6 +86,10 @@ SUBROUTINE eop_c04 (filename,mjd , eop)
          END IF
 ! ----------------------------------------------------------------------
 ! Data - check how much we read
+         !skip lines where year does not start with 1 or 2 ...
+         first = line_ith(1:1)
+         if (first .ne. '1' .and. first .ne. '2') cycle
+
          len_line = len(line_ith)
          IF (len_line >= 155) THEN
 	        READ (line_ith, '(3(I4),I7, 170A)' , IOSTAT=ios_data) year,month,day, mjd_day, eop_line			

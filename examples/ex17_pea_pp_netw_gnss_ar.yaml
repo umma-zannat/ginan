@@ -1,7 +1,5 @@
-
 # ex17 - Network Example
-# Uses TU GRAZ orbit to solve for satellite clocks solution (GPS-only, resolved ambiguities)
-# Total processing duration  ~ 2.5 minutes on 2-cores
+# Uses TU GRAZ orbit to solve for satellite clocks (GPS-only, resolved ambiguities)
 # Estimates clocks
 
 input_files:
@@ -14,10 +12,10 @@ input_files:
     # navfiles:   [ brdm1990.19p                                       ]    # required but shouldn't!
     # sp3files:   [ igs20624.sp3                                       ]
     # erpfiles:   [ igs19P2062.erp                                     ]    #config parser doesn't accept weekly files yet.
-    # #dcbfiles:       # monthly DCB file
+    # dcbfiles:       # monthly DCB file
     # bsxfiles:   [ CAS0MGXRAP_20191990000_01D_01D_DCB.BSX             ]
-    #clkfiles:   [     jpl20624.clk                                   ]   # Clk file
-    #orbfiles:   [ orb_partials/gag20624_orbits_partials.out.eop_test23      ]    # only need this if we are estimating orbits
+    # clkfiles:   [     jpl20624.clk                                   ]   # Clk file
+    # orbfiles:   [ orb_partials/gag20624_orbits_partials.out.eop_test23      ]    # only need this if we are estimating orbits
 
     navfiles: [ brdm1990.19p        ]  # broadcast navigation file
     sp3files: [ TUG0R03FIN_20191990000_01D_05M_ORB.SP3 ] # satellite orbit files in SP3 format
@@ -29,10 +27,27 @@ station_data:
     root_stations_directory: data/
 
     rnxfiles:
-        # Select files to run by:
-                                                        # - selecting one on the command line using the -rnxfiles option
-        - "*.rnx"                                       # - searching all in file_root directory, or
-        # - "A*.rnx"                                       # - searching all in file_root directory, or
+        - "AGGO*.rnx"
+        - "CEDU*.rnx"
+        - "DGAR*.rnx"
+        - "FAIR*.rnx"
+        - "FFMJ*.rnx"
+        - "HERS*.rnx"
+        - "IISC*.rnx"
+        - "KIRI*.rnx"
+        - "METG*.rnx"
+        - "MGUE*.rnx"
+        - "POAL*.rnx"
+        - "QUIN*.rnx"
+        - "RGDG*.rnx"
+        - "SAMO*.rnx"
+        - "SEY2*.rnx"
+        - "SOLO*.rnx"
+        - "TONG*.rnx"
+        - "TOPL*.rnx"
+        - "TOW2*.rnx"
+        - "USN7*.rnx"
+        - "ZIM2*.rnx"
 
 
 output_files:
@@ -77,12 +92,18 @@ output_files:
 
     output_sinex:                   true
 
-    output_mongo_measurements:      true
-    output_mongo_states:            true
+    output_trop_sinex:              true
+    trop_data_source:               KALMAN
+    trop_sinex_directory:           ./
+    trop_sinex_filename:            <CONFIG>-<STATION><WWWW><D>.tro
+
+    output_mongo_measurements:      false
+    output_mongo_states:            false
     output_mongo_metadata:          false
-    delete_mongo_history:           true
+    delete_mongo_history:           false
     mongo_uri:                      mongodb://127.0.0.1:27017
-    mongo_rts_suffix:               "laminar"
+    mongo_suffix:                   ""
+    mongo_rts_suffix:               "_rts"
 
 output_options:
 
@@ -92,21 +113,20 @@ output_options:
     analysis_program:               AUSACS
     rinex_comment:                  AUSNETWORK1
 
-
 processing_options:
 
-    start_epoch:               2019-07-18 00:00:00
-    #end_epoch:                 2019-07-18 23:59:30
-    max_epochs:                 100        #0 is infinite
-    epoch_interval:             30          #seconds
-    wait_next_epoch:            20
-    #wait_all_stations:          1
+    start_epoch:                2019-07-18 01:15:00
+    end_epoch:                  2019-07-18 22:30:00
+    #max_epochs:                 120        #0 is infinite # comment for full day run
+    epoch_interval:             60          #seconds
+    deweight_factor:            1000.0
+
 
     process_modes:
         user:                   false
         network:                true
-        minimum_constraints:    false
-        rts:                    true #should be true for this examples
+        minimum_constraints:    true
+        rts:                    true        #should be true for this example
         ionosphere:             false
         unit_tests:             false
 
@@ -123,7 +143,7 @@ processing_options:
     tide_otl:           true
 
     phase_windup:       true
-    reject_eclipse:     true            #reject observation during satellite eclipse periods
+    reject_eclipse:     true
     raim:               true
     antexacs:           true
 
@@ -150,106 +170,55 @@ processing_options:
                         L2W, L2P, L2Y, L2C, L2M, L2N, L2D, L2S, L2L, L2X,
                         L5I, L5Q, L5X]
 
-
 network_filter_parameters:
 
     process_mode:               kalman      #lsq
     inverter:                   ldlt         #LLT LDLT INV
 
-    max_filter_iterations:      1
-    max_prefit_removals:        3
+    max_filter_iterations:      10
+    max_prefit_removals:         2
+    outage_reset_limit:          1
+    phase_reject_limit:          2
 
     rts_lag:                    -1      #-ve for full reverse, +ve for limited epochs 1 epoch?
     rts_directory:              ./
     rts_filename:               <CONFIG>-Network.rts
-
-# ionosphere_filter_parameters:
-
-#     max_filter_iterations:  5
-#     max_filter_removals:    4
-
-#     rts_lag:                    -1      #-ve for full reverse, +ve for limited epochs
-#     rts_directory:              ./
-#     rts_filename:               Ionosphere.rts
-
-#     model:        spherical_harmonics              # meas_out, spherical_harmonics, spherical_caps
-#     lat_center:   0.0
-#     lon_center:   2.5
-#     lat_width:    141.0
-#     lon_width:    356.0
-#     lat_res:      5.0
-#     lon_res:      5.0
-#     time_res:     1800.0
-#     func_order:   15
-#     layer_heights: [450]
-#     model_noise:    0.01
 
 default_filter_parameters:
 
     stations:
 
         error_model:        elevation_dependent         #uniform elevation_dependent
-        code_sigmas:        [1]
-        phase_sigmas:       [0.0015]
+        code_sigmas:        [0.3333]
+        phase_sigmas:       [0.0033]
 
         pos:
             estimated:          true
-            sigma:              [0.1]
+            sigma:              [0.01]
             proc_noise:         [0]
 
         clk:
             estimated:          true
             sigma:              [1000]
-            #proc_noise:         [0]
             proc_noise:         [10]
-            proc_noise_dt:      sqrt_second #per sqrt second
-            #proc_noise_model:   Gaussian
-
-        # clk_rate:
-        #     estimated:          true
-        #     sigma:              [10]
-        #     proc_noise:         [1e-8]
+            proc_noise_dt:      sqrt_second
 
         amb:
             estimated:          true
-            sigma:              [60]
+            sigma:              [100]
             proc_noise:         [0]
-            #proc_noise_dt:      day
-
-#        trop:
-#            estimated:          true
-#            sigma:              [0.1]
-#            proc_noise:         [0.3]
-#            proc_noise_dt:      hour
 
         trop:
             estimated:          true
-            sigma:              [0.1]
+            sigma:              [0.3]
             proc_noise:         [0.0001] #0.1 mm
-            proc_noise_dt:      second
-
-        # trop_gauss_markov:
-        #     estimated:          true
-        #     sigma:              [0.05]
-        #     proc_noise:         [1.00E-02]  # steady-state sigma
-        #     tau:                [12600]      # correlation time (units set by proc_noise_dt)
-        #     proc_noise_dt:      second
-        #     #proc_noise_model:   GaussMarkov
-
+            proc_noise_dt:      sqrt_second
 
         trop_grads:
             estimated:          true
-            sigma:              [0.05]
-            proc_noise:         [1.0E-7]
-            proc_noise_dt:      second
-
-        # trop_grads_gauss_markov:
-        #     estimated:          true
-        #     sigma:              [0.01]
-        #     proc_noise:         [5.49E-03]
-        #     tau:                [9216]
-        #     proc_noise_dt:      second
-        #     #proc_noise_model:   GaussMarkov
+            sigma:              [0.02]
+            proc_noise:         [1.0E-6]
+            proc_noise_dt:      sqrt_second
 
 
     satellites:
@@ -270,30 +239,37 @@ default_filter_parameters:
 
     eop:
         estimated:  true
-        sigma:      [40]
+        sigma:      [30]
+
+    eop_rates:
+        estimated:  true
+        sigma:      [30]
 
 
 override_filter_parameters:
 
     stations:
-        #ALICAUS01:
-            #pos:
-                #sigma:              [0.001]
-                #proc_noise:         [0]
-            #clk:
-                #sigma:              [0.01]
+        AGGO:
+            clk_rate:
+                estimated:          true
+                sigma:              [10]
+                proc_noise:         [1e-8]
+                
+        CEDU:
+            trop_gauss_markov:
+                estimated:          true
+                sigma:              [0.05]
+                proc_noise:         [0.01]
+                tau:                [12600]
+                proc_noise_dt:      sqrt_second
 
-        #AGGO:
-            #exclude: true
-        #ALIC:
-            #exclude: true
-        #ANKR:
-            #exclude: true
-                #estimated:  false
-
-        #GANP:
-            #exclude: true
-
+            trop_grads_gauss_markov:
+                estimated:          true
+                sigma:              [0.01]
+                proc_noise:         [0.00549]
+                tau:                [9216]
+                proc_noise_dt:      second
+                
     satellites:
 
         ### Constellation Overrides
@@ -309,17 +285,28 @@ override_filter_parameters:
 
         ### Block Type Overrides
         #GPS-IIR-A:
-            #pos: { sigma: [10.0] }
-            #vel: { sigma: [0.1] }
 
         ### PRN Overrides
-        #PRN_G10:
-            #pos: { sigma: [10.0]    }
-            #vel: { sigma: [0.1]     }
-            #clk: { sigma: [1.0]     }
+        
+        PRN_G01:
+            clk_rate:
+                estimated:          true
+                sigma:              [10]
+                proc_noise:         [1e-5]
 
-        #PRN_G15:
-            #exclude: true
+        PRN_G02:
+
+            clk_rate:
+                estimated:          true
+                sigma:              [0.1]
+                proc_noise:         [1e-6]
+
+            clk_rate_gauss_markov:
+                estimated:          true
+                sigma:              [0.05]
+                proc_noise:         [1e-3] 
+                proc_noise_dt:      sqrt_second
+                tau:                [86400] 
 
         ### SVN Overrides
         #SVN_G265:
@@ -329,15 +316,13 @@ override_filter_parameters:
 
 minimum_constraints:
 
-    process_mode:       kalman     #kalman
-
     estimate:
         translation:    true
         rotation:       true
         #scale:          false   #not yet implemented
 
-    station_default_noise: -1        #constrain none by default (negative numbers are not constrained)
-    #station_default_noise: +1       #constrain all by default
+    #station_default_noise: -1        #constrain none by default (negative numbers are not constrained)
+    station_default_noise: +1       #constrain all by default
 
     #    station_noise:
     #    ALIC: 0.001     #constrain strongly

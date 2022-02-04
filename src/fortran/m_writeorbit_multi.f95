@@ -81,13 +81,13 @@ SUBROUTINE writeorbit_multi (orbitsmatrix_crf,orbitsmatrix_trf,orbits_ics_icrf,P
 ! ----------------------------------------------------------------------
 ! Local variables declaration
 ! ----------------------------------------------------------------------
-      INTEGER (KIND = prec_int8) :: i, j, i_write
+      INTEGER (KIND = prec_int8) :: i, j, i_write, k, l, m
       INTEGER (KIND = prec_int2) :: UNIT_IN, ios, ios_ith, ios_key
       INTEGER (KIND = prec_int8) :: sz1, sz2, sz3
       INTEGER (KIND = prec_int2) :: wrt_opt
       INTEGER (KIND = prec_int2) :: FMT_opt
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=1) :: RealT
+!       CHARACTER (LEN=1) :: RealT
       INTEGER (KIND = prec_int2) :: RealW, RealD
       CHARACTER (LEN=70) :: fmt_wrt, fmt_wrt0, fmt_sz2
       REAL (KIND = prec_q) :: wrtArrayLN 
@@ -367,7 +367,7 @@ DO i_sat = 1 , Nsat
 
     STR99=''
     IF (yml_pulses) THEN
-       ! pulses always reported in orbital frame, reagrdless of user choice
+       ! pulses always reported in orbital frame, regardless of user choice
        Do i = 1, N_PULSE_PARAM_glb / yml_pulse_parameter_count
        if (yml_pulse_ref_frame == ICRF) then
           if (BTEST(yml_pulse_parameters, DIR_X - one)) then
@@ -495,9 +495,24 @@ DO i_sat = 1 , Nsat
   IF (yml_pulses) THEN
      j = yml_pulse_parameter_count + 2
      DO i = 1, N_PULSE_param_glb/yml_pulse_parameter_count
+     if (btest(yml_pulse_parameters, DIR_X - one) .or. BTEST(yml_pulse_parameters, DIR_R - one)) then
+             k = i
+     else
+             k = 0
+     end if
+     if (btest(yml_pulse_parameters, DIR_Y - one) .or. BTEST(yml_pulse_parameters, DIR_T - one)) then
+             l = i
+     else
+             l = 0
+     end if
+     if (btest(yml_pulse_parameters, DIR_Z - one) .or. BTEST(yml_pulse_parameters, DIR_N - one)) then
+             m = i
+     else
+             m = 0
+     end if
      IF (i <= 9) THEN
        STR99=''
-       WRITE(PNUM, '(1X,A2,I1,1X,A2,I1,1X,A2,I1)')'PR',i,'PT',i,'PN',i
+       WRITE(PNUM, '(1X,A2,I1,1X,A2,I1,1X,A2,I1)')'PR',k,'PT',l,'PN',m
        STR99 = trim(STR99)//trim(PNUM)
        WRITE (UNIT=UNIT_IN,FMT='(a,a3,1x,I3,1x,a,1x,a,1x,a15,2x)',ADVANCE="no",IOSTAT=ios_ith) &
              &'#IC_PULSE_INFO  ',PRN_array(i_sat),SVNID,TRIM(BLKTYP),'ICRF', trim(STR99)
@@ -508,7 +523,7 @@ DO i_sat = 1 , Nsat
              N_PULSE_param_glb+i*yml_pulse_parameter_count)
      ELSE 
       STR99=''
-       WRITE(PNUM, '(1X,A2,I2,1X,A2,I2,1X,A2,I2)')'PR',i,'PT',i,'PN',i
+       WRITE(PNUM, '(1X,A2,I2,1X,A2,I2,1X,A2,I2)')'PR',k,'PT',l,'PN',m
        STR99 = trim(STR99)//trim(PNUM)
        WRITE (UNIT=UNIT_IN,FMT='(a,a3,1x,I3,1x,a,1x,a,1x,a15,2x)',ADVANCE="no",IOSTAT=ios_ith) &
              &'#IC_PULSE_INFO  ',PRN_array(i_sat),SVNID,TRIM(BLKTYP),'ICRF', trim(STR99)

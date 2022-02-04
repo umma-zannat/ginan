@@ -1,14 +1,16 @@
 
+// #pragma GCC optimize ("O0")
+
 #include "observations.hpp"
 #include "streamTrace.hpp"
 #include "linearCombo.hpp"
 #include "corrections.hpp"
 #include "navigation.hpp"
 #include "testUtils.hpp"
+#include "ephemeris.hpp"
 #include "acsConfig.hpp"
 #include "constants.hpp"
 #include "satStat.hpp"
-#include "preceph.hpp"
 #include "station.hpp"
 #include "algebra.hpp"
 #include "antenna.hpp"
@@ -118,7 +120,7 @@ void pppoutstat(
 			kfState.getKFValue(key, rClkGLO, &GLOclkVar);
 			key.num = SatSys(E_Sys::GAL).biasGroup();
 			kfState.getKFValue(key, rClkGAL, &GALclkVar);
-			key.num = SatSys(E_Sys::CMP).biasGroup();
+			key.num = SatSys(E_Sys::BDS).biasGroup();
 			kfState.getKFValue(key, rClkBDS, &BDSclkVar);
 
 			tracepdeex(1, trace, "$CLK,%d,%.3f,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n",
@@ -212,15 +214,22 @@ void udbias_ppp(
 			continue;
 		}
 
-		if	( (acsConfig.ionoOpts.corr_mode == +E_IonoMode::IONO_FREE_LINEAR_COMBO && ft != FTYPE_IF12)
-			||(acsConfig.ionoOpts.corr_mode != +E_IonoMode::IONO_FREE_LINEAR_COMBO && ft == FTYPE_IF12)
+		E_FType ifft = FTYPE_IF12;
+		E_FType l    = F2;
+		if (  obs.Sat.sys == +E_Sys::GAL ||
+			( obs.Sat.sys == +E_Sys::GPS && acsConfig.ionoOpts.iflc_freqs == +E_LinearCombo::L1L5_ONLY ))
+		{
+			ifft = FTYPE_IF15;
+			l    = F5;
+		}
+
+		if	( (acsConfig.ionoOpts.corr_mode == +E_IonoMode::IONO_FREE_LINEAR_COMBO && ft != ifft)
+			||(acsConfig.ionoOpts.corr_mode != +E_IonoMode::IONO_FREE_LINEAR_COMBO && ft == ifft)
 			||(sig.L_corr_m == 0)
 			||(sig.P_corr_m == 0))
 		{
 			continue;
 		}
-
-		E_FType l = obs.Sat.sys == +E_Sys::GAL ? F5 : F2;
 
 		double	bias	= 0;
 		int		slip	= obs.satStat_ptr->sigStatMap[ft].slip.any;
@@ -343,8 +352,6 @@ int ppp_filter(
 
 	KFState&	kfState = rtk.pppState;
 
-	kfState.initFilterEpoch();
-
 	char str[32];
 	time2str(obsList.front().time, str, 2);
 
@@ -356,7 +363,9 @@ int ppp_filter(
 	double jd	= ymdhms2jd(ep);
 	double mjd	= jd - JD2MJD;
 
-	auto& recOpts = acsConfig.getRecOpts(obsList.front().mount);
+	string id = obsList.front().mount;
+	
+	auto& recOpts = acsConfig.getRecOpts(id);
 
 	//Get the previous estimate of position or load from the point positioning solution if not initialised.
 	Vector3d x0 = Vector3d::Zero();
@@ -365,7 +374,7 @@ int ppp_filter(
 	{
 		KFKey xKey;
 		xKey.type	= KF::REC_POS;
-		xKey.str	= obsList.front().mount;
+		xKey.str	= id;
 		xKey.num	= i;
 		bool pass = kfState.getKFValue(xKey, x0[i]);
 		if (pass == false)
@@ -397,6 +406,45 @@ int ppp_filter(
 	KFMeasEntryList		kfMeasEntryList;
 	map<KFKey, bool>	measuredStates;
 
+	for (auto sys : E_Sys::_values())
+	{
+		if (acsConfig.process_sys[sys] == false)
+		{
+			continue;
+		}
+		
+		SatSys Sat(sys, 0);
+		
+		auto biasGroup = Sat.biasGroup();
+		
+		InitialState systemBiasInit = initialStateFromConfig(recOpts.clk, biasGroup);
+		
+		KFKey systemBiasKey;
+		{
+			systemBiasKey.type	= KF::REC_SYS_BIAS;
+			systemBiasKey.num	= biasGroup;
+			systemBiasKey.str	= id;
+		}
+		
+		double C_dtRecAdj	= rtk.sol.dtRec_m			[biasGroup]
+							- rtk.sol.dtRec_m_ppp_old	[biasGroup];
+
+		rtk.sol.dtRec_m_ppp_old[biasGroup] = rtk.sol.dtRec_m[biasGroup];
+		
+		//get, modify and set the old bias in the state according to SPP estimates
+		trace << std::endl
+		<< "Adjusting " << systemBiasKey.str
+		<< " clock by " << C_dtRecAdj;
+		
+		KFKey oneKey;
+		oneKey.type	= KF::ONE;
+		
+		kfState.setKFTrans(systemBiasKey, oneKey, C_dtRecAdj, systemBiasInit);
+	}
+	
+	//add process noise to existing states as per their initialisations.
+	kfState.stateTransition(std::cout, obsTime);
+	
 	for (auto& obs : obsList)
 	{
 		if (obs.exclude)
@@ -412,7 +460,9 @@ int ppp_filter(
 		int			biasGroup	= obs.Sat.biasGroup();
 
 		E_FType ft2 = F2;
-		if (obs.Sat.sys == +E_Sys::GAL)	ft2 = F5;
+		if ( obs.Sat.sys == +E_Sys::GAL ||
+			(obs.Sat.sys == +E_Sys::GPS && acsConfig.ionoOpts.iflc_freqs == +E_LinearCombo::L1L5_ONLY )) ft2 = F5;
+		
 		double ionfact=SQR(lam[F1]) / (SQR(lam[F1])-SQR(lam[ft2]));
 
 		//Satellite already has precise clocks if available
@@ -526,10 +576,15 @@ int ppp_filter(
 				}*/
 
 				// Ken: It would be nice to be able to use both L1L2 and L1L5 combinations, but not if the correlation matrix cannot be introduced
-				if(sys == +E_Sys::GPS && ft != FTYPE_IF12) continue;
+				if(sys == +E_Sys::GPS)
+				{
+					if(acsConfig.ionoOpts.iflc_freqs == +E_LinearCombo::L1L5_ONLY && ft != FTYPE_IF15) continue;
+					if(acsConfig.ionoOpts.iflc_freqs == +E_LinearCombo::L1L2_ONLY && ft != FTYPE_IF12) continue;
+					if(acsConfig.ionoOpts.iflc_freqs == +E_LinearCombo::ANY       && ft != FTYPE_IF12) continue; // It would be nice to be able to use both L1L2 and L1L5 combinations, but not if the correlation matrix cannot be introduced
+				}
 				if(sys == +E_Sys::GLO && ft != FTYPE_IF12) continue;
 				if(sys == +E_Sys::GAL && ft != FTYPE_IF15) continue;
-				if(sys == +E_Sys::CMP && ft != FTYPE_IF12) continue;		/* need to confirm this */
+				if(sys == +E_Sys::BDS && ft != FTYPE_IF12) continue;		/* need to confirm this */
 				if(sys == +E_Sys::QZS && ft != FTYPE_IF12) continue;
 
 			}
@@ -594,9 +649,10 @@ int ppp_filter(
 			KFKey tropKeys[3];
 			for (short i = 0; i < 3; i++)
 			{
-				tropKeys[i].type	= KF::TROP;
-				tropKeys[i].num		= i;
-				tropKeys[i].str		= obs.mount;
+				tropKeys[i].type		= KF::TROP;
+				tropKeys[i].num			= i;
+				tropKeys[i].str			= obs.mount;
+				tropKeys[i].station_ptr	= &rec;
 			}
 
 			KFKey phaseBiasKey;
@@ -642,15 +698,6 @@ int ppp_filter(
 			kfState.getKFValue(dcbKey,			dcb);
 			kfState.getKFValue(phaseBiasKey,	phaseBias);
 			kfState.getKFValue(systemBiasKey,	C_dtRec);
-
-			double C_dtRecAdj	= rtk.sol.dtRec_m			[biasGroup]
-								- rtk.sol.dtRec_m_ppp_old	[biasGroup];
-			C_dtRec += C_dtRecAdj;
-
-			InitialState systemBiasInit;
-			systemBiasInit.x = C_dtRec;
-			systemBiasInit.P = VAR_CLK;
-			kfState.resetKFValue(systemBiasKey, systemBiasInit);
 
 			//Prepare the measurement innovation values and sigmas
 
@@ -742,6 +789,12 @@ int ppp_filter(
 // 				posRateInits[i].x = rtk.sol.sppRRec[i];	//todo aaron, get from doppler
 			}
 
+			InitialState systemBiasInit;
+			{
+				systemBiasInit.x = rtk.sol.dtRec_m[biasGroup];
+				systemBiasInit.P = VAR_CLK;
+			}
+		
 			InitialState clockBiasRateInit	= initialStateFromConfig(recOpts.clk_rate);
 
 			InitialState phaseBiasInit		= initialStateFromConfig(recOpts.amb);
@@ -867,7 +920,7 @@ int ppp_filter(
 				&&( fabs(codeInnov)		> acsConfig.max_inno
 				  ||fabs(phasInnov)		> acsConfig.max_inno))
 			{
-				tracepde(2, std::cout, "outlier rejected  sat=%s %d res=%9.4f %9.4f el=%4.1f\n", obs.Sat.id().c_str(), ft, codeInnov, phasInnov, satStat.el * R2D);
+				tracepde(2, trace, "outlier rejected  sat=%s %d res=%9.4f %9.4f el=%4.1f\n", obs.Sat.id().c_str(), ft, codeInnov, phasInnov, satStat.el * R2D);
 				obs.excludeOutlier = true;
 				continue;			//todo aaron, moved to filer
 			}
@@ -877,8 +930,8 @@ int ppp_filter(
 			kfMeasEntryList.push_back(phasMeas);
 			kfMeasEntryList.push_back(codeMeas);
 
-			tracepde(4, trace, "%s sat=%s P%d res=%9.4f sig=%9.4f el=%4.1f\n", str, obs.Sat.id().c_str(), ft, codeInnov, sqrt(codeVar), satStat.el * R2D);
-			tracepde(4, trace, "%s sat=%s L%d res=%9.4f sig=%9.4f el=%4.1f\n", str, obs.Sat.id().c_str(), ft, phasInnov, sqrt(phasVar), satStat.el * R2D);
+			tracepde(4, trace, "%s sat=%2d P%d res=%9.4f sig=%9.4f el=%4.1f\n", str, obs.Sat, ft, codeInnov, sqrt(codeVar), satStat.el * R2D);
+			tracepde(4, trace, "%s sat=%2d L%d res=%9.4f sig=%9.4f el=%4.1f\n", str, obs.Sat, ft, phasInnov, sqrt(phasVar), satStat.el * R2D);
 
 			sig.vsig = true;
 		}
@@ -888,13 +941,14 @@ int ppp_filter(
 
 	//add process noise to existing states as per their initialisations.
 	kfState.stateTransition(std::cout, obsTime);
-
+	
 	//combine the measurement list into a single matrix
 	KFMeas combinedMeas = kfState.combineKFMeasList(kfMeasEntryList);
 	combinedMeas.time = obsList.front().time;
 
 	if (combinedMeas.V.rows() == 0)
 	{
+		trace << std::endl << " -------NO MEASUREMENTS TO FILTER!--------" << std::endl;
 		return SOLQ_NONE;
 	}
 
@@ -909,8 +963,6 @@ int ppp_filter(
 	//perform kalman filtering
 	trace << std::endl << " -------DOING KALMAN FILTER --------" << std::endl;
 	kfState.filterKalman(trace, combinedMeas, true);
-
-	rtk.sol.dtRec_m_ppp_old = rtk.sol.dtRec_m;
 
 	TestStack::testMat("combinedMeas.V", combinedMeas.V);
 	TestStack::testMat("combinedMeas.A", combinedMeas.A);

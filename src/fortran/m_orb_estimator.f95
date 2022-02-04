@@ -45,6 +45,11 @@ SUBROUTINE orb_estimator(orbref, veqZarray, veqParray, orbobs, Xmatrix, Wmatrix,
 ! ----------------------------------------------------------------------
 ! Dr. Thomas Papanikolaou, Geoscience Australia            19 March 2018
 ! ----------------------------------------------------------------------
+!
+! Changes: 22-10-2020 Tzupang Tseng: Parameter correlation matrix, including the initial state vector and SRP parameters
+!          09-03-2021 Tzupang Tseng: Minimum constraint on stochastic pulse parameter
+!
+
 
 
       USE mdl_precision
@@ -289,7 +294,6 @@ n_NEQn = size(Amatrix, DIM = 2)
 !end do
 !NEQn = NEQn+WP
 ! --------------------------------------------------------------------------------------
-
 Call matrixinv (NEQn, NEQn_inv, n_NEQn)
 !Print *,"NEQn", NEQn
 !Print *,"NEQn_inv", NEQn_inv
@@ -317,7 +321,7 @@ Xsigma = SQRT(sigma*NEQn_inv)
 
 !PRINT*,'Xsigma =', Xsigma(7,7), Xsigma(8,8),Xsigma(9,9)
 
-! Parameter correlation matrix
+! Parameter correlation matrix(22-10-2020 Tzupang Tseng)
 DO i = 1, 6+Nparam
    DO j = 1, 6+Nparam
       corrl(i,j)=NEQn_inv(i,j)/sqrt(NEQn_inv(i,i))/sqrt(NEQn_inv(j,j))

@@ -10,16 +10,16 @@ MODULE m_matrixRxR
 ! Subroutines contained within the module:
 ! - matrixRxR
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-!			Cooperative Research Centre for Spatial Information, Australia
-! Created:	5 March 2018
+! Author :  Dr. Thomas Papanikolaou
+!                 Cooperative Research Centre for Spatial Information, Australia
+! Created:  5 March 2018
 ! ----------------------------------------------------------------------
 
 
       IMPLICIT NONE
-      !SAVE 			
+      !SAVE                   
   
-	  
+        
 Contains
 
 
@@ -66,31 +66,32 @@ SUBROUTINE matrixRxR (R1, R2, R3)
       INTEGER (KIND = prec_int8) :: R1_i, R1_j, R2_i, R2_j
       INTEGER (KIND = prec_int8) :: i, j, n, m
       REAL (KIND = prec_q) :: R3_ij
-      INTEGER (KIND = prec_int2) :: AllocateStatus, DeAllocateStatus	  
+      INTEGER (KIND = prec_int2) :: AllocateStatus
+!       , DeAllocateStatus      
 ! ----------------------------------------------------------------------
 
 
       R1_i = size(R1, dim = 1)
       R1_j = size(R1, dim = 2)
-	  
+        
       R2_i = size(R2, dim = 1)
       R2_j = size(R2, dim = 2)
 
 ! Allocatable arrays
 ALLOCATE (R3(R1_i,R2_j), STAT = AllocateStatus) 
-	  
-      DO i = 1 , R1_i	  
+        
+      DO i = 1 , R1_i     
         DO m = 1 , R2_j
-        ! R3(i,m)		 
+        ! R3(i,m)        
           R3_ij = 0.0D0
           DO j = 1 , R1_j
             n = j
-			R3_ij = R1(i,j) * R2(n,m) + R3_ij
+                  R3_ij = R1(i,j) * R2(n,m) + R3_ij
           End Do
           R3(i,m) = R3_ij    
         End Do
       End Do
-	
+      
 
 
 

@@ -85,9 +85,9 @@ SUBROUTINE write_orb2sp3 (ORBmatrix, PRNmatrix, sp3_fname, sat_vel, CLKmatrix)
       INTEGER :: year, month, day, hour_ti, min_ti 
       REAL (KIND = prec_q) :: sec_ti 	  
 ! ----------------------------------------------------------------------
-      INTEGER (KIND = prec_int8) :: Nepochs, Nelem, Nsat
+      INTEGER (KIND = prec_int8) :: Nepochs, Nelem, Nsat, NsatCount
       INTEGER (KIND = prec_int8) :: Nclk_epoch, Nclk_elem, Nclk_sat, iCLK_epoch
-      INTEGER (KIND = prec_int8) :: i_sat
+      INTEGER (KIND = prec_int8) :: i_sat, j_sat
       INTEGER (KIND = prec_int2) :: clk_write
 ! ----------------------------------------------------------------------
       CHARACTER (LEN=1) :: orbvector
@@ -102,14 +102,14 @@ SUBROUTINE write_orb2sp3 (ORBmatrix, PRNmatrix, sp3_fname, sat_vel, CLKmatrix)
       CHARACTER (LEN=3) :: PRN_write
       CHARACTER (LEN=300) :: wrt_line
       CHARACTER (LEN=6) :: wrt_line_0
-      INTEGER (KIND = prec_int8) :: GPS_week, GPSweek_mod1024
+      INTEGER (KIND = prec_int8) :: GPS_week, GPSweek_mod1024, valid_sat_index
       REAL (KIND = prec_d) :: GPS_wsec, GPS_day
       REAL (KIND = prec_d) :: Interval
       INTEGER (KIND = prec_int8) :: Nsat_17frac, Nsat_lines, j17
       CHARACTER (LEN=1) :: char1
       INTEGER (KIND = prec_int2) :: num1
 ! ----------------------------------------------------------------------
-
+      logical epochs_written
       external time_GPSweek3
 
 UNIT_IN = 7  												
@@ -208,14 +208,21 @@ vel = sat_vel
 ! ----------------------------------------------------------------------
 ! Write Header of the sp3 file
 ! ----------------------------------------------------------------------
+valid_sat_index = 0
+do i = 1, Nsat
+    if (yml_satellites(i)) then
+        valid_sat_index = i
+        exit
+    end if
+end do
 
 ! ----------------------------------------------------------------------
 ! Initial Epoch 
 ! ----------------------------------------------------------------------
 ! MJD of epoch (including fraction of the day)
-MJD_ti = ORBmatrix(1,1,1)
+MJD_ti = ORBmatrix(1,1,valid_sat_index)
 ! Sec of Day (since 0h)
-Sec_00 = ORBmatrix(1,2,1)
+Sec_00 = ORBmatrix(1,2,valid_sat_index)
 
 ! MJD of Epoch (including fraction of the day)
 DJ1 = 2400000.5D0
@@ -243,7 +250,7 @@ CALL time_GPSweek3(MJD_ti, Sec_00, GPS_week, GPS_wsec, GPSweek_mod1024, GPS_day)
 
 ! ----------------------------------------------------------------------
 ! Epochs Interval
-Interval = ORBmatrix(2,2,1) - ORBmatrix(1,2,1)
+Interval = ORBmatrix(2,2,valid_sat_index) - ORBmatrix(1,2,valid_sat_index)
 ! ----------------------------------------------------------------------
 
 
@@ -272,8 +279,13 @@ WRITE (UNIT=UNIT_IN,FMT=fmt_line,IOSTAT=ios_ith) '##',' ', &
 ! ----------------------------------------------------------------------
 ! Lines 3 to 7 (or more if Satellites>85) :: Satellites number and PRNs
 ! ----------------------------------------------------------------------
-Nsat_17frac = INT(Nsat / 17)
-If (Nsat > (Nsat_17frac * 17) )  Nsat_17frac = Nsat_17frac + 1
+NsatCount = Nsat
+Do i = 1, Nsat
+    if (.not. yml_satellites(i)) NsatCount = NsatCount - 1
+enddo
+
+Nsat_17frac = INT(NsatCount / 17)
+If (NsatCount > (Nsat_17frac * 17) )  Nsat_17frac = Nsat_17frac + 1
 
 ! Nsat_lines: 5 for satellites <=85
 If (Nsat_17frac > 5) Then 
@@ -282,14 +294,18 @@ Else
 	Nsat_lines = 5
 End IF
 
+j_sat = 1
 
 Do i = 1 , Nsat_lines
 
 WRITE(wrt_line  ,FMT=*,IOSTAT=ios_ith) ''
 
 Do j17 = 1 , 17
-	i_sat = (i-1)*17 + j17
+	i_sat = j_sat
 	IF (i_sat <= Nsat ) THEN
+            do while ( .not. yml_satellites(i_sat) .and. (i_sat < Nsat) )
+                i_sat = i_sat + 1
+            end do
             IF ( yml_satellites(i_sat)) THEN	
 		PRN_write = PRNmatrix(i_sat)
             ELSE
@@ -301,6 +317,7 @@ Do j17 = 1 , 17
 		!WRITE(wrt_line,FMT=*,IOSTAT=ios_ith) ADJUSTL(TRIM(wrt_line)),'  0'
 	END IF
 	
+        j_sat = i_sat + 1
 	If (j17 == 1) Then
 		IF (PRN_write == '  0') THEN
 			num1 = 0
@@ -316,7 +333,7 @@ END DO
 ! Write Line to sp3 file
 if (i==1) then
 	fmt_line = '(A2,A1,I3,A3,A)'
-	WRITE (UNIT=UNIT_IN,FMT=fmt_line,IOSTAT=ios_ith) '+ ',' ', Nsat,'   ', ADJUSTL(TRIM(wrt_line)) 
+	WRITE (UNIT=UNIT_IN,FMT=fmt_line,IOSTAT=ios_ith) '+ ',' ', NsatCount,'   ', ADJUSTL(TRIM(wrt_line)) 
 ELSE
 	!fmt_line = '(A9,A)'
 	!WRITE (UNIT=UNIT_IN,FMT=fmt_line,IOSTAT=ios_ith) '+        ', ADJUSTL(TRIM(wrt_line)) 	
@@ -398,6 +415,7 @@ WRITE (UNIT=UNIT_IN,FMT=fmt_line,IOSTAT=ios_ith) &
 DO i_write = 1 , Nepochs       
 
 
+epochs_written = .false.
 ! Satellites loop
 DO i_sat = 1 , Nsat       
 if (.not. yml_satellites(i_sat)) cycle
@@ -455,9 +473,10 @@ END IF
 !end if 
 
 ! ----------------------------------------------------------------------
-IF (i_sat == 1) THEN
+IF (.not. epochs_written) THEN
 ! Write the Epoch line
 
+epochs_written = .true.
 ! MJD of Epoch (including fraction of the day)
 DJ1 = 2400000.5D0
 DJ2 = MJD_ti

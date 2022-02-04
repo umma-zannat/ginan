@@ -1,4 +1,6 @@
 
+//#pragma GCC optimize ("O0")
+
 #include "summary.hpp"
 
 /** Output statistics from each station.

@@ -90,8 +90,9 @@ SUBROUTINE eop_cor (mjd, EOP_days, EOP_sol, n_interp , EOP_cr)
       REAL (KIND = prec_d) :: mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC, mjd_UT1
       DOUBLE PRECISION TT1, TT2, TT1_UT1, TT2_UT1, TAI1, TAI2
       INTEGER (KIND = prec_int8) :: mjd_UTC_day
-      REAL (KIND = prec_d) :: EOP_day(7)
-      DOUBLE PRECISION xp, yp, xp_int, yp_int, xp_cor, yp_cor
+!       REAL (KIND = prec_d) :: EOP_day(7)
+      DOUBLE PRECISION xp_cor, yp_cor 
+!       xp, yp, xp_int, yp_int,
       DOUBLE PRECISION dUT1_UTC, ut1utc_int, UT1UTC_cor
       DOUBLE PRECISION dX_eop, dY_eop, LOD 
 ! ----------------------------------------------------------------------

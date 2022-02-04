@@ -73,10 +73,10 @@ struct SatSys
 	{
 		switch (sys)
 		{
-			default:			return BiasGroup::GPS;
-			case E_Sys::GLO:	return BiasGroup::GLO;
-			case E_Sys::GAL:	return BiasGroup::GAL;
-			case E_Sys::CMP:	return BiasGroup::BDS;
+			default:			return E_BiasGroup::GPS;
+			case E_Sys::GLO:	return E_BiasGroup::GLO;
+			case E_Sys::GAL:	return E_BiasGroup::GAL;
+			case E_Sys::BDS:	return E_BiasGroup::BDS;
 		}
 	}
 
@@ -91,7 +91,7 @@ struct SatSys
 			case E_Sys::GLO:	return 'R';
 			case E_Sys::GAL:	return 'E';
 			case E_Sys::QZS:	return 'J';
-			case E_Sys::CMP:	return 'C';
+			case E_Sys::BDS:	return 'C';
 			case E_Sys::LEO:	return 'L';
 			case E_Sys::IRN:	return 'I';
 			case E_Sys::SBS:	return SBAS_CHAR;
@@ -212,7 +212,7 @@ struct SatSys
 				case 'R': sys = E_Sys::GLO; break;
 				case 'E': sys = E_Sys::GAL; break;
 				case 'J': sys = E_Sys::QZS; break;
-				case 'C': sys = E_Sys::CMP; break;
+				case 'C': sys = E_Sys::BDS; break;
 				case 'L': sys = E_Sys::LEO; break;
 				case 'I': sys = E_Sys::IRN; break;
 				case 'S': sys = E_Sys::SBS; prn+=100; break;

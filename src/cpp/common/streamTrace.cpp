@@ -1,4 +1,6 @@
 
+//#pragma GCC optimize ("O0")
+
 #include "streamTrace.hpp"
 #include <stdarg.h>
 #include <ctype.h>
@@ -128,6 +130,20 @@ int level_trace = 0;       /* level of trace */
 void tracelevel(int level)
 {
 	level_trace = level;
+}
+
+void traceFormatedFloat(Trace& trace, double val, string formatStr)
+{
+	/* If someone knows how to make C++ print with just one digit as exponent... */
+	int		exponent	= 0;
+	double	base		= 0;
+
+	if (val != 0)
+	{
+		exponent	= (int)floor(log10(fabs(val)));
+		base		= val * pow(10, -1 * exponent);
+	}
+	tracepdeex(0, trace, formatStr.c_str(), base, exponent);
 }
 
 void tracepde(int level, FILE *fppde, const char *format, ...)

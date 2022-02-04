@@ -119,17 +119,19 @@ struct Satlpivt
 };
 
 /* global variables */
-extern map<E_Sys, bool>						sys_solve;
+typedef map<E_Sys,bool> OutSys;
+
+extern OutSys								sys_solve;
 extern string								ARrefsta;
 extern map<SatSys, Satlpivt>				satpiv;
 extern map<E_Sys, map<string, StatAmbg>>	StatAmbMap_list;
-extern KFState								KF_ARcopy;
 
 int networkAmbigResl( Trace& trace, StationMap& stations, KFState& kfState);
 void Netwrk_ARoutput ( Trace& trace, StationMap& stations, GTime time, bool ionout, double biaupdt, double arelev);
 int enduserAmbigResl( Trace& trace, ObsList& obsList, KFState& kfState);
 int net_sect_out ( Trace& trace );
 void Netwrk_trace_out(Trace& trace, double arelev,string recv);
+int sys_frq(short int sys, E_FType& frq1, E_FType& frq2, E_FType& frq3);
 
 void updt_usr_pivot ( Trace& trace, double arelev, string receiver );
 void init_net_pivot ( Trace& trace, double arelev, string defref );

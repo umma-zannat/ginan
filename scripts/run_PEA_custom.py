@@ -70,6 +70,10 @@ if __name__ == "__main__":
         help = "Rather than specifying precise dates find the most recent x-day period that has CDDIS products"
     )
 
+    parser.add_argument("--repro3", "-repro3", default=False, action = 'store_true',
+        help = "Option to download the repro3 version of files"
+    )
+
     parser.add_argument("--month_day", "-md", action = "store_true", 
         help = "Option to replace DOY with month_day input with format MM-DD"
     )
@@ -134,8 +138,9 @@ if __name__ == "__main__":
     
     st_dt_str = args.start_datetime
     en_dt_str = args.end_datetime
-    m_r_xdays = args.most_recent_x_days
     md_flag = args.month_day
+    m_r_xdays = args.most_recent_x_days
+    repro3 = args.repro3
     
     plt_flag = args.plot_flag
     plt_m_r_1 = args.plot_most_recent
@@ -183,7 +188,8 @@ if __name__ == "__main__":
         trop_vmf3=vmf3,
         brd_typ=brd_ac,
         snx_typ=snx_ac,
-        clk_sel=clk_type
+        clk_sel=clk_type,
+        repro3 = repro3
     )
 
     # Download Data Files

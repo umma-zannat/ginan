@@ -1,8 +1,14 @@
+#define BOOST_BIND_GLOBAL_PLACEHOLDERS
+
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
+
+using boost::property_tree::ptree;
+using boost::property_tree::write_json;
 
 #include "acsNtripBroadcast.hpp"
 #include "ntripCasterService.hpp"
 #include "acsStream.hpp"
-
 
 NtripBroadcaster outStreamManager;
 
@@ -16,51 +22,177 @@ void NtripBroadcaster::stopBroadcast()
 	ntripUploadStreams.clear();
 }
 
-string NtripBroadcaster::NtripUploadClient::getJsonNetworkStatistics(system_clock::time_point epochTime)
+void NtripBroadcaster::NtripUploadClient::connectionError(
+	const boost::system::error_code& 	err,
+	string 								operation)
 {
-	auto time = std::chrono::system_clock::to_time_t(epochTime);
+	if (acsConfig.output_log == false)
+		return;
+
+	std::ofstream logStream(acsConfig.log_filename, std::ofstream::app);
+
+	if (!logStream)
+	{
+		BOOST_LOG_TRIVIAL(warning) << "Error opening log file.\n";
+		return;
+	}
 	
-	std::stringstream networkJson;
-	networkJson << "{";
-	networkJson << "\"Station\": \""		<< url.path.substr(1,url.path.length())					<< "\",";
-	networkJson << "\"Epoch\": \""			<< std::put_time( std::localtime( &time ), "%F %X" )	<< "\","; 
-	networkJson << "\"Network\": \""		<< acsConfig.analysis_agency							<< "\",";
-	networkJson << "\"Downloading\": \""	<< "false"												<< "\",";
-	auto timeNow = boost::posix_time::from_time_t(system_clock::to_time_t(system_clock::now()));
-	boost::posix_time::time_duration totalTime = timeNow - startTime;
-	double connRatio = (double)connectedDuration.total_milliseconds() /(double)totalTime.total_milliseconds();
+	auto time = std::chrono::system_clock::to_time_t(system_clock::now());
+
+	ptree root;
+	root.put("label", 			"connectionError");
+	root.put("Stream", 			url.path.substr(1,url.path.length()));
+	root.put("Time", 			std::put_time(std::localtime( &time ), "%F %X"));
+	root.put("BoostSysErrCode", err.value());
+	root.put("BoostSysErrMess", err.message());
+	root.put("SocketOperation", operation);
 	
-	double meanReconn = 0;
-	if ( disconnectionCount != 0 )
-		meanReconn = (double)disconnectedDuration.total_milliseconds()/(60.0*1000.0*disconnectionCount);
-
-	networkJson << "\"Disconnects\": "		<< disconnectionCount		<< ",";
-	networkJson << "\"MeanDowntime\": "		<< meanReconn				<< ",";
-	networkJson << "\"Connected ratio\": "	<< connRatio				<< ",";
-
-	double chunkRatio = 0;
-	numberErroredChunks = numberChunksSent - numberValidChunks;
-	if ( numberChunksSent != 0 )
-		chunkRatio = (double)numberErroredChunks/(double)(numberChunksSent);
-
-	networkJson << "\"Chunks\": "				<< numberChunksSent		<< ",";
-	networkJson << "\"ChunkErrors\": "			<< numberErroredChunks	<< ",";
-	networkJson << "\"Chunk error ratio\": "	<< chunkRatio			<< ",";
-
-	networkJson << "\"RtcmExtraBytes\": "	<< 0 << ",";
-	networkJson << "\"RtcmFailCrc\": "		<< 0 << ",";
-	networkJson << "\"RtcmPassedCrc\": "	<< 0 << ",";
-	networkJson << "\"RtcmDecoded\": "		<< 0 << ",";
-	networkJson << "\"RtcmPreamble\": "		<< 0 << ",";
-	
-
-	networkJson << "\"RtcmFailedCrcToPreambleRatio\": " << 0.0;
-	networkJson << "}";
-	
-	return networkJson.str();
+	write_json(logStream, root, false);
 }
 
-void NtripBroadcaster::NtripUploadClient::sendMessages(bool useSsrOut)
+void NtripBroadcaster::NtripUploadClient::serverResponse(
+	unsigned int	status_code,
+	string 			http_version)
+{
+	if (acsConfig.output_log == false)
+		return;
+
+	std::ofstream logStream(FileLog::path_log, std::ofstream::app);
+	
+	if (!logStream)
+	{
+		BOOST_LOG_TRIVIAL(warning) << "Error opening log file.\n";
+		return;
+	}
+
+	auto time = std::chrono::system_clock::to_time_t(system_clock::now());
+
+	ptree root;
+	root.put("label", 			"serverResponse");
+	root.put("Stream", 			url.path.substr(1,url.path.length()));
+	root.put("Time", 			std::put_time(std::localtime( &time ), "%F %X"));
+	root.put("ServerStatus", 	status_code);
+	root.put("VersionHTTP",		http_version);
+	write_json(logStream, root, false);
+}
+
+
+void NtripBroadcaster::NtripUploadClient::getJsonNetworkStatistics(
+	GTime now)
+{
+	if (acsConfig.output_log == false)
+		return;
+
+	std::ofstream logStream(FileLog::path_log, std::ofstream::app);
+
+	if (!logStream)
+	{
+		BOOST_LOG_TRIVIAL(warning) << "Error opening log file.\n";
+		return;
+	}
+
+	// Copy statistics into total run based statics.
+	if (runData.startTime.time == 0)
+	{
+		GTime start;
+		start.time = boost::posix_time::to_time_t(startTime);
+		start.sec = (startTime.time_of_day().total_milliseconds() - startTime.time_of_day().total_milliseconds()) / 1000.0;
+		runData		.startTime = start;
+		hourlyData	.startTime = start;
+		epochData	.startTime = start;
+
+		runData.endTime.time	= 0;
+		runData.endTime.sec		= 0;
+
+		runData		.streamName = url.path.substr(1, url.path.length());
+		hourlyData	.streamName = runData.streamName;
+		epochData	.streamName = runData.streamName;
+
+		// Set the first hours data to zero.
+		GTime tEnd = now;
+		tEnd.time = now.time + 1 * 60 * 60;
+		hourlyData.clearStatistics(now, tEnd);
+		hourlyData.getJsonNetworkStatistics(now, "hourlyData");
+	}
+	else
+	{
+		epochData.startTime = epochData.endTime;
+	}
+
+	epochData.endTime = now;
+	epochData.disconnectionCount = disconnectionCount;	disconnectionCount = 0;
+
+	// When the connection has cycled within outside an epoch.
+	epochData.connectedDuration = connectedDuration - epochConnectedDuration;
+	epochConnectedDuration = connectedDuration;
+
+	epochData.disconnectedDuration = disconnectedDuration - epochDisconnectedDuration;
+	epochDisconnectedDuration = disconnectedDuration;
+
+	// When the connection cycle is within the epoch transition.
+	if (isConnected)
+	{
+		boost::posix_time::ptime pNow	= boost::posix_time::from_time_t(now.time)
+										+ boost::posix_time::milliseconds((int)now.sec * 1000);
+
+		boost::posix_time::ptime pLast	= boost::posix_time::from_time_t(epochData.startTime.time)
+										+ boost::posix_time::milliseconds((int)epochData.startTime.sec * 1000);
+
+		boost::posix_time::time_duration epochDur	= pNow - pLast;
+		boost::posix_time::time_duration conDur		= pNow - connectedTime;
+
+		if (conDur < epochDur)
+		{
+			epochData.connectedDuration 	+= conDur;
+			epochConnectedDuration 			+= conDur;
+			epochData.disconnectedDuration 	+= epochDur - conDur;
+			epochDisconnectedDuration 		+= epochDur - conDur;
+		}
+	}
+	else
+	{
+		boost::posix_time::ptime pNow	= boost::posix_time::from_time_t(now.time)
+										+ boost::posix_time::milliseconds((int)now.sec * 1000);
+
+		boost::posix_time::ptime pLast	= boost::posix_time::from_time_t(epochData.startTime.time)
+										+ boost::posix_time::milliseconds((int)epochData.startTime.sec * 1000);
+
+		boost::posix_time::time_duration epochDur	= pNow - pLast;
+		boost::posix_time::time_duration disConDur	= pNow - disconnectedTime;
+
+		if (disConDur < epochDur)
+		{
+			epochData.disconnectedDuration	+= disConDur;
+			epochDisconnectedDuration		+= disConDur;
+			epochData.connectedDuration		+= epochDur - disConDur;
+			epochConnectedDuration			+= epochDur - disConDur;
+		}
+	}
+
+	epochData.numberChunks = numberValidChunks + numberErroredChunks;
+	numberValidChunks = 0;
+	epochData.numberErroredChunks = numberErroredChunks;
+	numberErroredChunks = 0;
+
+	if (hourlyData.endTime < now)
+	{
+		hourlyData.getJsonNetworkStatistics(now, "hourlyData");
+		GTime tEnd = now;
+		tEnd.time = now.time + 1 * 60 * 60;
+		hourlyData.clearStatistics(now, tEnd);
+	}
+
+	hourlyData	.accumulateStatisticsFrom(epochData);
+	runData		.accumulateStatisticsFrom(epochData);
+
+	string strJson;
+	strJson = epochData.getJsonNetworkStatistics(now, "epochData");		logStream << strJson;
+	strJson = hourlyData.previousJSON;									logStream << strJson;
+	strJson = runData.getJsonNetworkStatistics(now, "runData");			logStream << strJson;
+}
+
+void NtripBroadcaster::NtripUploadClient::sendMessages(
+	bool useSsrOut)
 {
 	for (auto RtcmMess : rtcmMessagesTypes)
 	{
@@ -83,18 +215,20 @@ void NtripBroadcaster::NtripUploadClient::sendMessages(bool useSsrOut)
 	int length = messStream.tellg();
 			
 	BOOST_LOG_TRIVIAL(debug) << "Called, NtripBroadcaster::NtripUploadClient::sendMessages(), MessageLength : " << length << std::endl;
-	if( length != 0)
+	if (length != 0)
 	{    
+		vector<char> data;
+		data.resize(length);
+		
 		outMessagesMtx.lock();
 		std::ostream chunkedStream(&outMessages);
 		chunkedStream << std::uppercase << std::hex << length << "\r\n";
 		
 		messStream.seekg(0, messStream.beg);
-		messStream.seekg(0, messStream.beg);    
-		vector<char> data;
-		data.resize(length);
-		messStream.read(&data[0],length);
-		chunkedStream.write(&data[0],length);
+		
+		
+		messStream.read(&data[0], length);
+		chunkedStream.write(&data[0], length);
 		chunkedStream << "\r\n";        
 	
 		if (url.protocol == "https")
@@ -120,9 +254,9 @@ void NtripBroadcaster::NtripUploadClient::connected()
 }
 
 
-void NtripBroadcaster::NtripUploadClient::writeResponse(const boost::system::error_code& err)
+void NtripBroadcaster::NtripUploadClient::writeResponse(
+	const boost::system::error_code& err)
 {
-	//BOOST_LOG_TRIVIAL(debug) << "RTCM, NtripUploadClient::writeResponse\n";
 	if (err)
 	{
 		outMessages.consume(outMessages.size());
@@ -139,78 +273,19 @@ void NtripBroadcaster::NtripUploadClient::writeResponse(const boost::system::err
 }
 
 
-void NtripBroadcaster::sendMessages(bool useSsrOut)
+void NtripBroadcaster::sendMessages(
+	bool useSsrOut)
 {
 	for (auto [label, outStream] : ntripUploadStreams)
 		outStream->sendMessages(useSsrOut);    
 }
 
 
-void NtripBroadcaster::NtripUploadClient::traceMakeNetworkOverview(Trace& trace)
+void NtripBroadcaster::NtripUploadClient::traceMakeNetworkOverview(
+	Trace&			   trace,
+	NetworkDataUpload& netData)
 {
-	bool printToTerminal = false;
-	std::stringstream message;
-	message << url.path;
-	if ( isConnected == false
-		&& disconnectionCount == 0 
-		&& (numberValidChunks+disconnectionCount) == 0 )
-	{
-		message << ", Network, Has Not Connected.";
-		message << std::endl;
-		message << std::endl;            
-	}
-	else
-	{
-		
-		message << ", Network, Number Disconnects : " << disconnectionCount;
-		double connRatio = 1;
-		if (disconnectionCount != 0)
-		{
-			boost::posix_time::time_duration totalTime = connectedTime - startTime;
-			double connRatio	= (double) connectedDuration.total_milliseconds() / (double)totalTime.total_milliseconds();
-			double meanReconn	= (double) disconnectedDuration.total_milliseconds() / (60.0 * 1000.0 * disconnectionCount);
-			
-			message << ", Mean Re-connection Time (min) : " << meanReconn;
-			message << ", Ratio Connectioned Time : " << connRatio;
-		}
-		
-		if (connRatio < 0.99)
-			printToTerminal = true;
-
-		
-		message << std::endl;
-		message << url.path;
-		numberErroredChunks = numberChunksSent - numberValidChunks;
-		message << ", Number Chunks : " << numberValidChunks;
-		message << ", Number Errored Chunks : " << numberErroredChunks;
-		
-		double chunkRatio = 0;
-		if (numberValidChunks != 0)
-		{
-			chunkRatio = (double)numberErroredChunks/(double)(numberValidChunks);
-			message << ", Ratio Error Chunks : " << chunkRatio;
-		}
-		
-		if (chunkRatio > 0.01)
-			printToTerminal = true;        
-		
-		message << std::endl;
-		message << std::endl;
-	}
-	
-	// The variable reduces the amount of printing to the terminal to only
-	// streams with high error.
-	if	(  printToTerminal 
-		&& print_stream_statistics)
-	{
-		BOOST_LOG_TRIVIAL(debug) << message.str();
-	}
-	
-	string messLine;
-	while(std::getline(message, messLine))
-	{
-		tracepde(3, trace, messLine + "\n"); 
-	}
+	netData.printTraceNetworkStatistics(trace);
 }
 
 void casterTest()

@@ -42,7 +42,7 @@ MU_TEST(test_read_sinex_1)
 	int status = getstnsnx(line, yds, station);
 	cout << "ALIC result" << result << endl;
 // 	Will return 0 if all field sare found, returns 1 if there is a stuff up and > 1 if something is missing
-	mu_assert_int_eq(5, status);
+	mu_assert_int_eq(E_SnxDataMissing::GPS_PHASE_CENTRE, status);
 	mu_assert_string_eq("ALIC", 				station.sitecode.c_str());
 	mu_assert_string_eq(" A", 					station.ptcode.c_str());
 	mu_assert_string_eq("50137M001", 			station.monuid.c_str());
@@ -210,7 +210,7 @@ MU_TEST(test_read_sinex_all)
 	yds2[2] = 0;
 
 	result =	getstnsnx("AUCK", yds, station);
-	mu_assert_int_eq		(5, result);
+	mu_assert_int_eq		(E_SnxDataMissing::GPS_PHASE_CENTRE, result);
 	mu_assert_string_eq		("AUCK", 	station.sitecode.c_str());
 	mu_assert_int_eq		(174, 		station.long_deg);
 	mu_assert_int_eq		(50, 		station.long_min);
@@ -237,7 +237,7 @@ MU_TEST(test_read_sinex_all)
 	mu_assert_string_eq("14410", 				station.antsn.c_str());
 
 	result = getstnsnx("AUCK", yds2, station);
-	mu_assert_int_eq		(5, 		result);
+	mu_assert_int_eq		(E_SnxDataMissing::GPS_PHASE_CENTRE, 		result);
 	mu_assert_string_eq		("AUCK", 	station.sitecode.c_str());
 	mu_assert_int_eq		(174, 		station.long_deg);
 	mu_assert_int_eq		(50, 		station.long_min);
@@ -278,7 +278,7 @@ MU_TEST(test_read_sinex_all)
 	}
 
 	result =	getstnsnx("AUCK", yds, station);
-	mu_assert_int_eq		(5, 		result);
+	mu_assert_int_eq		(E_SnxDataMissing::GPS_PHASE_CENTRE, 		result);
 	mu_assert_string_eq		("AUCK", 	station.sitecode.c_str());
 	mu_assert_int_eq		(174, 		station.long_deg);
 	mu_assert_int_eq		(50, 		station.long_min);
@@ -305,7 +305,7 @@ MU_TEST(test_read_sinex_all)
 	mu_assert_string_eq("14410",				station.antsn.c_str());
 
 	result = getstnsnx("AUCK", yds2, station);
-	mu_assert_int_eq		(5, 		result);
+	mu_assert_int_eq		(E_SnxDataMissing::GPS_PHASE_CENTRE, 		result);
 	mu_assert_string_eq		("AUCK", 	station.sitecode.c_str());
 	mu_assert_int_eq		(174, 		station.long_deg);
 	mu_assert_int_eq		(50, 		station.long_min);

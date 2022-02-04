@@ -9,23 +9,23 @@ SUBROUTINE integr_rkn768(zo, step, lamda_h, z_q, e_r)
 !  RKN7(6)-8 method by Dormand & Prince(1978) is implemented for satellite orbit integration
 ! ----------------------------------------------------------------------
 ! Input arguments:
-! - zo:  		Initial epoch (to) and state vector in Celestial Reference System GCRS
-!        		zo = [MJDo to ro vo]  
-!   			MJDo: initial epoch's Modified Julian Day (MJD) number (including the fraction of the day)
-!   			ro:   Position vector at initial epoch in GCRS (m)
-!   			vo:   Velocity vector at initial epoch in GCRS (m/sec)
-! - step:		Integration stepsize (sec)
-! - lamda_h:	RKN7(6)-8 specific parameter for stepsize control
+! - zo:           Initial epoch (to) and state vector in Celestial Reference System GCRS
+!                 zo = [MJDo to ro vo]  
+!                 MJDo: initial epoch's Modified Julian Day (MJD) number (including the fraction of the day)
+!                 ro:   Position vector at initial epoch in GCRS (m)
+!                 vo:   Velocity vector at initial epoch in GCRS (m/sec)
+! - step:         Integration stepsize (sec)
+! - lamda_h:      RKN7(6)-8 specific parameter for stepsize control
 !
 ! Output arguments
-! - z_q:		State vector at the next epoch t=to+h in GCRS
-! - e_r:   		Local truncation error of position vector
+! - z_q:          State vector at the next epoch t=to+h in GCRS
+! - e_r:          Local truncation error of position vector
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
-! Created:	6 October 2017
+! Author :  Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
+! Created:  6 October 2017
 ! ----------------------------------------------------------------------
-	  
-	  
+        
+        
       USE mdl_precision
       USE mdl_num
       IMPLICIT NONE
@@ -51,16 +51,17 @@ SUBROUTINE integr_rkn768(zo, step, lamda_h, z_q, e_r)
       REAL (KIND = prec_d), DIMENSION(9) :: t
       REAL (KIND = prec_d), DIMENSION(3) :: ro, vo
       REAL (KIND = prec_d), DIMENSION(3) :: ri1, vi1
-      REAL (KIND = prec_d), DIMENSION(3) :: r_q, v_q, r_p, er, ev
+      REAL (KIND = prec_d), DIMENSION(3) :: r_q, v_q, r_p, er
+!       , ev
       REAL (KIND = prec_d), DIMENSION(3,9) :: r, k
       REAL (KIND = prec_d), DIMENSION(3) :: sum_ak 
       REAL (KIND = prec_d), DIMENSION(9) :: c, b, b1, b2 
       REAL (KIND = prec_d), DIMENSION(9,8) :: a 
-      REAL (KIND = prec_d), DIMENSION(8,9) :: a_transp 
+!       REAL (KIND = prec_d), DIMENSION(8,9) :: a_transp 
       INTEGER (KIND = prec_int4) :: s, i, j
       REAL (KIND = prec_d) :: fx, fy, fz
-	  REAL (KIND = prec_d), DIMENSION(3) :: sum_bk, sum_b1k, sum_b2k
-! ----------------------------------------------------------------------	  
+        REAL (KIND = prec_d), DIMENSION(3) :: sum_bk, sum_b1k, sum_b2k
+! ----------------------------------------------------------------------        
 
 
 
@@ -109,7 +110,7 @@ s = 8
 c(1:9) = (/ 0.D0, 1.D0/10.D0, 1.D0/5.D0, 3.D0/8.D0, 1.D0/2.D0, (7.D0-sqrt(21.D0))/14.D0, (7.D0+sqrt(21.D0))/14.D0, 1.D0, 1.D0 /)
 
 
-	
+      
 ! ----------------------------------------------------------------------
 ! aij coefficients, i=1,....,s, j=0,...,s-1
 ! ----------------------------------------------------------------------
@@ -129,7 +130,7 @@ a(3,1:8) = (/ 1.D0/150.D0,   1.D0/75.D0,   0.0D0,   0.0D0,   0.0D0,   0.0D0,   0
 a(4,1:8) = (/ 171.D0/8192.D0,   45.D0/4096.D0,   315.D0/8192.D0,   0.0D0,   0.0D0,   0.0D0,   0.0D0,   0.0D0 /)     
 a(5,1:8) = (/ 5.D0/288.D0,   25.D0/528.D0,   25.D0/672.D0,   16.D0/693.D0,   0.0D0,   0.0D0,   0.0D0,   0.0D0 /)
 
-!!a(6,1:5) = (/ (1003.D0-205.D0*sqrt(21.D0))/12348.D0,   -25.D0*(751.D0-173.D0*sqrt(21.D0))/90552.D0,   25.D0*(624.D0-137.D0*sqrt(21.D0))/43218.D0,   -128.D0*(361.D0-79.D0*sqrt(21.D0))/237699.D0,   (3411.D0-745.D0*sqrt(21.D0))/24696.D0, 	 0.0D0,   0.0D0,   0.0D0 /)
+!!a(6,1:5) = (/ (1003.D0-205.D0*sqrt(21.D0))/12348.D0,   -25.D0*(751.D0-173.D0*sqrt(21.D0))/90552.D0,   25.D0*(624.D0-137.D0*sqrt(21.D0))/43218.D0,   -128.D0*(361.D0-79.D0*sqrt(21.D0))/237699.D0,   (3411.D0-745.D0*sqrt(21.D0))/24696.D0,     0.0D0,   0.0D0,   0.0D0 /)
 a(6,1) = (1003.D0-205.D0*sqrt(21.D0))/12348.D0
 a(6,2) = -25.D0*(751.D0-173.D0*sqrt(21.D0))/90552.D0
 a(6,3) = 25.D0*(624.D0-137.D0*sqrt(21.D0))/43218.D0
@@ -147,7 +148,7 @@ a(7,6) = -(581.D0+127.D0*sqrt(21.D0))/1722.D0
 a(7,7) = 0.0D0
 a(7,8) = 0.0D0  
 
-!a(8,1:8) = (/ -(157.D0-3.D0*sqrt(21.D0))/378.D0,   25.D0*(143.D0-10.D0*sqrt(21.D0))/2772.D0,   -25.D0*(876.D0+55.D0*sqrt(21.D0))/3969.D0,  	1280.D0*(913.D0+18.D0*sqrt(21.D0))/596673.D0,   -(1353.D0+26.D0*sqrt(21.D0))/2268.D0,  	7.D0*(1777.D0+377.D0*sqrt(21.D0))/4428.D0,   7.D0*(5.D0-sqrt(21.D0))/36.D0,   0.0D0 /)
+!a(8,1:8) = (/ -(157.D0-3.D0*sqrt(21.D0))/378.D0,   25.D0*(143.D0-10.D0*sqrt(21.D0))/2772.D0,   -25.D0*(876.D0+55.D0*sqrt(21.D0))/3969.D0,      1280.D0*(913.D0+18.D0*sqrt(21.D0))/596673.D0,   -(1353.D0+26.D0*sqrt(21.D0))/2268.D0,     7.D0*(1777.D0+377.D0*sqrt(21.D0))/4428.D0,   7.D0*(5.D0-sqrt(21.D0))/36.D0,   0.0D0 /)
 a(8,1) = -(157.D0-3.D0*sqrt(21.D0))/378.D0 
 a(8,2) = 25.D0*(143.D0-10.D0*sqrt(21.D0))/2772.D0 
 a(8,3) = -25.D0*(876.D0+55.D0*sqrt(21.D0))/3969.D0 
@@ -194,54 +195,54 @@ sum_ak(1:3) = (/ 0.0D0, 0.0D0, 0.0D0 /)
 
 DO i = 0 , s
     If (i == 0) Then
-	
+      
 !%%      Function evaluations (ki) for State vector (z = [r v]')       
         t(i+1) = to        
         r(1:3,i+1) = ro
-		
+            
         !% random value for velocity v = vo:
         !% Force model is indepedent from velocity vector
-		vi1 = vo
+            vi1 = vo
 
-		ri1(1:3) = ro
+            ri1(1:3) = ro
         
-		! MJD (in days) at ti including the fraction of the day
-		mjd_t = INT(mjd_to) + t(i+1) / (24.D0 * 3600.D0)
+            ! MJD (in days) at ti including the fraction of the day
+            mjd_t = INT(mjd_to) + t(i+1) / (24.D0 * 3600.D0)
 
-		! Force model acceleration components
+            ! Force model acceleration components
                 t_sec = t(i+1)
-		Call force_sum(mjd_t, t_sec, ri1, vi1, fx, fy, fz, i)
-		
+            Call force_sum(mjd_t, t_sec, ri1, vi1, fx, fy, fz, i)
+            
         k(1:3,i+1) = (/ fx, fy, fz /)
 
     Else        
-	
+      
 !%%      Function evaluations (ki) for State vector        
         Do j = 0 , i-1    
            !sum_ak = sum_ak + a(i+1,j+1) * k(:,j+1);
            sum_ak = sum_ak + a(i+1,j+1) * k(1:3,j+1)
         end do        
-		        
-		t(i+1) = to + c(i+1) * h
+                    
+            t(i+1) = to + c(i+1) * h
         r(1:3,i+1) = ro + c(i+1) * h * vo + h**2 * sum_ak
-		
+            
         sum_ak(1:3) = (/ 0.0D0, 0.0D0, 0.0D0 /) 
         
-		!% random value for velocity v = vo:
+            !% random value for velocity v = vo:
         !% Force model is indepedent from velocity vector
-		vi1 = vo
+            vi1 = vo
 
-		ri1(1:3) = r(1:3,i+1)
+            ri1(1:3) = r(1:3,i+1)
         
-		! MJD (in days) at ti including the fraction of the day
-		mjd_t = INT(mjd_to) + t(i+1) / (24.D0 * 3600.D0)
+            ! MJD (in days) at ti including the fraction of the day
+            mjd_t = INT(mjd_to) + t(i+1) / (24.D0 * 3600.D0)
 
-		! Force model acceleration components
+            ! Force model acceleration components
                 t_sec = t(i+1)
-		Call force_sum(mjd_t, t_sec, ri1, vi1, fx, fy, fz, i)
+            Call force_sum(mjd_t, t_sec, ri1, vi1, fx, fy, fz, i)
 
         k(1:3,i+1) = (/ fx, fy, fz /)
-		
+            
     End If
 End Do
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

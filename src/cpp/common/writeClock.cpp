@@ -1,24 +1,28 @@
-#include "writeClock.hpp"
+
+// #pragma GCC optimize ("O0")
+
 
 #include <fstream>
 #include <tuple>
-#include <list>
 #include <map>
 
+using std::map;
 
-
+#include "writeRinexNav.hpp"
+#include "writeRinexObs.hpp"
+#include "writeClock.hpp"
 #include "GNSSambres.hpp"
 #include "navigation.hpp"
 #include "acsConfig.hpp"
+#include "ephemeris.hpp"
 #include "constants.hpp"
 #include "station.hpp"
 #include "algebra.hpp"
-#include "preceph.hpp"
+#include "rinex.hpp"
 #include "enums.h"
 
 /* macro defintions */
 #define             VERSION             3.00
-using std::map;
 
 struct ClockEntry
 {
@@ -32,14 +36,13 @@ struct ClockEntry
 
 typedef std::list<ClockEntry> ClockList;
 
-
 void outputRinexClocksBody(
 	string&		filename,	    ///< Path to output file.
 	ClockList&	clkList,	    ///< List of data to print.
-	GTime		tsync)		    ///< Epoch time.
+	GTime&		time)		    ///< Epoch time.
 {
 	double ep[6] = {};
-	time2epoch(tsync, ep);
+	time2epoch(time, ep);
 	
 	std::ofstream clockFile(filename, std::ofstream::app);
 	
@@ -57,7 +60,7 @@ void outputRinexClocksBody(
 
 		int numData = 2; // Number of data values is 2, clock and sigma.
 		tracepdeex(0,clockFile,"%2s %-4s %4d%3d%3d%3d%3d%10.6f%3d   %19.12E %19.12E\n",
-			dataType, clkVal.id, 
+			dataType.c_str(), clkVal.id.c_str(), 
 			(int) ep[0],
 			(int) ep[1],
 			(int) ep[2],
@@ -71,8 +74,9 @@ void outputRinexClocksBody(
 }
 
 void getKalmanSatClks(
-	ClockList&	clkValList,
-	KFState&	kfState)
+	ClockList&			clkValList,
+	OutSys&				outSys,
+	KFState&			kfState)
 {
 	for (auto& [key,index] : kfState.kfIndexMap)
 	{
@@ -85,10 +89,13 @@ void getKalmanSatClks(
 		double variance	= 0;
 		kfState.getKFValue(key, clk, &variance);
 
+		if (!outSys[key.Sat.sys])
+			continue;
+
 		ClockEntry clkVal;
 		clkVal.id		= key.Sat.id();
 		clkVal.clock	= clk / CLIGHT;
-		clkVal.sigma	= sqrt(variance);
+		clkVal.sigma	= sqrt(variance) / CLIGHT;
 		clkVal.isRec	= false;
 		
 		clkValList.push_back(clkVal);
@@ -118,7 +125,7 @@ void getKalmanRecClks(
 			ClockEntry clkVal;
 			clkVal.id		= key.str;
 			clkVal.clock	= clk / CLIGHT;
-			clkVal.sigma	= sqrt(variance);
+			clkVal.sigma	= sqrt(variance) / CLIGHT;
 			clkVal.isRec	= true;
 
 			if (key.station_ptr == nullptr)
@@ -154,7 +161,7 @@ void getKalmanRecClks(
 void getPreciseRecClks(
 	ClockList&  	clkValList,
 	StationMap*		stationMap_ptr,
-	GTime 			tsync)
+	GTime& 			time)
 {
 	if (stationMap_ptr == nullptr)
 	{
@@ -167,7 +174,7 @@ void getPreciseRecClks(
 	{
 		double dt;
 		double variance;
-		int ret = pephclk(tsync, rec.id, nav, dt, &variance);
+		int ret = pephclk(time, rec.id, nav, dt, &variance);
 		if (ret != 1)
 		{
 			BOOST_LOG_TRIVIAL(warning) 
@@ -190,19 +197,18 @@ void getPreciseRecClks(
 }
 
 void getSatClksFromEph(
-	ClockList&  	clkValList,
-	GTime 			time,
-	E_Ephemeris		ephType)
+	ClockList&  		clkValList,
+	GTime& 				time,
+	OutSys&				outSys,
+	E_Ephemeris			ephType)
 {
 	for (auto& [satId, satNav] : nav.satNavMap)
 	{
 		SatSys Sat;
 		Sat.fromHash(satId);
 
-		if (acsConfig.process_sys[Sat.sys] == false)
-		{
+		if (!outSys[Sat.sys])
 			continue;
-		}
 
 		// Create a dummy observation
 		Obs obs;
@@ -231,10 +237,11 @@ void getSatClksFromEph(
 }
 
 void outputRinexClocksHeader(
-	string&			filename,			///< Path of tile to output to
-	ClockList&		clkValList,			///< List of clock values to output
-	ClockEntry&		referenceRec,		///< Entry for the reference receiver
-	GTime			tsync)				///< Epoch time
+	string&				filename,			///< Path of tile to output to
+	ClockList&			clkValList,			///< List of clock values to output
+	ClockEntry&			referenceRec,		///< Entry for the reference receiver
+	OutSys&				sysMap,				///< Options to enable outputting of specific systems
+	GTime				time)				///< Epoch time
 {
 	std::ofstream clockFile(filename, std::ofstream::app);
 	
@@ -249,28 +256,11 @@ void outputRinexClocksHeader(
 		return;
 
 	double ep[6] = {};
-	time2epoch(tsync, ep);
+	time2epoch(time, ep);
 
-	char syschar = 0;
-	for (int i = 0; i < E_Sys::NUM_SYS; i++)
-	{
-		if (acsConfig.process_sys[i])
-		{
-			SatSys Sat = SatSys(E_Sys::_from_integral(i));
-			if (syschar == 0)
-				syschar = Sat.sysChar();
-			else
-			{
-				syschar = 'M';
-				break;
-			}
-		}
-	}
-	if (syschar == 0)
-	{
-		BOOST_LOG_TRIVIAL(error) << "Writing RINEX clock file no systems in process_sys.";
-		return;
-	}
+	string sysDesc;
+	if (sysMap.size() == 1)	sysDesc = rinexSysDesc(sysMap.begin()->first);
+	else					sysDesc = rinexSysDesc(E_Sys::COMB);
 
 	string clkRefStation = referenceRec.id;
 	
@@ -283,13 +273,16 @@ void outputRinexClocksHeader(
 		}
 	}
 	
-	tracepdeex(0,clockFile,"%9.2f           C                   %c                   %s\n",
-		VERSION,syschar,
+	tracepdeex(0, clockFile, "%9.2f%-11s%-20s%-20s%-20s\n",
+		VERSION,
+		"",
+		"C",
+		sysDesc.c_str(),
 		"RINEX VERSION / TYPE");
 
 	tracepdeex(0,clockFile,"%-20s%-20s%4d%02d%02d %02d%02d%02d %4s%s\n",
-		acsConfig.analysis_program,
-		acsConfig.analysis_agency,
+		acsConfig.analysis_program.c_str(),
+		acsConfig.analysis_agency.c_str(),
 		(int)ep[0],
 		(int)ep[1],
 		(int)ep[2],
@@ -298,17 +291,17 @@ void outputRinexClocksHeader(
 		(int)ep[5],
 		"LCL","PGM / RUN BY / DATE");
 
-	tracepdeex(0,clockFile,"%-60s%s\n","",																	"SYS / # / OBS TYPES");
-	tracepdeex(0,clockFile,"%-60s%s\n","",																	"TIME SYSTEM ID");
-	tracepdeex(0,clockFile,"%6d    %2s    %2s%-42s%s\n",           2,"AS","AR","",							"# / TYPES OF DATA");
-	tracepdeex(0,clockFile,"%-60s%s\n","",																	"STATION NAME / NUM");
-	tracepdeex(0,clockFile,"%-60s%s\n","",																	"STATION CLK REF");
-	tracepdeex(0,clockFile,"%-3s  %-55s%s\n", acsConfig.analysis_agency.c_str(), acsConfig.analysis_center.c_str(),			"ANALYSIS CENTER");
-	tracepdeex(0,clockFile,"%6d%54s%s\n",1,"",																"# OF CLK REF");
+	tracepdeex(0,clockFile,"%-60s%s\n","",																			"SYS / # / OBS TYPES");
+	tracepdeex(0,clockFile,"%-60s%s\n","",																			"TIME SYSTEM ID");
+	tracepdeex(0,clockFile,"%6d    %2s    %2s%-42s%s\n",           2,"AS","AR","",									"# / TYPES OF DATA");
+	tracepdeex(0,clockFile,"%-60s%s\n","",																			"STATION NAME / NUM");
+	tracepdeex(0,clockFile,"%-60s%s\n","",																			"STATION CLK REF");
+	tracepdeex(0,clockFile,"%-3s  %-55s%s\n", acsConfig.analysis_agency.c_str(), acsConfig.analysis_center.c_str(),	"ANALYSIS CENTER");
+	tracepdeex(0,clockFile,"%6d%54s%s\n",1,"",																		"# OF CLK REF");
 
 	// Note clkRefStation can be a zero length string.
-	tracepdeex(0,clockFile,"%-4s %-20s%35s%s\n", "", clkRefStation,"",										"ANALYSIS CLK REF");
-	tracepdeex(0,clockFile,"%6d    %-50s%s\n", num_recs, "IGS14",											"# OF SOLN STA / TRF");
+	tracepdeex(0,clockFile,"%-4s %-20s%35s%s\n", "", clkRefStation.c_str(),"",										"ANALYSIS CLK REF");
+	tracepdeex(0,clockFile,"%6d    %-50s%s\n", num_recs, "IGS14",													"# OF SOLN STA / TRF");
 	// MM This line causes the clock combination software to crash to removing
 	//tracepdeex(0,clockFile,"%-60s%s\n",acsConfig.rinex_comment,												"COMMENT");
 
@@ -324,8 +317,8 @@ void outputRinexClocksHeader(
 		string idStr  = clkVal.id	.substr(0,4);
 		string monuid = clkVal.monid.substr(0,20);
 		
-		tracepdeex(0,clockFile,"%-4s ",idStr);
-		tracepdeex(0,clockFile,"%-20s",monuid);
+		tracepdeex(0,clockFile,"%-4s ",idStr.c_str());
+		tracepdeex(0,clockFile,"%-20s",monuid.c_str());
 		tracepdeex(0,clockFile,"%11.0f %11.0f %11.0f%s\n",
 				clkVal.recPos(0) * 1000,
 				clkVal.recPos(1) * 1000,
@@ -333,21 +326,21 @@ void outputRinexClocksHeader(
 				"SOLN STA NAME / NUM");
 	}
 
-
 	int num_sats = 0;
-	if (acsConfig.process_sys[E_Sys::GPS])	num_sats += NSATGPS;
-	if (acsConfig.process_sys[E_Sys::GLO])	num_sats += NSATGLO;
-	if (acsConfig.process_sys[E_Sys::GAL])	num_sats += NSATGAL;
-	if (acsConfig.process_sys[E_Sys::CMP])	num_sats += NSATCMP;
-		
+	if (sysMap[E_Sys::GPS])	num_sats += NSATGPS;
+	if (sysMap[E_Sys::GLO])	num_sats += NSATGLO;
+	if (sysMap[E_Sys::GAL])	num_sats += NSATGAL;
+	if (sysMap[E_Sys::BDS])	num_sats += NSATCMP;
+
+
 	/* output satellite PRN*/
 	int k = 0;		
 	tracepdeex(0,clockFile,"%6d%54s%s\n",num_sats,"","# OF SOLN SATS");
-	if (acsConfig.process_sys[E_Sys::GPS])	for (int prn = 1; prn <= NSATGPS; prn++)	{k++;	SatSys s(E_Sys::GPS,prn);	tracepdeex(0,clockFile,"%3s ",	s.id().c_str());	if (k % 15 == 0) tracepdeex(0,clockFile,"%s\n","PRN LIST");}
-	if (acsConfig.process_sys[E_Sys::GLO])	for (int prn = 1; prn <= NSATGLO; prn++)	{k++;	SatSys s(E_Sys::GLO,prn);	tracepdeex(0,clockFile,"%3s ",	s.id().c_str());	if (k % 15 == 0) tracepdeex(0,clockFile,"%s\n","PRN LIST");}
-	if (acsConfig.process_sys[E_Sys::GAL])	for (int prn = 1; prn <= NSATGAL; prn++)	{k++;	SatSys s(E_Sys::GAL,prn);	tracepdeex(0,clockFile,"%3s ",	s.id().c_str());	if (k % 15 == 0) tracepdeex(0,clockFile,"%s\n","PRN LIST");}
-	if (acsConfig.process_sys[E_Sys::CMP])	for (int prn = 1; prn <= NSATCMP; prn++)	{k++;	SatSys s(E_Sys::CMP,prn);	tracepdeex(0,clockFile,"%3s ",	s.id().c_str());	if (k % 15 == 0) tracepdeex(0,clockFile,"%s\n","PRN LIST");}
-	/*finish the line*/						while (k % 15 != 0)							{k++;								tracepdeex(0,clockFile,"%3s ",	"");				if (k % 15 == 0) tracepdeex(0,clockFile,"%s\n","PRN LIST");}
+	if (sysMap[E_Sys::GPS])	for (int prn = 1; prn <= NSATGPS; prn++)	{k++;	SatSys s(E_Sys::GPS,prn);	tracepdeex(0,clockFile,"%3s ",	s.id().c_str());	if (k % 15 == 0) tracepdeex(0,clockFile,"%s\n","PRN LIST");}
+	if (sysMap[E_Sys::GLO])	for (int prn = 1; prn <= NSATGLO; prn++)	{k++;	SatSys s(E_Sys::GLO,prn);	tracepdeex(0,clockFile,"%3s ",	s.id().c_str());	if (k % 15 == 0) tracepdeex(0,clockFile,"%s\n","PRN LIST");}
+	if (sysMap[E_Sys::GAL])	for (int prn = 1; prn <= NSATGAL; prn++)	{k++;	SatSys s(E_Sys::GAL,prn);	tracepdeex(0,clockFile,"%3s ",	s.id().c_str());	if (k % 15 == 0) tracepdeex(0,clockFile,"%s\n","PRN LIST");}
+	if (sysMap[E_Sys::BDS])	for (int prn = 1; prn <= NSATCMP; prn++)	{k++;	SatSys s(E_Sys::BDS,prn);	tracepdeex(0,clockFile,"%3s ",	s.id().c_str());	if (k % 15 == 0) tracepdeex(0,clockFile,"%s\n","PRN LIST");}
+	/*finish the line*/						while (k % 15 != 0)			{k++;								tracepdeex(0,clockFile,"%3s ",	"");				if (k % 15 == 0) tracepdeex(0,clockFile,"%s\n","PRN LIST");}
 
 	tracepdeex(0,clockFile,"%-60s%s\n","","END OF HEADER");
 }
@@ -389,12 +382,13 @@ void tryPrepareFilterPointers(
 }
 
 void outputClocks(
-	string			filename,
-	E_Ephemeris		clkDataRecSrc,
-	E_Ephemeris		clkDataSatSrc,
-	GTime			time,
-	KFState&		kfState,
-	StationMap*		stationMap_ptr)
+	string				filename,
+	E_Ephemeris			clkDataRecSrc,
+	E_Ephemeris			clkDataSatSrc,
+	GTime&				time,
+	OutSys&				outSys,
+	KFState&			kfState,
+	StationMap*			stationMap_ptr)
 {
 	ClockList  clkValList;
 	ClockEntry referenceRec;
@@ -402,24 +396,61 @@ void outputClocks(
 
 	switch (clkDataSatSrc)
 	{
-		case +E_Ephemeris::NONE:																	break;
-		case +E_Ephemeris::KALMAN:			getKalmanSatClks	(clkValList, kfState);				break;
+		case +E_Ephemeris::NONE:																		break;
+		case +E_Ephemeris::KALMAN:			getKalmanSatClks(clkValList, outSys, kfState);				break;
 		case +E_Ephemeris::PRECISE:			//fallthrough
 		case +E_Ephemeris::BROADCAST:		//fallthrough
-		case +E_Ephemeris::SSR:				getSatClksFromEph	(clkValList, time, clkDataSatSrc);	break;
-		default:	BOOST_LOG_TRIVIAL(error) << "Unknown / Undefined clock data source.";			return;
+		case +E_Ephemeris::SSR:				getSatClksFromEph(clkValList, time, outSys, clkDataSatSrc);	break;
+		default:	BOOST_LOG_TRIVIAL(error) << "Unknown / Undefined clock data source.";				return;
 	}
 
 	switch (clkDataRecSrc)
 	{
 		case +E_Ephemeris::NONE:																		break;
-		case +E_Ephemeris::KALMAN:			getKalmanRecClks	(clkValList, referenceRec, kfState);	break;
-		case +E_Ephemeris::PRECISE:			getPreciseRecClks	(clkValList, stationMap_ptr, tsync);	break;
+		case +E_Ephemeris::KALMAN:			getKalmanRecClks(clkValList, referenceRec, kfState);		break;
+		case +E_Ephemeris::PRECISE:			getPreciseRecClks(clkValList, stationMap_ptr, time);		break;
 		case +E_Ephemeris::SSR:				//fallthrough
 		case +E_Ephemeris::BROADCAST:		//fallthrough
 		default:	BOOST_LOG_TRIVIAL(error) << "Printing receiver clocks for " << clkDataRecSrc._to_string() << " not implemented.";	return;
 	}
 
-	outputRinexClocksHeader	(filename, clkValList, referenceRec,	tsync);
-	outputRinexClocksBody	(filename, clkValList,					tsync);
+	outputRinexClocksHeader(filename, clkValList, referenceRec, outSys, time);
+	outputRinexClocksBody(filename, clkValList, time);
+}
+
+map<string, map<E_Sys, bool>> getSysOutputFilenames(
+	string	filename,
+	GTime	logtime,
+	string	id)
+{
+	logtime = logtime.roundTime(acsConfig.trace_rotate_period);
+	
+	boost::posix_time::ptime	logptime	= boost::posix_time::from_time_t(logtime.time);
+	
+	replaceString(filename, "<STATION>", id);
+	replaceTimes (filename, logptime);
+	
+	map<string, map<E_Sys, bool>> fileOutputSysMap;
+	
+	for (auto& [sys, output] : acsConfig.process_sys)
+	{
+		if (output == false)
+			continue;
+		
+		SatSys t_Sat = SatSys(sys, 0);
+		
+		string sysChar;
+		if (acsConfig.output_sys_combined)	sysChar = "M";
+		else								sysChar = string(1, t_Sat.sysChar());
+		
+		if (sysChar == "-")
+			continue;
+		
+		string sysFilename = filename;
+		replaceString(sysFilename, "<SYS>", sysChar);
+		
+		fileOutputSysMap[sysFilename][sys] = true;
+	}
+	
+	return fileOutputSysMap;
 }

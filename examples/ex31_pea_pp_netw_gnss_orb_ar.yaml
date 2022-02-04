@@ -62,9 +62,9 @@ output_files:
     ionstec_directory:              ./
     ionstec_filename:               IONEX.stec
 
-    output_biasSINEX:               false
-    biasSINEX_directory:            ./
-    biasSINEX_filename:             AUS0ACSRAP_<YYYY><DDD><HH>00_01D_01D_REL.BIA
+    output_bias_sinex:              false
+    bias_sinex_directory:           ./
+    bias_sinex_filename:            AUS0ACSRAP_<YYYY><DDD><HH>00_01D_01D_REL.BIA
 
     output_clocks:                  true
     clocks_directory:               ./
@@ -91,7 +91,7 @@ processing_options:
 
     #start_epoch:               2019-07-18 00:00:00
     #end_epoch:                 2019-07-18 23:59:30
-    #max_epochs:                 50        #0 is infinite
+    max_epochs:                 20        #0 is infinite
     epoch_interval:             60          #seconds
 
     process_modes:
@@ -264,6 +264,9 @@ default_filter_parameters:
             sigma:              [5e-1, 5e-1, 5e-1, 5e-3, 5e-3, 5e-3, 5e-1]
 
     eop:
+        estimated:  true
+        sigma:      [30]
+    eop_rates:
         estimated:  true
         sigma:      [30]
 

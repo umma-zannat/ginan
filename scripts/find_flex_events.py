@@ -306,16 +306,16 @@ def find_flex_events(
                 if plot_multi:
                     for sat in dfp.columns:
                         dfp.loc[dfp[sat]<end_floor,sat] = _np.NaN
-                    dfp[cond1 & cond2].dropna(axis=1,how='all').plot(figsize=(12,10),ax=ax1)
-                    _plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")
+                    dfp[cond1 & cond2].dropna(axis=1,how='all').plot(figsize=(12,10),ax=ax1,lw=4)
+                    _plt.legend(bbox_to_anchor=(1.04,1), loc="upper left", prop={'size': 13})
                 else:
-                    dfp[cond1 & cond2][row['PRN']].plot(figsize=(12,10),ax=ax1)
+                    dfp[cond1 & cond2][row['PRN']].plot(figsize=(12,10),ax=ax1,lw=4)
 
-                ax1.set_xlabel('Time',fontsize=16)
-                ax1.set_ylabel(f'$C/N_0$ {row["Code"]} (dB-Hz)',fontsize=16)
-                ax1.tick_params(axis='x', labelsize=14)
-                ax1.tick_params(axis='y', labelsize=14)
-                ax1.set_title(f'Flex Event - {row["Station"]} -  {row["Event_type"]} - {row["Code"]} - {row["PRN"]} - {date_str}',fontsize=18)
+                ax1.set_xlabel('Time',fontsize=18)
+                ax1.set_ylabel(f'$C/N_0$ {row["Code"]} (dB-Hz)',fontsize=18)
+                ax1.tick_params(axis='x', labelsize=16)
+                ax1.tick_params(axis='y', labelsize=16)
+                ax1.set_title(f'Flex Event - {row["Station"]} -  {row["Event_type"]} - {row["Code"]} - {row["PRN"]} - {date_str}',fontsize=20)
 
                 plt_names = []
                 for name in file_nameorder:

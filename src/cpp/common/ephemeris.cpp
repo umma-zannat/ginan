@@ -6,7 +6,6 @@
 #include "common.hpp"
 #include "satSys.hpp"
 #include "algebra.hpp"
-#include "preceph.hpp"
 #include "constants.hpp"
 #include "acsConfig.hpp"
 #include "ephemeris.hpp"
@@ -15,6 +14,7 @@
 #include "corrections.hpp"
 #include "streamTrace.hpp"
 #include "eigenIncluder.hpp"
+
 
 #define 	NMAX		10
 
@@ -133,7 +133,7 @@ void eph2pos(
 	switch (sys)
 	{
 		case E_Sys::GAL:	mu = MU_GAL;	omge = OMGE_GAL;	break;
-		case E_Sys::CMP:	mu = MU_CMP;	omge = OMGE_CMP;	break;
+		case E_Sys::BDS:	mu = MU_CMP;	omge = OMGE_CMP;	break;
 		default:			mu = MU_GPS;	omge = OMGE;		break;
 	}
 
@@ -176,7 +176,7 @@ void eph2pos(
 	double cosi = cos(i);
 
 	/* beidou geo satellite (ref [9]) */
-	if	(  sys == +E_Sys::CMP 
+	if	(  sys == +E_Sys::BDS 
 		&& prn <= 5)
 	{
 		double O	= eph.OMG0
@@ -298,11 +298,11 @@ double geph2clk(
 
 	for (int i = 0; i < 2; i++)
 	{
-		t -= -geph.taun 
+		t -=  geph.taun 
 			+ geph.gamn * t;
 	}
 
-	return	- geph.taun 
+	return	  geph.taun 
 			+ geph.gamn * t;
 }
 
@@ -320,8 +320,8 @@ void geph2pos(
 
 	double t = time - geph.toe;
 
-	dts =	- geph.taun 
-			+ geph.gamn * t;
+	dts = geph.taun 
+		+ geph.gamn * t;
 
 	double x[6];
 	for (int i = 0; i < 3; i++)
@@ -413,7 +413,7 @@ void cullEphMap(
 		{
 			case E_Sys::QZS:	tmax = MAXDTOE_QZS	+ 1; break;
 			case E_Sys::GAL:	tmax = MAXDTOE_GAL	+ 1; break;
-			case E_Sys::CMP:	tmax = MAXDTOE_CMP	+ 1; break;
+			case E_Sys::BDS:	tmax = MAXDTOE_CMP	+ 1; break;
 			default: 			tmax = MAXDTOE		+ 1; break;
 		}
 		
@@ -479,6 +479,7 @@ void cullOldEphs(
  */
 template<typename EPHTYPE>
 EPHTYPE* seleph(
+	Trace&														trace,
 	GTime														time, 
 	SatSys														Sat, 
 	int															iode, 
@@ -491,7 +492,7 @@ EPHTYPE* seleph(
 	{
 		case E_Sys::QZS:	tmax = MAXDTOE_QZS	+ 1; break;
 		case E_Sys::GAL:	tmax = MAXDTOE_GAL	+ 1; break;
-		case E_Sys::CMP:	tmax = MAXDTOE_CMP	+ 1; break;
+		case E_Sys::BDS:	tmax = MAXDTOE_CMP	+ 1; break;
 		case E_Sys::GLO:	tmax = MAXDTOE_GLO	+ 1; break;
 		case E_Sys::SBS:	tmax = MAXDTOE_SBS	+ 1; break;
 		default: 			tmax = MAXDTOE		+ 1; break;
@@ -511,14 +512,19 @@ EPHTYPE* seleph(
 			return &eph;
 		}
 	
-        tracepdeex(5, std::cout, "no broadcast ephemeris: %s sat=%s with iode=%3d\n", time.to_string(0).c_str(), Sat.id().c_str(), iode);
+        tracepdeex(5, trace, "no broadcast ephemeris: %s sat=%s with iode=%3d\n", time.to_string(0).c_str(), Sat.id().c_str(), iode);
 		return nullptr;
 	}
 	
 	auto it = satEphMap.lower_bound(time + tmax);
 	if (it == satEphMap.end())
 	{
-        tracepdeex(5, std::cout, "no broadcast ephemeris: %s sat=%s within MAXDTOE\n", time.to_string(0).c_str(), Sat.id().c_str());
+        tracepdeex(5, trace, "no broadcast ephemeris: %s sat=%s within MAXDTOE+ ", time.to_string(0).c_str(), Sat.id().c_str());
+    	if (satEphMap.empty() == false)
+    	{
+    		tracepdeex(5, trace, " last is %s", satEphMap.begin()->first.to_string(0).c_str());
+    	}
+    	tracepdeex(5, trace, "\n");
 		return nullptr;
 	}
 	
@@ -526,7 +532,7 @@ EPHTYPE* seleph(
 	
 	if (fabs(eph.toe - time) > tmax)
 	{
-        tracepdeex(5, std::cout, "no broadcast ephemeris: %s sat=%s within MAXDTOE\n", time.to_string(0).c_str(), Sat.id().c_str());
+        tracepdeex(5, trace, "no broadcast ephemeris: %s sat=%s within MAXDTOE-\n", time.to_string(0).c_str(), Sat.id().c_str());
 		return nullptr;
 	}
 	
@@ -535,32 +541,35 @@ EPHTYPE* seleph(
 
 template<>
 Eph* seleph<Eph>(
+	Trace&	trace,
 	GTime	time, 
 	SatSys	Sat, 
 	int		iode, 
 	nav_t&	nav)
 {
-	return seleph(time, Sat, iode, nav.ephMap);
+	return seleph(trace, time, Sat, iode, nav.ephMap);
 }
 
 template<>
 Geph* seleph<Geph>(
+	Trace&	trace,
 	GTime	time, 
 	SatSys	Sat, 
 	int		iode, 
 	nav_t&	nav)
 {
-	return seleph(time, Sat, iode, nav.gephMap);
+	return seleph(trace, time, Sat, iode, nav.gephMap);
 }
 
 template<>
 Seph* seleph<Seph>(
+	Trace&	trace,
 	GTime	time, 
 	SatSys	Sat, 
 	int		iode, 
 	nav_t&	nav)
 {
-	return seleph(time, Sat, -1, nav.sephMap);
+	return seleph(trace, time, Sat, -1, nav.sephMap);
 }
 
 /* satellite clock with broadcast ephemeris ----------------------------------*/
@@ -582,7 +591,7 @@ int ephclk(
 		case E_Sys::GPS:
 		case E_Sys::GAL:
 		case E_Sys::QZS:
-		case E_Sys::CMP:	{	if (!obs.satNav_ptr->eph_ptr)	return 0;	dts = eph2clk (time, *obs.satNav_ptr->eph_ptr);		break;	}
+		case E_Sys::BDS:	{	if (!obs.satNav_ptr->eph_ptr)	return 0;	dts = eph2clk (time, *obs.satNav_ptr->eph_ptr);		break;	}
 		case E_Sys::GLO:	{	if (!obs.satNav_ptr->geph_ptr)	return 0;	dts = geph2clk(time, *obs.satNav_ptr->geph_ptr);	break;	}
 		case E_Sys::SBS:	{	if (!obs.satNav_ptr->seph_ptr)	return 0;	dts = seph2clk(time, *obs.satNav_ptr->seph_ptr);	break;	}
 		default:
@@ -598,6 +607,7 @@ int ephclk(
 
 /* satellite position and clock by broadcast ephemeris -----------------------*/
 bool ephpos(
+	Trace&		trace,
 	GTime		time,
 	GTime		teph,
 	SatSys		Sat,
@@ -623,9 +633,9 @@ bool ephpos(
 	if	(  sys == +E_Sys::GPS
 		|| sys == +E_Sys::GAL
 		|| sys == +E_Sys::QZS
-		|| sys == +E_Sys::CMP)
+		|| sys == +E_Sys::BDS)
 	{
-		Eph* eph_ptr	= seleph<Eph>(teph, Sat, iode, nav);
+		Eph* eph_ptr	= seleph<Eph>(trace, teph, Sat, iode, nav);
 
 		if (eph_ptr == nullptr)
 			return false;
@@ -640,7 +650,7 @@ bool ephpos(
 	}
 	else if (sys == +E_Sys::GLO)
 	{
-		Geph* geph_ptr	= seleph<Geph>(teph, Sat, iode, nav);
+		Geph* geph_ptr	= seleph<Geph>(trace, teph, Sat, iode, nav);
 
 		if (geph_ptr == nullptr)
 			return false;
@@ -655,7 +665,7 @@ bool ephpos(
 	}
 	else if (sys == +E_Sys::SBS)
 	{
-		Seph* seph_ptr	= seleph<Seph>(teph, Sat, -1, nav);
+		Seph* seph_ptr	= seleph<Seph>(trace, teph, Sat, -1, nav);
 
 		if (seph_ptr == nullptr)
 			return 0;
@@ -686,6 +696,7 @@ bool ephpos(
 	int			iode)
 {
 	return ephpos(
+		trace,
 		time, 
 		teph,
 		obs.Sat, 
@@ -875,7 +886,7 @@ bool satpos_ssr(
 	}
 	
 	/* satellite postion and clock by broadcast ephemeris */
-	bool pass = ephpos(time, teph, Sat, rSat, satVel, dtSat, ephVar, svh, obsIode, nav, iodEph);
+	bool pass = ephpos(trace, time, teph, Sat, rSat, satVel, dtSat, ephVar, svh, obsIode, nav, iodEph);
 	
 	if (pass == false)
 	{
@@ -889,9 +900,9 @@ bool satpos_ssr(
 	if	(  sys == +E_Sys::GPS
 		|| sys == +E_Sys::GAL
 		|| sys == +E_Sys::QZS
-		|| sys == +E_Sys::CMP)
+		|| sys == +E_Sys::BDS)
 	{
-		Eph* eph = seleph<Eph>(teph, Sat, iodEph, nav);
+		Eph* eph = seleph<Eph>(trace, teph, Sat, iodEph, nav);
 
 		if (eph == nullptr)
 		{
@@ -907,7 +918,6 @@ bool satpos_ssr(
 
 		dtSat[1] 	= eph->f1
 					+ eph->f2 * tk * 2;
-
 	}
 
 	Matrix3d rac2ecefMat = rac2ecef(rSat, satVel);
@@ -969,6 +979,30 @@ bool satpos_ssr(
 		applyRelativity);
 }
 
+bool kalmanPos(
+	Trace&		trace,
+	GTime		time,
+	SatSys		Sat,
+	Obs&		obs,
+	KFState*	kfState_ptr)
+{
+	if (kfState_ptr == nullptr)
+	{
+		return false;
+	}
+	
+	auto& kfState = *kfState_ptr;
+	
+	bool pass = true;
+	
+	for (short int i = 0; i < 3; i++)
+	{
+		pass &= kfState.getKFValue(KFKey{.type = KF::SAT_POS,		.Sat = Sat,	.num = i},	obs.rSat[i]);
+		pass &= kfState.getKFValue(KFKey{.type = KF::SAT_POS_RATE,	.Sat = Sat, .num = i},	obs.satVel[i]);
+	}
+	
+	return pass;
+}
 
 /* satellite position and clock ------------------------------------------------
 * compute satellite position, velocity and clock
@@ -984,7 +1018,8 @@ int satpos(
 	E_OffsetType	offsetType,			///< Type of antenna offset to apply
 	nav_t&			nav,				///< navigation data
 	PcoMapType* 	pcoMap_ptr,			///< Optional pointer to phase center offset data (depending on offsetType)
-	bool			applyRelativity)	///< Apply relativity
+	bool			applyRelativity,	///< Apply relativity
+	KFState*		kfState_ptr)		///< Optional pointer to a kalman filter to take values from
 {
 	tracepde(4, trace, "%s: time=%s sat=%s ephType=%d offsetType=%d\n", __FUNCTION__, time.to_string(3).c_str(), obs.Sat.id().c_str(), ephType, offsetType);
 
@@ -995,17 +1030,22 @@ int satpos(
 	{
 		case E_Ephemeris::BROADCAST:	returnValue = ephpos		(trace, time, teph,		obs, 	nav,	ANY_IODE);			break;
 		case E_Ephemeris::SSR:			returnValue = satpos_ssr	(trace, time, teph,		obs, 	nav,	applyRelativity);	break;
-		case E_Ephemeris::PRECISE:		returnValue = peph2pos		(trace, time, obs.Sat, 	obs, 	nav,	applyRelativity);	break;
+		case E_Ephemeris::PRECISE:		returnValue = peph2pos		(trace, time, obs.Sat,	obs, 	nav,	applyRelativity);	break;
+		case E_Ephemeris::KALMAN:		returnValue = kalmanPos		(trace, time, obs.Sat,	obs,	kfState_ptr);				break;
 		default:						return false;
 	}
 	
 	double antennaScalar = 0;
 	
+	if 	(ephType == +E_Ephemeris::SSR											&& acsConfig.ssr_input_antenna_offset == +E_OffsetType::UNSPECIFIED)
+		BOOST_LOG_TRIVIAL(error) << "Error: ssr_input_antenna_offset has not been set in config.";
+
 	if	(ephType == +E_Ephemeris::SSR		&& offsetType == +E_OffsetType::APC	&& acsConfig.ssr_input_antenna_offset == +E_OffsetType::COM)		antennaScalar = +1;
 	if	(ephType == +E_Ephemeris::SSR		&& offsetType == +E_OffsetType::COM	&& acsConfig.ssr_input_antenna_offset == +E_OffsetType::APC)		antennaScalar = -1;
 	if	(ephType == +E_Ephemeris::PRECISE	&& offsetType == +E_OffsetType::APC)																	antennaScalar = +1;
+	if	(ephType == +E_Ephemeris::KALMAN	&& offsetType == +E_OffsetType::APC)																	antennaScalar = +1;
 	if	(ephType == +E_Ephemeris::BROADCAST	&& offsetType == +E_OffsetType::COM)																	antennaScalar = -1;
-	
+		
 	/* satellite antenna offset correction */
 	if	(  antennaScalar
 		&& pcoMap_ptr != nullptr)

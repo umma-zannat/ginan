@@ -1,14 +1,17 @@
 
+// #pragma GCC optimize ("O0")
+
+#include "eigenIncluder.hpp"
 #include "observations.hpp"
 #include "streamTrace.hpp"
 #include "linearCombo.hpp"
 #include "corrections.hpp"
 #include "navigation.hpp"
+#include "ephemeris.hpp"
 #include "testUtils.hpp"
 #include "acsConfig.hpp"
 #include "constants.hpp"
 #include "satStat.hpp"
-#include "preceph.hpp"
 #include "station.hpp"
 #include "algebra.hpp"
 #include "antenna.hpp"
@@ -20,7 +23,6 @@
 #include "vmf3.h"
 #include "trop.h"
 
-#include "eigenIncluder.hpp"
 
 
 /* phase and code residuals --------------------------------------------------*/
@@ -143,7 +145,7 @@ int resomc(
 		else
 		{
 			/* tropospheric model gpt2+vmf1 */
-			zhd = tropztd(gptg, pos, mjd, satStat.el, 0, mf, &zwd);
+			zhd = tropztd(gptg, pos, mjd, satStat.el, 0, mf, zwd);
 		}
 
 		double dtrp	= mf[0] * zhd
@@ -177,16 +179,6 @@ int resomc(
 				{
 					tracepde(lv, trace, " %.6f %s  rec pco%d (enu)       = %14.4f %14.4f %14.4f\n", mjd, id, ft, pco_r[0],	pco_r[1],	pco_r[2]);
 					tracepde(lv, trace, " %.6f %s  rec pco%d             = %14.4f %14.4f %14.4f\n", mjd, id, ft, dr2[0],	dr2[1],		dr2[2]);
-					if (ft == F1)
-					{
-						TestStack::testMat("rec pco1 (enu)",	pco_r,	1e-3);
-						TestStack::testMat("rec pco1",			dr2,	1e-3);
-					}
-					else
-					{
-						TestStack::testMat("rec pco2 (enu)",	pco_r,	1e-3);
-						TestStack::testMat("rec pco2",			dr2,	1e-3);
-					}
 				}
 
 				/* get rec position and geometric distance for each frequency */
@@ -240,10 +232,6 @@ int resomc(
 			tracepde(lv, trace, " %.6f %s  recpos+tide          = %14.4f %14.4f %14.4f\n",  mjd, id, rRec[0], rRec[1], rRec[2]);
 			tracepde(lv, trace, " %.6f %s  satpos+pco           = %14.4f %14.4f %14.4f\n",	mjd, id, obs.rSat[0], obs.rSat[1], obs.rSat[2]);
 			tracepde(lv, trace, " %.6f %s  dist                 = %14.4f\n",				mjd, id, r);
-											TestStack::testMat("tide", 			dTide,		1e-3);
-											TestStack::testMat("recpos+tide",	rRec,		1e-3);
-											TestStack::testMat("satpos+pco",	obs.rSat,	1e-3);
-											TestStack::testMat("dist", 			r,			1e-3);
 		}
 		else
 		{
@@ -255,14 +243,6 @@ int resomc(
 			tracepde(lv, trace, " %.6f %s  satpos+pco           = %14.4f %14.4f %14.4f\n", 	mjd, id, obs.rSat[0], obs.rSat[1], obs.rSat[2]);
 			tracepde(lv, trace, " %.6f %s  dist1                = %14.4f\n",	         	mjd, id, r2[F1]);
 			tracepde(lv, trace, " %.6f %s  dist2                = %14.4f\n",	         	mjd, id, r2[F2]);
-											TestStack::testMat("tide",					dTide,			1e-3);
-											TestStack::testMat("delta xyz",				dr1,			1e-3);
-											TestStack::testMat("enu",					opt.antdel,		1e-3);
-											TestStack::testMat("recpos+tide+enu+pco1",	rr2[F1], 		1e-3);
-											TestStack::testMat("recpos+tide+enu+pco2",	rr2[F2], 		1e-3);
-											TestStack::testMat("satpos+pco",			obs.rSat,		1e-3);
-											TestStack::testMat("dist1,",				r2[F1], 		1e-3);
-											TestStack::testMat("dist2",					r2[F2], 		1e-3);
 		}
 
 		tracepde(lv, trace, " %.6f %s  satpcv               = %14.4f %14.4f\n",	        mjd, id, dAntSat[F1], dAntSat[F2]);
@@ -275,18 +255,6 @@ int resomc(
 		tracepde(lv, trace, " %.6f %s  trop                 = %14.4f\n",	         	mjd, id, dtrp);
 
 		tracepde(lv, trace, " %.6f %s  phw(cycle)           = %14.4f \n",	         	mjd, id, satStat.phw);
-
-											TestStack::testMat("satpcv",				dAntSat[F1],			1e-3);
-											TestStack::testMat("recpcv",				dAntRec[F1],			1e-3);
-											TestStack::testMat("az",					obs.satStat_ptr->az,	1e-3);
-											TestStack::testMat("el",					obs.satStat_ptr->el,	1e-3);
-											TestStack::testMat("nadir",					nadir,					1e-3);
-											TestStack::testMat("trop zenith dry (m)",	zhd,					1e-3);
-											TestStack::testMat("trop dry mf",			mf[0],					1e-3);
-											TestStack::testMat("trop zenith wet (m)",	zwd,					1e-3);
-											TestStack::testMat("trop wet mf",			mf[1],					1e-3);
-											TestStack::testMat("trop", 					dtrp,					1e-3);
-											TestStack::testMat("phw(cycle)",			satStat.phw,			1e-3);
 
 		/* corrected phase and code measurements */
 
@@ -355,11 +323,6 @@ int resomc(
 			obs.satStat_ptr->sigStatMap[ifType].slip.any	= obs.satStat_ptr->sigStatMap[F1].slip.any
 															| obs.satStat_ptr->sigStatMap[ft].slip.any;
 		}
-		TestStack::testMat("dAntRec",		dAntRec[F1]);
-		TestStack::testMat("dAntSat",		dAntSat[F1]);
-		TestStack::testMat("satStat.phw",	&satStat.phw);
-		TestStack::testMat("c1",			&c1);
-		TestStack::testInt("cjump",			cj.msJump);
 
 		/* dual-frequency are required, omit first epoch with single freq */
 		E_FType ft = (E_FType) firstFT;
@@ -404,21 +367,6 @@ int resomc(
 		tracepde(lv, trace, " %.6f %s  OMC Pi(m)            = %14.4f %14.4f %14.4f\n",	mjd, id, obs.Sigs[F1].P_corr_m - expected, obs.Sigs[ft].P_corr_m - expected, obs.Sigs[FTYPE_IF12].P_corr_m - expected);
 		tracepde(lv, trace, " %.6f %s  LOS                  = %14.4f %14.4f %14.4f\n",	mjd, id, e[0], e[1], e[2]);
 
-												TestStack::testMat("L(cycle)(F1)",				obs.Sigs[F1].L,					1e-3);
-												TestStack::testMat("L(cycle)(F2)",				obs.Sigs[F2].L,					1e-3);
-												TestStack::testMat("P(m)(F1)",					obs.Sigs[F1].P,					1e-3);
-												TestStack::testMat("P(m)(F2)",					obs.Sigs[F2].P,					1e-3);
-												TestStack::testMat("relativity on clock",		dtrel,							1e-3);
-												TestStack::testMat("relativity (shapiro)",		dtrel2,							1e-3);
-												TestStack::testMat("Calclated Geo (m)",			expected,						1e-3);
-												TestStack::testMat("OMC Li(m)(F1)",				obs.Sigs[F1].L_corr_m, 			1e-3);
-												TestStack::testMat("OMC Li(m)(F2)",				obs.Sigs[F2].L_corr_m, 			1e-3);
-												TestStack::testMat("OMC Li(m)(FTYPE_LC12)",		obs.Sigs[FTYPE_IF12].L_corr_m, 	1e-3);
-												TestStack::testMat("OMC Pi(m)(F1)",				obs.Sigs[F1].P_corr_m,  		1e-3);
-												TestStack::testMat("OMC Pi(m)(F2)",				obs.Sigs[F2].P_corr_m,  		1e-3);
-												TestStack::testMat("OMC Pi(m)(FTYPE_LC12)",		obs.Sigs[FTYPE_IF12].P_corr_m,  1e-3);
-												TestStack::testMat("LOS",						e,								1e-3);
-
 		//do residuals for all frequencies, plain and linear combinations.
 		for (auto& [ft, sig] : obs.Sigs)
 		{
@@ -430,15 +378,6 @@ int resomc(
 
 			sig.phasRes	= sig.L_corr_m - expected;
 			sig.codeRes	= sig.P_corr_m - expected;
-
-												TestStack::testMat("sig.phasRes",	sig.phasRes);
-												TestStack::testMat("sig.codeRes",	sig.codeRes);
-												TestStack::testMat("L_corr",		sig.L_corr_m);
-												TestStack::testMat("P_corr",		sig.P_corr_m);
-												TestStack::testMat("L",				sig.L);
-												TestStack::testMat("P",				sig.P);
-												TestStack::testStr("Code",			sig.code._to_string());
-												TestStack::testMat("expected",		expected);
 
 			sig.vsig	= true;
 			nv++;
@@ -470,9 +409,6 @@ void pppomc(
 
 	/* satellite positions and clocks */
 	satposs(trace, time, obsList, nav, acsConfig.ppp_ephemeris, E_OffsetType::APC);
-
-																					TestStack::testMat("sat0", obsList.front().rSat);
-																					TestStack::testMat("dts0", obsList.front().dtSat);
 
 	/* earth tides correction */
 	Vector3d dTide = Vector3d::Zero();

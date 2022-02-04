@@ -1,3 +1,6 @@
+
+// #pragma GCC optimize ("O0")
+
 /** \file
 * ppp.c : precise point positioning
 *
@@ -25,23 +28,27 @@
 */
 
 
+//#pragma GCC optimize ("O0")
+
 #include <boost/log/trivial.hpp>
 
 #include <vector>
 
 using std::vector;
 
+#include "eigenIncluder.hpp"
 #include "observations.hpp"
 #include "streamTrace.hpp"
 #include "linearCombo.hpp"
 #include "corrections.hpp"
 #include "navigation.hpp"
+#include "instrument.hpp"
 #include "testUtils.hpp"
+#include "ephemeris.hpp"
 #include "acsConfig.hpp"
 #include "biasSINEX.hpp"
 #include "constants.hpp"
 #include "satStat.hpp"
-#include "preceph.hpp"
 #include "station.hpp"
 #include "algebra.hpp"
 #include "antenna.hpp"
@@ -54,7 +61,6 @@ using std::vector;
 #include "vmf3.h"
 #include "trop.h"
 
-#include "eigenIncluder.hpp"
 
 #define VAR_IONO    	SQR(60.0)       // init variance iono-delay
 #define VAR_IONEX   	SQR(0.0)
@@ -218,6 +224,10 @@ int model_phw(
 	Vector3d ds = exs - ek * ek.dot(exs) - eks;
 	Vector3d dr = exr - ek * ek.dot(exr) + ekr;
 	double cosp = ds.dot(dr) / ds.norm() / dr.norm();
+	if (isfinite(cosp) == false)
+	{
+		return 0;
+	}
 	if      (cosp < -1) cosp = -1;
 	else if (cosp > +1) cosp = +1;
 	double ph = acos(cosp) / 2 / PI;
@@ -334,7 +344,8 @@ void corr_meas(
 	ClockJump&	cj,			///< Clock jump
 	Station&	rec)		///< Receiver
 {
-	TestStack ts(__FUNCTION__);
+	TestStack	ts			(__FUNCTION__);
+	Instrument	instrument	(__FUNCTION__);
 
 	Sig& sig = obs.Sigs[ft];
 
@@ -360,7 +371,7 @@ void corr_meas(
 	biaopt.COD_biases = true;
 	biaopt.PHS_biases = true;	
 	
-	inpt_hard_bias(trace, obs, sig.code, bias, bvar, biaopt);
+	inpt_hard_bias(trace, obs.time, obs.Sat.id(), obs.Sat, sig.code, bias, bvar, biaopt, obs.satNav_ptr);
 
 	if (acsConfig.ssrOpts.calculate_ssr)
 	{
@@ -447,7 +458,6 @@ double trop_model_prec(
 
 	/* zenith hydrostatic delay */
 	double zhd = tropacs(pos, azel, map);
-
 	double zwd = tropStates[0] - zhd;
 	
 	if	( acsConfig.process_user
@@ -535,13 +545,11 @@ int model_iono(
 
 			return 1;
 		}
-		case E_IonoMode::OFF:
+		default:
 		{
 			return 0;
 		}
 	}
-
-	return 0;
 }
 
 void pppCorrections(
@@ -800,20 +808,21 @@ void outputPPPSolution(
 	Vector3d diffEnu;
 	diffEnu = Vector3d::Map(diffEnuArr, diffEnu.rows());
 
-	std::ofstream fout(acsConfig.ppp_sol_filename, std::ios::out | std::ios::app);
+	std::ofstream fout(rec.solutFilename, std::ios::out | std::ios::app);
 	if (!fout)
 	{
 		BOOST_LOG_TRIVIAL(error)
-		<< "Could not open trace file for PPP solution at " << acsConfig.ppp_sol_filename;
+		<< "Could not open trace file for PPP solution at " << rec.solutFilename;
 	}
 	else
 	{
-		fout << epoch << " ";
+		fout << rec.rtk.sol.time.to_string(2) << " ";
 		fout << rec.id << " ";
-		fout << snxPos.transpose() << " ";
-		fout << estPos.transpose() << " ";
-		fout << diffEcef.transpose() << " ";
-		fout << diffEnu.transpose() << " ";
+		fout << std::fixed << std::setprecision(4);
+		fout << snxPos.transpose() << "  ";
+		fout << estPos.transpose() << "  ";
+		fout << diffEcef.transpose() << "  ";
+		fout << diffEnu.transpose() << "  ";
 		fout << std::endl;
 	}
 }
@@ -835,6 +844,10 @@ void selectAprioriSource(
 	{
 		rec.aprioriPos		= rec.snx.pos;
 		rec.primaryApriori	= rec.snx.primary;
+		for (int i = 0; i < 3; i++)
+		{
+			rec.aprioriTime[i] = rec.snx.start[i];
+		}
 		
 		Vector3d delta = rec.snx.pos - rec.rtk.sol.sppRRec;
 		
@@ -851,7 +864,11 @@ void selectAprioriSource(
 	}
 	else
 	{
+		double ep[6];
+		time2epoch(rec.rtk.sol.time, ep);
+		epoch2yds(ep, rec.aprioriTime);
 		rec.aprioriPos		= rec.rtk.sol.sppRRec;
+		
 		sppUsed				= true;
 	}
 }
@@ -882,19 +899,18 @@ bool incrementPhaseSignalError(
 {
 	map<string, void*>& metaDataMap = kfMeas.metaDataMaps[index];
 
-	unsigned int* phaseRejectCount_ptr = (unsigned int*) metaDataMap["phaseRejectCount_ptr"];
+	unsigned int* PhaseRejectCount_ptr = (unsigned int*) metaDataMap["PhaseRejectCount_ptr"];
 
-	if (phaseRejectCount_ptr == nullptr)
+	if (PhaseRejectCount_ptr == nullptr)
 	{
 		return true;
 	}
 
-	unsigned int&	phaseRejectCount	= *phaseRejectCount_ptr;
+	unsigned int&	phaseRejectCount	= *PhaseRejectCount_ptr;
 
 	//increment counter, and clear the pointer so it cant be reset to zero in subsequent operations (because this is a failure)
 	phaseRejectCount++;
-	metaDataMap["phaseRejectCount_ptr"] = nullptr;
-
+	metaDataMap["PhaseRejectCount_ptr"] = nullptr;
 	
 	return true;
 }
@@ -933,14 +949,14 @@ bool resetPhaseSignalError(
 	map<string, void*>& metaDataMap = kfMeas.metaDataMaps[index];
 
 	//this will have been set to null if there was an error after adding the measurement to the list
-	unsigned int* phaseRejectCount_ptr = (unsigned int*) metaDataMap["phaseRejectCount_ptr"];
+	unsigned int* PhaseRejectCount_ptr = (unsigned int*) metaDataMap["PhaseRejectCount_ptr"];
 
-	if (phaseRejectCount_ptr == nullptr)
+	if (PhaseRejectCount_ptr == nullptr)
 	{
 		return true;
 	}
 
-	unsigned int&	phaseRejectCount	= *phaseRejectCount_ptr;
+	unsigned int&	phaseRejectCount	= *PhaseRejectCount_ptr;
 
 	phaseRejectCount = 0;
 
@@ -953,14 +969,14 @@ bool resetPhaseSignalOutage(
 {
 	map<string, void*>& metaDataMap = kfMeas.metaDataMaps[index];
 
-	unsigned int* phaseOutageCount_ptr = (unsigned int*) metaDataMap["phaseOutageCount_ptr"];
+	unsigned int* PhaseOutageCount_ptr = (unsigned int*) metaDataMap["PhaseOutageCount_ptr"];
 
-	if (phaseOutageCount_ptr == nullptr)
+	if (PhaseOutageCount_ptr == nullptr)
 	{
 		return true;
 	}
 
-	unsigned int&	phaseOutageCount	= *phaseOutageCount_ptr;
+	unsigned int&	phaseOutageCount	= *PhaseOutageCount_ptr;
 
 	phaseOutageCount = 0;
 

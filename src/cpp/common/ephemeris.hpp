@@ -17,7 +17,18 @@ using std::map;
 #include "enums.h"
 
 
+#include <iostream>
+#include <string>
+#include <list>
 
+using std::string;
+using std::list;
+
+
+//forward declarations
+struct nav_t;
+struct Obs;
+struct Peph;
 
 /** GPS/QZS/GAL broadcast ephemeris
  */
@@ -184,6 +195,7 @@ struct nav_t;
 
 template<typename EPHTYPE>
 EPHTYPE* seleph(
+	Trace&	trace,
 	GTime	time, 
 	SatSys	Sat, 
 	int		iode, 
@@ -191,6 +203,7 @@ EPHTYPE* seleph(
 
 template<>
 Eph* seleph<Eph>(
+	Trace&	trace,
 	GTime	time, 
 	SatSys	Sat, 
 	int		iode, 
@@ -198,6 +211,7 @@ Eph* seleph<Eph>(
 
 template<>
 Geph* seleph<Geph>(
+	Trace&	trace,
 	GTime	time, 
 	SatSys	Sat, 
 	int		iode, 
@@ -205,6 +219,7 @@ Geph* seleph<Geph>(
 
 template<>
 Seph* seleph<Seph>(
+	Trace&	trace,
 	GTime	time, 
 	SatSys	Sat, 
 	int		iode, 
@@ -228,6 +243,8 @@ void cullOldSSRs(
 	GTime	time);
 
 
+struct KFState;
+
 int satpos(
 	Trace&			trace,
 	GTime			time,
@@ -237,7 +254,8 @@ int satpos(
 	E_OffsetType	offsetType,
 	nav_t&			nav,
 	PcoMapType* 	pcoMap_ptr,
-	bool			applyRelativity = true);
+	bool			applyRelativity	= true,
+	KFState*		kfState_ptr		= nullptr);
 
 void satposs(
 	Trace&			trace,
@@ -249,5 +267,43 @@ void satposs(
 	bool			applyRelativity = true,
 	bool			applyFlightTime = true);
 
+int readdcb(
+	string	file, 
+	nav_t*	nav);
+
+bool peph2pos(
+	Trace&		trace,
+	GTime		time,
+	SatSys&		Sat,
+	Obs&		obs,
+	nav_t& 		nav,
+	bool		applyRelativity	= true);
+
+void readSp3ToNav(
+	string&	file, 
+	nav_t*	nav, 
+	int		opt);
+
+bool readsp3(
+	std::istream&	fileStream, 
+	list<Peph>&		pephList,	
+	int				opt,		
+	bool&			isUTC,
+	double*			bfact);
+
+double	interppol(
+	const double*	x,
+	double*			y,
+	int				n);
+
+void	orb2sp3(
+	nav_t& nav);
+
+int		pephclk(
+	GTime	time,
+	string	id,
+	nav_t&	nav,
+	double&	dtSat,
+	double*	varc = nullptr);
 
 #endif

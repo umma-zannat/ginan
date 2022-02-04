@@ -70,8 +70,7 @@ else
     end if
     end do
     if (.not. found) then
-        call new_prn_override(PRN)
-        i = prn_override_count
+        i = new_prn_override(PRN)
         yml_prn_overrides(i)%integ%emp_init_values(1:EMPNUM) = EMP_0_coef(1:EMPNUM)
         yml_prn_overrides(i)%integ%emp_parameters_used = EMPNUM
     end if

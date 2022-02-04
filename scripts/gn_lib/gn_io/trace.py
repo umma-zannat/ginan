@@ -53,42 +53,90 @@ def _read_trace_residuals(path_or_bytes,it_max_only=True):
     it_max_ind=df[['TIME','It']].groupby(['TIME']).max().reset_index().values.tolist()
     return df.set_index(['TIME','It']).loc[it_max_ind].reset_index().set_index(['TIME','SITE','TYPE','SAT'])
 
-def diff2msg(diff,tol):
+
+def _valvar2diffstd(valvar1,valvar2,trace=True,std_coeff=1):
+    df = _pd.concat([valvar1,valvar2],axis=0,keys=['valvar1','valvar2']).unstack(0) #fastest\
+    df_nd = df.values
+    diff = df_nd[:,0] - df_nd[:,1]
+    nan_mask = ~_np.isnan(diff)
+
+    diff = diff[nan_mask]
+    std = std_coeff*_np.sqrt((df_nd[:,3] + df_nd[:,2])[nan_mask])
+    df_combo = _pd.DataFrame(_np.vstack([diff,std]).T,columns=['DIFF','STD'],index=df.index[nan_mask])
+
+    if trace:
+        sats = df.index.get_level_values(3)
+        sats_mask = ~sats.isna()
+        sats_df = sats[sats_mask].unique()
+        
+        df_combo.attrs['SAT_MASK'] = sats_mask[nan_mask]
+        sats_common = sats[sats_mask & nan_mask]#.unique()
+        df_combo.attrs['EXTRA_SATS'] = sats_df[~sats_df.isin(sats_common)].to_list() # is [] if none
+    return df_combo
+
+def diff2msg(diff, tol = None,from_valvar=True):
     _pd.set_option("display.max_colwidth", 10000)
-    count_total = (~_np.isnan(diff.values)).sum(axis=0)
-    mask2d_over_threshold = (_np.abs(diff.values) >=tol)
+
+    if from_valvar: #if from_valvar else diff.values
+        diff_df = diff.DIFF
+        std_df  = diff.STD
+        std_vals = std_df.values
+    else:
+        diff_df = diff
+        assert tol is not None
+
+    count_total = (~_np.isnan(diff_df.values)).sum(axis=0)
+    mask2d_over_threshold = (_np.abs(diff_df) > (std_vals if tol is None else tol))
+
     diff_count = mask2d_over_threshold.sum(axis=0)
+    
     mask = diff_count.astype(bool)
     if mask.sum() == 0:
         return None
+    mask_some_vals = mask[mask.values].index
+    # print(diff_count[mask])
 
-    diff_over = diff[mask2d_over_threshold]
-    msg =  (diff_count[mask].astype(str).astype(object) + '/' + count_total[mask].astype(str) + ' (' + (diff_count[mask]/count_total[mask] * 100).round(2).astype(str) +'%)'
-    + ' | Mean: ' + diff_over.loc(axis=1)[mask].mean(axis=0).round(4).astype(str).str.rjust(7) 
-    + '|STD:' + diff_over.std(axis=0).round(4).astype(str).str.rjust(7)
-    + '|MIN:' + diff_over.min(axis=0).round(4).astype(str).str.rjust(7)
-    + '|MAX:' + diff_over.max(axis=0).round(4).astype(str).str.rjust(7))
-    return _pd.Series(data = msg, index = diff.columns.values[mask])
+    diff_over = diff_df[mask2d_over_threshold][mask_some_vals]
+    idx_max = diff_over.idxmax()
+    diff_max = _pd.Series(_np.diag(diff_over.loc[idx_max.values].values),index=idx_max.index)
+    idx_min = diff_over.idxmin()
+    diff_min = _pd.Series(_np.diag(diff_over.loc[idx_min.values].values),index=idx_min.index)
 
-def _compare_gnss_states(states1,states2,tol=0.2):
-    sats1 = states1.index.get_level_values(3)
-    sats2 = states2.index.get_level_values(3)
+    if from_valvar:
+        std_over  =  std_df[mask2d_over_threshold][mask_some_vals]
+        std_max = _pd.Series(_np.diag(std_over.loc[idx_max.values].values),index=idx_max.index)
+        std_min = _pd.Series(_np.diag(std_over.loc[idx_min.values].values),index=idx_min.index)
+    # return idx_min
+    msg = _pd.DataFrame()
+    msg['RATIO'] =  (diff_count[mask].astype(str).astype(object) + '/' + count_total[mask].astype(str) 
+    + ('(' + (diff_count[mask]/count_total[mask] * 100).round(2).astype(str)).str.ljust(5,fillchar='0') +'%)')
 
-    extra_svs = list(set(sats1).symmetric_difference(sats2))
-    # states differencing requires pandas>=1.2.0
-    p_bias_diff = states1.EST[~sats1.isna()].droplevel([1,2,4]).unstack(1) - states2.EST[~sats2.isna()].droplevel([1,2,4]).unstack(1)
-    return extra_svs, diff2msg(p_bias_diff,tol)
+    msg['DIFF/MIN_DIFF'] = (diff_min.round(4).astype(str)
+    +('±' + std_min.round(4).astype(str).str.ljust(6,fillchar='0') if from_valvar else '') + ' @' + (idx_min.values + _J2000_ORIGIN).astype(str))
 
-def _compare_postrop_states(states1,states2,tol=0.2):
-    pos_trop_diff = states1.EST.droplevel('SAT').loc[:,:,['REC_POS','TROP']].unstack(['SITE','TYPE','NUM']) - states2.EST.droplevel('SAT').loc[:,:,['REC_POS','TROP']].unstack(['SITE','TYPE','NUM'])
+    if (diff_count[mask]>1).sum()>0:
+        msg['MAX_DIFF'] = (diff_max.round(4).astype(str).str.rjust(7) 
+        +('±' + std_max.round(4).astype(str).str.ljust(6,fillchar='0') if from_valvar else '') + ' @' + (idx_max.values + _J2000_ORIGIN).astype(str)) * (diff_count[mask]>1)
+        
+        msg['MEAN_DIFF'] = (diff_over.mean(axis=0).round(4).astype(str)
+        +'±' + diff_over.std(axis=0).round(4).astype(str).str.ljust(6,fillchar='0'))* (diff_count[mask]>1)
+
+    return msg
+
+def _compare_gnss_states(diffstd,tol=None):
+    p_bias_diff = diffstd[diffstd.attrs['SAT_MASK']].droplevel([1,2,4]).unstack(1)
+    return diff2msg(p_bias_diff,tol)
+
+def _compare_postrop_states(diffstd,tol=None):
+    pos_trop_diff = diffstd.droplevel(level = 'SAT',axis=0)[~diffstd.attrs['SAT_MASK']].loc[:,:,['REC_POS','TROP']].unstack(['SITE','TYPE','NUM'])
     return diff2msg(pos_trop_diff,tol=tol)
 
-def _compare_recsysbias_states(states1,states2,tol=0.2):
-    recsysbias_diff = states1.EST.droplevel('SAT').loc[:,:,'REC_SYS_BIAS'].unstack(['SITE','NUM']) - states2.EST.droplevel('SAT').loc[:,:,'REC_SYS_BIAS'].unstack(['SITE','NUM'])
+def _compare_recsysbias_states(diffstd,tol=None):
+    recsysbias_diff = diffstd[~diffstd.attrs['SAT_MASK']].droplevel('SAT').loc[:,:,'REC_CLOCK'].unstack(['SITE','NUM'])
     return diff2msg(recsysbias_diff,tol=tol)
 
-def _compare_postfit_residuals(residuals1,residuals2,tol = 0.2):
-    diff_count =  residuals1.droplevel('SITE').POSTFIT.unstack(['TYPE','SAT']) - residuals2.droplevel('SITE').POSTFIT.unstack(['TYPE','SAT'])
+def _compare_postfit_residuals(diffstd,tol=None):
+    diff_count =  diffstd.droplevel('SITE').unstack(['TYPE','SAT'])
     return diff2msg(diff_count,tol)
 
 

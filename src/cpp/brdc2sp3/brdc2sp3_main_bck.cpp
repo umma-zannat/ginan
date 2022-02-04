@@ -97,7 +97,7 @@ int main(int argc, char **argv)
     if (GNSSinp.find("G")!=std::string::npos) GNSS_on[E_Sys::GPS]=true; //GPS
     if (GNSSinp.find("R")!=std::string::npos) GNSS_on[E_Sys::GLO]=true; //GLONASS
     if (GNSSinp.find("E")!=std::string::npos) GNSS_on[E_Sys::GAL]=true; //Galileo
-    if (GNSSinp.find("C")!=std::string::npos) GNSS_on[E_Sys::CMP]=true; //Beidou
+    if (GNSSinp.find("C")!=std::string::npos) GNSS_on[E_Sys::BDS]=true; //Beidou
     if (GNSSinp.find("J")!=std::string::npos) GNSS_on[E_Sys::QZS]=true; //QZSS
     if (GNSS_on.size()==0){
         fprintf(stderr,"No GNSS selected\n");

@@ -47,7 +47,7 @@ void NtripCasterService::startPerformanceMonitoring()
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		}
 
-		BOOST_LOG_TRIVIAL(debug) << std::endl << "<<<<<<<<<<< Network Trace : Epoch " << epoch << " >>>>>>>>>>>" << std::endl;
+		BOOST_LOG_TRIVIAL(debug) << std::endl << "------=============== Network Trace : Epoch " << epoch << " =============-----------" << std::endl;
 		BOOST_LOG_TRIVIAL(debug) << "Date / Time : " << boost::posix_time::from_time_t(std::chrono::system_clock::to_time_t(breakTime)) << std::endl;
 
 		recordNetworkStatistics(downloadStreamMap );
@@ -63,7 +63,7 @@ void NtripCasterService::startPerformanceMonitoring()
 			for (auto once : {1})
 			{
 				std::ofstream trace(t->second,std::ofstream::out | std::ofstream::app);
-				trace << std::endl << "<<<<<<<<<<< Network Trace : Epoch " << epoch << " >>>>>>>>>>>" << std::endl;
+				trace << std::endl << "------=============== Network Trace : Epoch " << epoch << " =============-----------" << std::endl;
 				trace << "Date / Time : " << boost::posix_time::from_time_t(std::chrono::system_clock::to_time_t(breakTime)) << std::endl;
 				downStream.traceWriteEpoch(trace);
 			}

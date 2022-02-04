@@ -166,6 +166,7 @@ Do i = 1 , Nepochs
       delta_t = ABS(ds2_2(j,1) - ds1_2(i,1))
       IF (delta_t < dt_limit) then
 	  ! Compute the numerical differences of the state vector
+          ! TODO: check here if ds2_2 or ds1_2 array is all zero's. terminate loop maybe?
          k = k + 1
 		 dsr(k,1:2) = ds1_2(i,1:2)
          dsr(k,3:sz2) = ds2_2(j,3:sz2) - ds1_2(i,3:sz2)

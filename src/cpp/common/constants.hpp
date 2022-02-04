@@ -59,6 +59,11 @@ using std::map;
 
 #define JD2MJD      2400000.5           /* JD to MJD */
 
+#define ZEROC		273.15
+
+#define GRAVITY     9.80665             /* mean gravity (m/s^2) */
+#define MOLARDRY    0.028965            /* molar mass dry air (kg/mol) */
+#define UGAS        8.3143              /* universal gas constant (J/K/mol) */
 
 #define TSYS_GPS    0                   /* time system: GPS time */
 #define TSYS_UTC    1                   /* time system: UTC */

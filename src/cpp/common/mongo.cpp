@@ -1,4 +1,6 @@
 
+//#pragma GCC optimize ("O0")
+
 #ifdef ENABLE_MONGODB
 
 
@@ -44,7 +46,7 @@ void mongoooo()
 
 	auto c = mongo.pool.acquire();
 	mongocxx::client&		client	= *c;
-	mongocxx::database		db		= client[acsConfig.config_description];
+	mongocxx::database		db		= client[acsConfig.mongo_database];
 
 	if (acsConfig.delete_mongo_history)
 	{
@@ -94,7 +96,7 @@ void MongoLogSinkBackend::consume(
 
 	auto 						c		= mongo.pool.acquire();
 	mongocxx::client&			client	= *c;
-	mongocxx::database			db		= client[acsConfig.config_description];
+	mongocxx::database			db		= client[acsConfig.mongo_database];
 	mongocxx::collection		coll	= db	["Console"];
 
 	//add a azimuth to a chunk
@@ -118,7 +120,7 @@ void mongoMeasSatStat_all(
 
 	auto 						c		= mongo.pool.acquire();
 	mongocxx::client&			client	= *c;
-	mongocxx::database			db		= client[acsConfig.config_description];
+	mongocxx::database			db		= client[acsConfig.mongo_database];
 	mongocxx::collection		coll	= db	["Measurements"];
 
 	mongocxx::options::update	options;
@@ -135,6 +137,9 @@ void mongoMeasSatStat_all(
 	for (auto& obs : rec.obsList)
 	{
 		if (obs.exclude)
+			continue;
+
+		if (obs.satStat_ptr == nullptr)
 			continue;
 
 		SatStat& satStat = *obs.satStat_ptr;
@@ -177,7 +182,7 @@ void mongoMeasSatStat(
 
 	auto 						c		= mongo.pool.acquire();
 	mongocxx::client&			client	= *c;
-	mongocxx::database			db		= client[acsConfig.config_description];
+	mongocxx::database			db		= client[acsConfig.mongo_database];
 	mongocxx::collection		coll	= db	["Measurements"];
 
 	mongocxx::options::update	options;
@@ -196,9 +201,12 @@ void mongoMeasSatStat(
 		{
 			continue;
 		}
+		
+		if (obs.satStat_ptr == nullptr)
+			continue;	
 
 		SatStat& satStat = *obs.satStat_ptr;
-
+		
 		mongocxx::model::update_one  mongo_req{
 			document{}
 				<< "Epoch"			<< bsoncxx::types::b_date {std::chrono::system_clock::from_time_t(tsync.time)}
@@ -228,7 +236,9 @@ void mongoMeasResiduals(
 	vector<ObsKey>		obsKeys,
 	VectorXd&			prefits,
 	VectorXd&			postfits,
-	MatrixXd&			variance)
+	MatrixXd&			variance,
+	int					beg,
+	int					num)
 {
 	if (mongo_ptr == nullptr)
 	{
@@ -239,7 +249,7 @@ void mongoMeasResiduals(
 
 	auto 						c		= mongo.pool.acquire();
 	mongocxx::client&			client	= *c;
-	mongocxx::database			db		= client[acsConfig.config_description];
+	mongocxx::database			db		= client[acsConfig.mongo_database];
 	mongocxx::collection		coll	= db	["Measurements"];
 
 	mongocxx::options::update	options;
@@ -252,8 +262,13 @@ void mongoMeasResiduals(
 
 	bool update = false;
 
+	if (num < 0)
+	{
+		num = prefits.rows();
+	}
+	
 	options.upsert(true);
-	for (int i = 0; i < prefits.rows(); i++)
+	for (int i = beg; i < beg + num; i++)
 	{
 		ObsKey& obsKey = obsKeys[i];
 
@@ -262,7 +277,7 @@ void mongoMeasResiduals(
 		mongocxx::model::update_one  mongo_req(
 			document{}
 				<< "Epoch"		<< bsoncxx::types::b_date {std::chrono::system_clock::from_time_t(tsync.time)}
-				<< "Site"		<< obsKey.str
+				<< "Site"		<< obsKey.str	+ acsConfig.mongo_suffix
 				<< "Sat"		<< obsKey.Sat.id()
 				<< finalize,
 
@@ -300,7 +315,7 @@ void mongoStates(
 
 	auto 						c		= mongo.pool.acquire();
 	mongocxx::client&			client	= *c;
-	mongocxx::database			db		= client[acsConfig.config_description];
+	mongocxx::database			db		= client[acsConfig.mongo_database];
 	mongocxx::collection		coll	= db	["States"];
 
 	mongocxx::options::update	options;

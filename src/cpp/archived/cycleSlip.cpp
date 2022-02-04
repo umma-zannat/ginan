@@ -1444,5 +1444,54 @@ void networkEstimatorCSStuff()
 	{
 		kfState.stateTransition(trace, tgap);
 	}
+
+// 	auto cycle_slip = stringsToYamlObject({yaml, ""}, {"cycle_slip_filter_parameters"});
+// 	{
+// 		trySetFromYaml(csOpts.enable,							cycle_slip, {"enable"							});
+// 		trySetFromYaml(csOpts.freq_l1,							cycle_slip, {"freq_l1"							});
+// 		trySetFromYaml(csOpts.freq_l2,							cycle_slip, {"freq_l2"							});
+// 		trySetFromYaml(csOpts.print_activity,					cycle_slip, {"print_activity"					});
+// 		trySetFromYaml(csOpts.debug,							cycle_slip, {"debug"							});
+// 		trySetFromYaml(csOpts.timer_debug,						cycle_slip, {"timer_debug"						});
+// 		trySetFromYaml(csOpts.new_channel_break_in_duration,	cycle_slip, {"new_channel_break_in_duration"	});
+// 		trySetFromYaml(csOpts.d_moving_ave_win,					cycle_slip, {"d_moving_ave_win"					});
+// 		trySetFromYaml(csOpts.common_mode_method,				cycle_slip, {"common_mode_method"				});
+// 		trySetFromYaml(csOpts.slip_classify_min_pts,			cycle_slip, {"slip_classify_min_pts"			});
+// 		trySetFromYaml(csOpts.slip_classify_post_outlier_pts,	cycle_slip, {"slip_classify_post_outlier_pts"	});
+// 		trySetFromYaml(csOpts.outlier_p_alpha,					cycle_slip, {"outlier_p_alpha"					});
+// 		trySetFromYaml(csOpts.t_alpha,							cycle_slip, {"t_alpha"							});
+// 		trySetFromYaml(csOpts.min_size_p_alpha,					cycle_slip, {"min_size_p_alpha"					});
+// 		trySetFromYaml(csOpts.outlier_detect_min_pts,			cycle_slip, {"outlier_detect_min_pts"			});
+// 		trySetFromYaml(csOpts.int_valid_pdf_thresh,				cycle_slip, {"int_valid_pdf_thresh"				});
+// 		trySetFromYaml(csOpts.int_valid_outlier_alpha,			cycle_slip, {"int_valid_outlier_alpha"			});
+// 		trySetFromYaml(csOpts.deweight_noise,					cycle_slip, {"deweight_noise"					});
+// 		trySetFromYaml(csOpts.int_valid_combo_jump_alpha,		cycle_slip, {"int_valid_combo_jump_alpha"		});
+// 	}
+
+/** Options associated with cycle slip detection and repair within the network filter
+*/
+struct CycleSlipOptions
+{
+	bool	enable							= false;
+	bool	print_activity					= false;
+	bool	debug							= false;
+	bool	timer_debug						= false;
+	double	freq_l1							= 0;
+	double	freq_l2							= 0;
+	int		new_channel_break_in_duration	= 0;
+	int		d_moving_ave_win				= 0;
+	string	common_mode_method				= "";
+	int		slip_classify_min_pts			= 0;
+	int		slip_classify_post_outlier_pts	= 0;
+	double	outlier_p_alpha					= 0;
+	double	t_alpha							= 0;
+	double	min_size_p_alpha				= 0;
+	int		outlier_detect_min_pts			= 0;
+	double	int_valid_pdf_thresh			= 0;
+	double	int_valid_outlier_alpha			= 0;
+	double	deweight_noise					= 0;
+	double	int_valid_combo_jump_alpha		= 0;
+};
+
 #endif
 }

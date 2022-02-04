@@ -63,10 +63,11 @@ BETTER_ENUM(E_Sys,			short int,
 			GLO,
 			GAL,
 			QZS,
-			CMP,
+			BDS,
 			LEO,
 			IRN,
-			NUM_SYS)
+			NUM_SYS,
+			COMB)
 
 
 BETTER_ENUM(E_DCBPair,		short int,
@@ -75,7 +76,7 @@ BETTER_ENUM(E_DCBPair,		short int,
 			P1_C1,
 			P2_C2)
 
-BETTER_ENUM(BiasGroup,		short int,
+BETTER_ENUM(E_BiasGroup,	short int,
 			GPS,
 			GLO,
 			GAL,
@@ -84,6 +85,7 @@ BETTER_ENUM(BiasGroup,		short int,
 
 
 BETTER_ENUM(E_OffsetType,	short int,
+			UNSPECIFIED,
 			APC,
 			COM)
 
@@ -96,22 +98,23 @@ BETTER_ENUM(KF,				short int,
 	
 	SAT_POS,
 	SAT_POS_RATE,
+	SAT_MOMENTUM,
 	
 	REF_SYS_BIAS,
 	
-	REC_SYS_BIAS,
-	REC_SYS_BIAS_RATE,
-	
-	REC_CLOCK,
-	REC_CLOCK_RATE,
+	REC_CLOCK,			REC_SYS_BIAS			= REC_CLOCK,
+	REC_CLOCK_RATE,		REC_SYS_BIAS_RATE		= REC_CLOCK_RATE,
+	REC_CLOCK_RATE_GM,	REC_SYS_BIAS_RATE_GM	= REC_CLOCK_RATE_GM,
 	
 	SAT_CLOCK,
 	SAT_CLOCK_RATE,
+	SAT_CLOCK_RATE_GM,
 	
 	TROP,
 	TROP_GM,
 	
 	ORBIT_PTS,
+	SRP,
 	
 	KEPLERS,
 	
@@ -438,5 +441,18 @@ BETTER_ENUM(E_RTCMSubmessage,	short int,
 		TIMESTAMP = 1
 )
 
+BETTER_ENUM(E_ObsWaitCode,	short int,
+		OK,
+		NO_DATA_WAIT,
+		NO_DATA_EVER)
+
+BETTER_ENUM(E_SnxDataMissing,	short int,
+	NONE_MISSING,
+	SITE_ID,
+	RECEIVER,
+	ANTENNA,
+	ECCENTRICITY,
+	GPS_PHASE_CENTRE,
+	ESTIMATE)
 
 #endif

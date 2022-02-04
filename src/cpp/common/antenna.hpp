@@ -32,6 +32,7 @@ struct PhaseCenterData
 	string code;				/* serial number or satellite code */
 	string svn;					/* SVN in satellites */
 	string cospar;				/* Cospar code satellites */
+	string calibModel;			/* name of the antenna calibration model */
 	double aziDelta;			/* azimuth increment (degree) */
 	double zenStart;
 	double zenStop;

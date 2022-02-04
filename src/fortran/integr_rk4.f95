@@ -22,8 +22,8 @@ SUBROUTINE integr_rk4(mjdo, yo, step, mjdn, yn)
 ! Author :	Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
 ! Created:	19 October 2017
 ! ----------------------------------------------------------------------
-	  
-	  
+
+
       USE mdl_precision
       USE mdl_num
       IMPLICIT NONE
@@ -46,12 +46,13 @@ SUBROUTINE integr_rk4(mjdo, yo, step, mjdn, yn)
 ! Local variables declaration
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d) :: h, to, mjd_to
-      REAL (KIND = prec_d), DIMENSION(3) :: ro, vo	  
+      REAL (KIND = prec_d), DIMENSION(3) :: ro , vo	  
       REAL (KIND = prec_d) :: ti, mjd_t
       REAL (KIND = prec_d), DIMENSION(3) :: ri, vi
       REAL (KIND = prec_d), DIMENSION(6) :: yi
       REAL (KIND = prec_d) :: fx, fy, fz
-      REAL (KIND = prec_d), DIMENSION(6) :: k1, k2, k3, k4, FRK4, y
+      REAL (KIND = prec_d), DIMENSION(6) :: k1, k2, k3, k4, FRK4
+!       , y
      INTEGER (KIND = prec_int4) :: i_stage
 ! ----------------------------------------------------------------------	  
 

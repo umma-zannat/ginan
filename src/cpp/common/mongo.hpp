@@ -58,7 +58,9 @@ void mongoMeasResiduals(
 	vector<ObsKey>		obsKeys,
 	VectorXd&			prefits,
 	VectorXd&			postfits,
-	MatrixXd&			variance);
+	MatrixXd&			variance,
+	int					beg = 0,
+	int					num = -1);
 
 void mongoMeasSatStat(
 	ObsList&			obsList);

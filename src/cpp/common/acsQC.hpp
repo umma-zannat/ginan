@@ -87,17 +87,17 @@ struct mgex_trop                 /* trop information */
 };
 
 int lsqqc(
-		FILE *fp,
-		const double *H,
-		const double *P,
-		const double *Z,
-		double *v,
-		double *xo,
-		double *Po,
-		int m,
-		int n,
-		int ind,
-		int norb);
+	Trace&	trace,
+	const double *H,
+	const double *P,
+	const double *Z,
+	double *v,
+	int m,
+	int n,
+	int ind,
+	int norb,
+	double *xo = nullptr,
+	double *Po = nullptr);
 
 int chiqc(
 	Trace& trace,

@@ -7,19 +7,19 @@ MODULE m_matrixmerge
 ! Purpose:
 !  Module for calling the matrixmerge subroutine 
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-! 			Geoscience Australia, Frontier-SI
-! Created:	12 September 2019
+! Author :  Dr. Thomas Papanikolaou
+!                 Geoscience Australia, Frontier-SI
+! Created:  12 September 2019
 ! ----------------------------------------------------------------------
 
 
       IMPLICIT NONE
-      !SAVE 			
+      !SAVE                   
   
-	  
+        
 Contains
-	  
-	  
+        
+        
 SUBROUTINE matrixmerge (matrix0, matrix1) 
 
 
@@ -30,24 +30,24 @@ SUBROUTINE matrixmerge (matrix0, matrix1)
 !  Merge input matrices 
 ! ----------------------------------------------------------------------
 ! Input arguments:
-! - matrix0: 	Input Matrix 0  
-! - matrix1: 	Input Matrix 1  
+! - matrix0:      Input Matrix 0  
+! - matrix1:      Input Matrix 1  
 !
 ! Output arguments:
-! - matrix2: 	Merged matrix 
+! - matrix2:      Merged matrix 
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-! 			Geoscience Australia, Frontier-SI
-! Created:	12 September 2019
+! Author :  Dr. Thomas Papanikolaou
+!                 Geoscience Australia, Frontier-SI
+! Created:  12 September 2019
 ! ----------------------------------------------------------------------
-	  
-	  
+        
+        
       USE mdl_precision
 !      USE mdl_num
 !      USE mdl_param
       IMPLICIT NONE
 
-	  
+        
 ! ----------------------------------------------------------------------
 ! Dummy arguments declaration
 ! ----------------------------------------------------------------------
@@ -94,8 +94,8 @@ Nepochs_1 = sz1
 N2_1 = sz2
 
 IF (N2_0 /= N2_1) THEN 
-	PRINT *, "m_matrixmerge.f03 :: Matrices columns dimensions do not match. Merging matrices failed"
-	STOP 
+      PRINT *, "m_matrixmerge.f03 :: Matrices columns dimensions do not match. Merging matrices failed"
+      STOP 
 END IF
 
 ! Number of epochs (rows) of merged matrix

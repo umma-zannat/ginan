@@ -219,4 +219,27 @@ bool resetPhaseSignalOutage(
 	KFMeas&		kfMeas,
 	int			index);
 
+
+
+
+
+void stationPPP(
+			Trace&				netTrace,		
+			Station&			rec,			
+/*	const*/	KFState&			kfState,		
+			KFMeasEntryList&	kfMeasEntryList,
+			gptgrid_t&			gptg,			
+// 			vmf3_t*				vmf3,			
+			double*				orography);		
+
+
+void stationPseudo(
+			Trace&				netTrace,			
+			Station&			rec,				
+/*	const*/	KFState&			kfState,			
+			KFMeasEntryList&	kfMeasEntryList);	
+
+Matrix3d stationEopPartials(
+	Vector3d&	rRec);
+
 #endif

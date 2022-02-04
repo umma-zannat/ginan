@@ -63,9 +63,11 @@ SUBROUTINE matrixreverse (matrix0)
 ! ----------------------------------------------------------------------
 ! Local variables declaration
 ! ----------------------------------------------------------------------
-      INTEGER (KIND = prec_int8) :: i, j
+      INTEGER (KIND = prec_int8) :: i
+!       , j
       INTEGER (KIND = prec_int8) :: sz1, sz2 
-      INTEGER (KIND = prec_int8) :: Nepochs, Nepochs_0, Nepochs_1, N2_0
+      INTEGER (KIND = prec_int8) :: Nepochs_0, N2_0
+!       , Nepochs, , Nepochs_1, 
       INTEGER (KIND = prec_int2) :: AllocateStatus, DeAllocateStatus  
 ! ----------------------------------------------------------------------
       !REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: matrix0 

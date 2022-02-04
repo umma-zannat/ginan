@@ -1,4 +1,5 @@
 
+
 #include <functional>
 #include <utility>
 #include <list>
@@ -10,11 +11,13 @@ using std::pair;
 #include "eigenIncluder.hpp"
 #include "algebraTrace.hpp"
 #include "streamTrace.hpp"
+#include "instrument.hpp"
 #include "acsConfig.hpp"
 #include "algebra.hpp"
 #include "common.hpp"
 #include "mongo.hpp"
 
+// #pragma GCC optimize ("O0")
 
 /** \file
 * This software uses specialised kalman filter classes to perform filtering.
@@ -72,15 +75,23 @@ bool KFKey::operator <(const KFKey& b) const
 void KFState::initFilterEpoch()
 {
 	ZAdditionMap.		clear();
-	ZTransitionMap.		clear();
-	stateTransitionMap.	clear();
 	initNoiseMap.		clear();
 
-	for (auto& [kfKey, index] : kfIndexMap)
+	KFKey oneKey;
+	oneKey.type = KF::ONE;
+	
+	for (auto& [key1, mapp]	: stateTransitionMap)
 	{
-		ZTransitionMap		[kfKey][kfKey] = 1;
-		stateTransitionMap	[kfKey][kfKey] = 1;
+		if (key1 == oneKey)
+		{
+			continue;
+		}
+		
+		//remove initialisation elements for subsequent epochs
+		mapp.erase(oneKey);
 	}
+	
+	stateTransitionMap	[oneKey][oneKey]	= {1, 0};
 }
 
 /** Finds the position in the KF state vector of particular states.
@@ -179,18 +190,6 @@ bool KFState::setKFNoise(
 	return true;
 }
 
-/** Adds dynamics to a filter state by inserting off-diagonal, time dependent elements to transition matrix
-*/
-void KFState::setKFTransRateRate(
-	KFKey			dest,			///< [in]	Key to search for in state to change in transition
-	KFKey			source,			///< [in]	Key to search for in state as source
-	double			value,			///< [in]	Input value
-	InitialState	initialState)	///< [in]	Initial state for rate state.
-{
-	addKFState(source, initialState);
-
-	rateRateTransitionMap[dest][source] = value;
-}
 
 /** Adds dynamics to a filter state by inserting off-diagonal, time dependent elements to transition matrix
 */
@@ -202,7 +201,7 @@ void KFState::setKFTransRate(
 {
 	addKFState(source, initialState);
 
-	rateTransitionMap[dest][source] = value;
+	stateTransitionMap[dest][source] = {value, 1};
 }
 
 /** Adds dynamics to a filter state by inserting off-diagonal, non-time dependent elements to transition matrix
@@ -215,16 +214,17 @@ void KFState::setKFTrans(
 {
 	addKFState(dest, initialState);
 
-	stateTransitionMap[dest][source] += value;
-}
-
-/** Sets time constant Tau used in first-order Gauss-Markov state transition & process noise models
-*/
-void KFState::setKFGaussMarkovTau(
-	KFKey			kfKey,	   		///< [in]	Key to search for in state
-	double			tau)   			///< [in]	Input value
-{
-	gaussMarkovTauMap[kfKey] = tau;
+	auto& [oldValue, rate] = stateTransitionMap[dest][source];
+	
+	if (rate != 0)
+	{
+		std::cout << "ERROR: BAD TRANS SUM" << std::endl;
+		return;
+	}
+	
+	value += oldValue;
+	
+	stateTransitionMap[dest][source] = {value, 0};
 }
 
 /** Remove a state from a kalman filter object.
@@ -234,20 +234,9 @@ void KFState::removeState(
 {
 	ZTransitionMap.			erase(kfKey);
 	stateTransitionMap.		erase(kfKey);
-	rateTransitionMap.		erase(kfKey);
-	rateRateTransitionMap.	erase(kfKey);
 	procNoiseMap.			erase(kfKey);
 	gaussMarkovTauMap.		erase(kfKey);
-}
-
-/** Reinitialise a state within a kalman filter object.
-*/
-void KFState::resetKFValue(
-	KFKey			kfKey,				///< [in]	Key to search for in state
-	InitialState	initialState)       ///< [in]	Initial values to reset the state with
-{
-	removeState	(kfKey);
-	addKFState	(kfKey, initialState);
+	gaussMarkovMuMap.		erase(kfKey);
 }
 
 /** Tries to add a state to the filter object.
@@ -261,11 +250,10 @@ void KFState::addKFState(
 	auto iter = stateTransitionMap.find(kfKey);
 	if (iter != stateTransitionMap.end())
 	{
-		//is an existing state, just update process noise value
-		if (initialState.Q != 0)
-		{
-			procNoiseMap[kfKey]	= initialState.Q;
-		}
+		//is an existing state, just update values
+		if (initialState.Q		!= 0)		{	procNoiseMap		[kfKey]	= initialState.Q;		}	
+		if (initialState.mu		!= 0)		{	gaussMarkovMuMap	[kfKey]	= initialState.mu;		}	
+		if (initialState.tau	!= 0)		{	gaussMarkovTauMap	[kfKey] = initialState.tau;		}
 
 		return;
 	}
@@ -273,10 +261,14 @@ void KFState::addKFState(
 	//this is a new state, add to the state transition matrix to create a new state.
 
 	KFKey ONE = {KF::ONE};
-	ZAdditionMap		[kfKey]			= 1;
-	stateTransitionMap	[kfKey][ONE]	= initialState.x;
-	initNoiseMap		[kfKey]			= initialState.P;
-	procNoiseMap		[kfKey]			= initialState.Q;
+	ZAdditionMap		[kfKey]			=  1;
+	ZTransitionMap		[kfKey][kfKey]	=  1;
+	stateTransitionMap	[kfKey][kfKey]	= {1,				0};
+	stateTransitionMap	[kfKey][ONE]	= {initialState.x,	0};
+	initNoiseMap		[kfKey]			=  initialState.P;		//todo aaron, check if these can be neglected for zero entries
+	procNoiseMap		[kfKey]			=  initialState.Q;
+	gaussMarkovTauMap	[kfKey]			=  initialState.tau;
+	gaussMarkovMuMap	[kfKey]			=  initialState.mu;
 
 	if (initialState.P == 0)
 	{
@@ -306,13 +298,17 @@ void KFState::stateTransition(
 {
 	KFState& kfState = *this;
 	
-	if (time == GTime::noTime())
+	double tgap = 0;
+	if	( newTime	!= GTime::noTime()
+		&&time		!= GTime::noTime())
+	{
+		tgap = newTime.time - time.time;
+	}
+	
+	if	( newTime	!= GTime::noTime())
 	{
 		time = newTime;
 	}
-	
-	double tgap = newTime.time - time.time;
-	time = newTime;
 	
 //	TestStack ts(__FUNCTION__);
 
@@ -333,29 +329,87 @@ void KFState::stateTransition(
 	}
 
 	//Initialise and populate a state transition and Z transition matrix
-	MatrixXd F		= MatrixXd::Zero(newStateCount, x.rows());
-	MatrixXd F_z	= MatrixXd::Zero(newStateCount, x.rows());
-	VectorXd Z_plus	= VectorXd::Zero(newStateCount);
-
+	SparseMatrix<double>	F_z		= SparseMatrix<double>	(newStateCount, x.rows());
+	SparseMatrix<double>	F		= SparseMatrix<double>	(newStateCount, x.rows());
+// 	MatrixXd			F		= MatrixXd::Zero(newStateCount, x.rows());
+	VectorXd			Z_plus	= VectorXd::Zero(newStateCount);
+	
 	//add transitions for any states (usually close to identity)
 	int row = 0;
 	map<KFKey, short int> newKFIndexMap;
-	for (auto& [kfKey1, map] : stateTransitionMap)
+	for (auto& [newStateKey, newStateMap] : stateTransitionMap)
 	{
-		newKFIndexMap[kfKey1] = row;
+		newKFIndexMap[newStateKey] = row;
 
-		for (auto& [kfKey2, value] : map)
+		for (auto& [sourceStateKey, values] : newStateMap)
 		{
-			int index2	= getKFIndex(kfKey2);
+			int sourceIndex	= getKFIndex(sourceStateKey);
 
-			if	( (index2 < 0)
-				||(index2 >= F.cols()))
+			if	( (sourceIndex < 0)
+				||(sourceIndex >= F.cols()))
 			{
 				continue;
 			}
+			auto& [value, tExp] = values;
 
-			F(row, index2) = value;
+			double tau = -1;
+			
+			auto gmIter = gaussMarkovTauMap.find(sourceStateKey);
+			if (gmIter != gaussMarkovTauMap.end())
+			{
+				auto& [dummy, sourceTau] = *gmIter;
+			
+				tau = sourceTau;
+			}
+
+			double scalar = 1;			
+			
+			if (tau < 0)
+			{
+				//Random Walk model (special case for First Order Gauss Markov model when tau == inf)
+			
+				for (int i = 0; i < tExp; i++)
+				{
+					scalar *= tgap / (i+1);
+				}
+				
+// 				F(row, sourceIndex) = value * scalar;
+				F.insert(row, sourceIndex) = value * scalar;
+				
+				continue;
+			}
+			
+			//First Order Gauss Markov model, Ref: Carpenter and Lee (2008) - A Stable Clock Error Model Using Coupled First- and Second-Order Gauss-Markov Processes - https://ntrs.nasa.gov/api/citations/20080044877/downloads/20080044877.pdf
+		
+			double tempTerm = 1;
+			scalar = exp(-tgap/tau);
+			
+			for (int i = 0; i < tExp; i++)
+			{
+				scalar = tau * (tempTerm - scalar);	//recursive formula derived according to Ref: Carpenter and Lee (2008)
+				tempTerm *= tgap / (i+1);
+			}
+			
+			double transition = value * scalar;
+			
+// 			F(row, sourceIndex) = transition;
+			F.insert(row, sourceIndex) = transition;
+			
+			
+			//Add state transitions to ONE element, to allow for tiedown to average value mu
+			//derived from integrating and distributing terms for v = (v0 - mu) * exp(-t/tau) + mu;
+			//tempTerm calculated above appears to be same as required for these terms too, (at least for tExp = 0,1)
+			
+			auto muIter = gaussMarkovMuMap.find(sourceStateKey);
+			if (muIter != gaussMarkovMuMap.end())
+			{
+				auto& [dummy2, mu] = *muIter;
+				
+// 				F(row, 0) = mu * (tempTerm - transition);
+				F.insert(row, 0) = mu * (tempTerm - transition);
+			}
 		}
+		
 		row++;
 	}
 	
@@ -378,7 +432,8 @@ void KFState::stateTransition(
 		
 		auto& [dummy, row] = *it;
 		
-		F_z(row, index2) = value;
+// 		F_z(row, index2) = value;
+		F_z.insert(row, index2) = value;
 	}
 	
 	
@@ -387,63 +442,6 @@ void KFState::stateTransition(
 		int row = newKFIndexMap[kfKey];
 		
 		Z_plus(row) = value;
-	}
-
-	//add transitions for states using a first-order Gauss-Markov model 
-	for (auto& [kfKey, tau] : gaussMarkovTauMap)
-	{
-		auto iter = newKFIndexMap.find(kfKey);
-		if (iter == newKFIndexMap.end())
-		{
-			std::cout << kfKey << " broke" << std::endl;        //todo aaron, this might have been unmeasured, need to add
-			continue;
-		}
-		int row    = iter->second;
-
-		int index2	= getKFIndex(kfKey);
-		if	( (index2 < 0)
-			||(index2 >= F.cols()))
-		{
-			continue;
-		}
-		F(row, index2) += exp(-tgap/tau); // Ref: El-Mowafy (2011) - Dynamic Modelling of Zenith Wet Delay in GNSS Measurements - https://ro.ecu.edu.au/cgi/viewcontent.cgi?referer=&httpsredir=1&article=1789&context=ecuworks2011
-	}
-
-	//add transitions for any dynamics that are scaled by time
-	if (tgap)
-	for (bool rateRate : {true, false})
-	{
-		auto* transitionMap_ptr	= &rateTransitionMap;
-		
-		if (rateRate)
-			transitionMap_ptr	= &rateRateTransitionMap;
-		
-		auto& transitionMap = *transitionMap_ptr;
-		
-		for (auto& [dest,	map] : transitionMap)
-		for (auto& [source,	val] : map)
-		{
-			auto iter = newKFIndexMap.find(dest);
-			if (iter == newKFIndexMap.end())
-			{
-				std::cout << dest << " broke" << std::endl;		//todo aaron, this might have been unmeasured, need to add
-				continue;
-			}
-
-			int index1	= iter->second;
-			int index2	= getKFIndex(source);
-
-			if	( (index1 < 0)
-				||(index2 < 0)
-				||(index1 >= F.rows())
-				||(index2 >= F.cols()))
-			{
-				continue;
-			}
-
-			if (rateRate == false)			F(index1, index2) += val * tgap;
-			else							F(index1, index2) += val * tgap * tgap / 2;
-		}
 	}
 
 	//scale and add process noise
@@ -472,53 +470,11 @@ void KFState::stateTransition(
 
 	//add time dependent process noise
 	if (tgap)
-	for (auto& [kfKey, value]	: procNoiseMap)
+	for (auto& [dest,	map]	: stateTransitionMap)
+	for (auto& [source,	vals]	: map)
 	{
-		auto initIter = initNoiseMap.find(kfKey);
-		if (initIter != initNoiseMap.end())
-		{
-			//this was initialised this epoch
-			double init = initIter->second;
-
-			if (init == 0)
-			{
-				//this was initialised with no noise, do lsq, dont add process noise
-				continue;
-			}
-		}
-
-		auto iter = newKFIndexMap.find(kfKey);
-		if (iter == newKFIndexMap.end())
-		{
-			std::cout << kfKey << " broke" << std::endl;
-			continue;
-		}
-		int index	= iter->second;
-
-		if	( (index < 0)
-			||(index >= Q0.rows()))
-		{
-			continue;
-		}
-
-		// add noise for states using first-order Gauss-Markov model (overrides regular time dependent process noise)
-		auto gmIter = gaussMarkovTauMap.find(kfKey);
-		if (gmIter != gaussMarkovTauMap.end())
-		{
-			double tau = gmIter->second;
-			Q0(index, index) += value * (1-exp(-2*tgap/tau)) * tgap;  // Ref: El-Mowafy (2011) - Dynamic Modelling of Zenith Wet Delay in GNSS Measurements - https://ro.ecu.edu.au/cgi/viewcontent.cgi?referer=&httpsredir=1&article=1789&context=ecuworks2011
-			continue;
-		}
-
-		Q0(index, index) += value * tgap;
-		//todo aaron, acceleration process noise?
-	}
-
-	//add process noise according to the uncertainty in dynamical states
-	if (tgap)
-	for (auto& [dest,	map] : rateTransitionMap)
-	for (auto& [source,	val] : map)
-	{
+		auto& [val, tExp] = vals;
+	
 		auto initIter = initNoiseMap.find(dest);
 		if (initIter != initNoiseMap.end())
 		{
@@ -532,35 +488,80 @@ void KFState::stateTransition(
 			}
 		}
 
-		auto iter1 = newKFIndexMap.find(dest);
-		if (iter1 == newKFIndexMap.end())
+		auto destIter = newKFIndexMap.find(dest);
+		if (destIter == newKFIndexMap.end())
 		{
 			std::cout << dest << " broke" << std::endl;
 			continue;
 		}
+		
+		int destIndex	= destIter->second;
 
-		auto iter2 = newKFIndexMap.find(source);
-		if (iter2 == newKFIndexMap.end())
-		{
-			std::cout << source << " broke" << std::endl;
-			continue;
-		}
-
-		int index1	= iter1->second;
-		int index2	= iter2->second;
-
-		if	( (index1 < 0)
-			||(index2 < 0)
-			||(index1 >= Q0.rows())
-			||(index2 >= Q0.cols()))
+		if	( (destIndex < 0)
+			||(destIndex >= Q0.rows()))
 		{
 			continue;
 		}
 
-		double sourceNoise = Q0(index2, index2) * val;
-// 		Q0(index1, index2) += sourceNoise / 2 * tgap * tgap;
-// 		Q0(index2, index1) += sourceNoise / 2 * tgap * tgap;
-		Q0(index1, index1) += sourceNoise / 3 * tgap * tgap * tgap;
+		auto sourceIter = newKFIndexMap.find(source);
+		if (sourceIter == newKFIndexMap.end())
+		{
+			std::cout << dest << " broKe" << std::endl;
+			continue;
+		}
+		
+		int sourceIndex	= sourceIter->second;
+
+		if	( (sourceIndex < 0)
+			||(sourceIndex >= Q0.rows()))
+		{
+			continue;
+		}
+
+		auto iter2 = procNoiseMap.find(source);
+		if (iter2 == procNoiseMap.end())
+		{
+// 			std::cout << dest << " brOke" << std::endl;
+			continue;
+		}
+		
+		auto [dummy, sourceProcessNoise] = *iter2;
+		
+		auto gmIter = gaussMarkovTauMap.find(source);
+		if (gmIter != gaussMarkovTauMap.end())
+		{
+			auto& [dummy, tau] = *gmIter;
+
+			if (tau < 0)
+			{
+				//Random Walk model (special case for First Order Gauss Markov model when tau == inf)
+				
+				if		(tExp == 0)	{	Q0(destIndex,	destIndex) += sourceProcessNoise / 1	* tgap;}
+				else if	(tExp == 1)	{	Q0(destIndex,	destIndex) += sourceProcessNoise / 3	* tgap * tgap * tgap;	
+		// 								Q0(sourceIndex, destIndex) += sourceProcessNoise / 2	* tgap * tgap;	
+		// 								Q0(destIndex, sourceIndex) += sourceProcessNoise / 2	* tgap * tgap; 
+									}
+				else if (tExp == 2)	{	Q0(destIndex,	destIndex) += sourceProcessNoise / 20	* tgap * tgap * tgap * tgap * tgap;}
+			}
+			else
+			{
+				//First Order Gauss Markov model, Ref: Carpenter and Lee (2008) - A Stable Clock Error Model Using Coupled First- and Second-Order Gauss-Markov Processes - https://ntrs.nasa.gov/api/citations/20080044877/downloads/20080044877.pdf
+			
+				if		(tExp == 0)	{	Q0(destIndex,	destIndex) += sourceProcessNoise / 2	* tau * (1 - exp(-2*tgap/tau));		}
+				else if	(tExp == 1)	{	Q0(destIndex,	destIndex) += sourceProcessNoise / 2	* tau * tau * (	+ 2 * tgap 								//one tau from front tau3 distributed to prevent divide by zero
+																												- 4 * tau * (1 - exp(-1*tgap/tau)) 
+																												+ 1 * tau * (1 - exp(-2*tgap/tau)));	//correct formula re-derived according to Ref: Carpenter and Lee (2008)
+		// 								Q0(sourceIndex, destIndex) += sourceProcessNoise / 2	* tau * tau * (1-exp(-tgap/tau)) * (1-exp(-tgap/tau));
+		// 								Q0(destIndex, sourceIndex) += sourceProcessNoise / 2	* tau * tau * (1-exp(-tgap/tau)) * (1-exp(-tgap/tau));
+									}
+				else if (tExp == 2)	{	std::cout << "FOGM model is not applied to acceleration term at the moment" << std::endl;	}	//todo Eugene: add process noise for acceleration term
+			}
+		}
+		else
+		{
+			std::cout << "Tau value not found in filter: " << source << std::endl;
+			continue;
+		}
 	}
 
 	//output the state transition matrix to a trace file (used by RTS smoother)
@@ -573,13 +574,14 @@ void KFState::stateTransition(
 		for (auto& [kfKey1, newIndex] : newKFIndexMap)
 		for (auto& [kfKey2, oldIndex] : kfIndexMap)
 		{
-			double transition	= F(newIndex, oldIndex);
-
-			//only output non zero elements to save space
-			if	(transition	!= 0)
-			{
-				transitionMatrixObject.forwardTransitionMap[{newIndex, oldIndex}] = transition;
-			}
+// 			double transition	= F(newIndex, oldIndex);
+// 			double transition	= F(newIndex, oldIndex);
+// 
+// 			//only output non zero elements to save space
+// 			if	(transition	!= 0)
+// 			{
+// 				transitionMatrixObject.forwardTransitionMap[{newIndex, oldIndex}] = transition;
+// 			}
 		}
 		spitFilterToFile(transitionMatrixObject,	E_SerialObject::TRANSITION_MATRIX,	rts_forward_filename);
 		rtsFilterInProgress = true;
@@ -588,19 +590,32 @@ void KFState::stateTransition(
 	//compute the updated states and permutation and covariance matrices
 	if (F.rows() == F.cols())
 	{
-		dx = (F - MatrixXd::Identity(F.rows(), F.cols())) * x;
+		Instrument	instrument("PPPalgebra0");
+		dx = (F * x) - x;
 	}
 	
-	Z = (F_z	* Z	* F_z.transpose()			).eval();
-	x = (F		* x								).eval();
-	P = (F		* P * F.transpose()		+ Q0	).eval();
-	Z += Z_plus.asDiagonal();
+	{
+		Instrument	instrument("PPPalgebra1");
+		Z = (F_z	* Z	* F_z.transpose()			).eval();
+	}
+	{
+		Instrument	instrument("PPPalgebra2");
+		x = (F		* x								).eval();
+	}
+	{
+		Instrument	instrument("PPPalgebra3");
+		P = (F		* P * F.transpose()		+ Q0	).eval();
+	}
+	{
+		Instrument	instrument("PPPalgebra4");
+		Z += Z_plus.asDiagonal();
+	}
 // 	std::cout << "F_z" << std::endl << F_z << std::endl;
 // 	std::cout << "F" << std::endl << F << std::endl;
 // 	std::cout << "Z" << std::endl << Z << std::endl;
 
 	//replace the index map with the updated version that corresponds to the updated state
-	kfIndexMap = newKFIndexMap;
+	kfIndexMap = std::move(newKFIndexMap);
 	
 	initFilterEpoch();
 }
@@ -612,14 +627,20 @@ int KFState::postFitSigmaCheck(
 	KFMeas&		kfMeas,		///< Measurements, noise, and design matrix
 	VectorXd&	xp,         ///< The post-filter state vector to compare with measurements
 	VectorXd&	dx,			///< The innovations from filtering to recalculate the deltas.
-	int			iteration)	///< Number of iterations prior to this check
+	int			iteration,	///< Number of iterations prior to this check
+	int			begX,		///< Index of first state element to process
+	int			numX,		///< Number of state elements to process
+	int			begH,		///< Index of first measurement to process
+	int			numH)		///< Number of measurements to process
 {
-	MatrixXd&	H = kfMeas.A;
-	VectorXd	v = kfMeas.V	- H * dx;
+	VectorXd	v = VectorXd::Zero(kfMeas.V.rows());
+	
+	auto		H = kfMeas.A.block(begH, begX, numH, numX);
+	v.segment(begH, numH) = kfMeas.V.segment(begH, numH)	- H * dx.segment(begX, numX);
 
 	//use 'array' for component-wise calculations
-	auto		variations		= v.array().square();	//delta squared
-	auto		variances		= kfMeas.R.diagonal().array();
+	auto		variations		= v.segment(begH, numH).array().square();	//delta squared
+	auto		variances		= kfMeas.R.block(begH, begH, numH, numH).diagonal().array();
 	auto		ratios			= variations / variances;
 	auto		outsideExp		= ratios > SQR(4);
 // 	double		meanVariations	= variations.mean();
@@ -629,7 +650,7 @@ int KFState::postFitSigmaCheck(
 		trace << std::endl << "+ Residuals" << std::endl;
 		tracepdeex(2, trace, "#\t%2s\t%19s\t%8s\t%3s\t%7s\t%13s\t%13s\t%16s\n", "It", "Time", "Str", "Sat", "Type", "Prefit Res", "Postfit Res", "Meas Variance");
 
-		for (int i = 0; i < kfMeas.V.rows(); i++)
+		for (int i = begH; i < begH + numH; i++)
 		{
 			tracepdeex(2, trace, "%%\t%2d\t%19s\t%20s\t%13.4f\t%13.4f\t%16.9f\n", iteration, time.to_string(0).c_str(), ((string)kfMeas.obsKeys[i]).c_str(), kfMeas.V(i), v(i), kfMeas.R(i,i));
 		}
@@ -639,7 +660,7 @@ int KFState::postFitSigmaCheck(
 #	ifdef ENABLE_MONGODB
 	if (acsConfig.output_mongo_measurements)
 	{
-		mongoMeasResiduals(kfMeas.obsKeys, kfMeas.V, v, kfMeas.R);
+		mongoMeasResiduals(kfMeas.obsKeys, kfMeas.V, v, kfMeas.R, begH, numH);
 	}
 #	endif
 
@@ -651,9 +672,9 @@ int KFState::postFitSigmaCheck(
 	{
 		Eigen::ArrayXd::Index index;
 
-		trace << "LARGE ERROR OF " << ratios.maxCoeff(&index) << " AT " << index << " : " << kfMeas.obsKeys[index];
+		trace << "LARGE ERROR OF " << ratios.maxCoeff(&index) << " AT " << index + begH << " : " << kfMeas.obsKeys[index + begH];
 
-		return index;
+		return index + begH;
 	}
 	return -1;
 }
@@ -662,17 +683,20 @@ int KFState::postFitSigmaCheck(
 */
 int KFState::preFitSigmaCheck(
 	Trace&		trace,		///< Trace to output to
-	KFMeas&		kfMeas)		///< Measurements, noise, and design matrix
+	KFMeas&		kfMeas,		///< Measurements, noise, and design matrix
+	int			begX,		///< Index of first state element to process
+	int			numX,		///< Number of states elements to process
+	int			begH,		///< Index of first measurement to process
+	int			numH)		///< Number of measurements to process
 {
-	auto	v = kfMeas.V;
-	auto	R = kfMeas.R;		//todo aaron, use references?
-	auto	H = kfMeas.A;
-	auto	P = this->P;
+	auto&	v = kfMeas.V;
+	auto&	R = kfMeas.R;
+	auto&	H = kfMeas.A;
+	auto&	P = this->P;
 
 	//use 'array' for component-wise calculations
-	MatrixXd	HPHt		= H * P * H.transpose();
-	auto		variations	= v.array().square();	//delta squared
-	auto		variances	= (R.diagonal() + (H * P * H.transpose()).diagonal()).array();
+	auto		variations	= v.segment(begH, numH).array().square();	//delta squared
+	auto		variances	= (R.diagonal().segment(begH, numH) + (H.block(begH, begX, numH, numX) * P.block(begX, begX, numX, numX) * H.block(begH, begX, numH, numX).transpose()).diagonal()).array();
 
 	auto		ratios		= variations / variances;
 	auto		outsideExp	= ratios > SQR(4);
@@ -688,9 +712,9 @@ int KFState::preFitSigmaCheck(
 	{
 		Eigen::ArrayXd::Index index;
 
-		trace << "LARGE ERROR OF " << ratios.maxCoeff(&index) << " AT " << index << " : " << kfMeas.obsKeys[index];
+		trace << "LARGE ERROR OF " << ratios.maxCoeff(&index) << " AT " << index + begH << " : " << kfMeas.obsKeys[index + begH];
 
-		return index;
+		return index + begH;
 	}
 
 	return -1;
@@ -703,17 +727,23 @@ int KFState::kFilter(
 	KFMeas&			kfMeas,		///< Measurements, noise, and design matrices
 	VectorXd&		xp,   		///< Post-update state vector
 	MatrixXd&		Pp,   		///< Post-update covariance of states
-	VectorXd&		dx)			///< Post-update state innovation
+	VectorXd&		dx,			///< Post-update state innovation
+	int				begX,		///< Index of first state element to process
+	int				numX,		///< Number of state elements to process
+	int				begH,		///< Index of first measurement to process
+	int				numH)		///< Number of measurements to process
 {
 	auto& H = kfMeas.A;
 	auto& R = kfMeas.R;
 	auto& v = kfMeas.V;
 
-	MatrixXd HP	= H		* P;
-	MatrixXd Q	= HP	* H.transpose();
+	auto subH = H.block(begH, begX, numH, numX);
+	
+	MatrixXd HP	= subH	* P.block(begX, begX, numX, numX);
+	MatrixXd Q	= HP	* subH.transpose();
 
-	Q += R;
-
+	Q += R.block(begH, begH, numH, numH);
+	
 	MatrixXd K;
 
 	bool repeat = true;
@@ -784,22 +814,34 @@ int KFState::kFilter(
 		repeat = false;
 	}
 
-	dx = K * v;
-	xp = x + dx;
+
+	dx.segment(begX, numX)	= K * v.segment(begH, numH);
+	xp.segment(begX, numX)	= x. segment(begX, numX)
+							+ dx.segment(begX, numX);
+
+// 	trace << std::endl << "h "	<< std::endl << subH;
+// 	trace << std::endl << "hp "	<< std::endl << HP;
+// 	trace << std::endl << "Q "	<< std::endl << Q;
+// 	trace << std::endl << "K "	<< std::endl << K;
+// 	trace << std::endl << "X "	<< std::endl << x. segment(begX, numX);
+// 	trace << std::endl << "DX"	<< std::endl << dx.segment(begX, numX);
+// 	trace << std::endl << "xp"	<< std::endl << xp.segment(begX, numX);
 	
-	if (acsConfig.joseph_stabilisation)
+// 	if (acsConfig.joseph_stabilisation)
+// 	{
+// 		MatrixXd IKH = MatrixXd::Identity(P.rows(), P.cols()) - K * H;
+// 		Pp = IKH * P * IKH.transpose() + K * R * K.transpose();
+// 	}
+// 	else
 	{
-		MatrixXd IKH = MatrixXd::Identity(P.rows(), P.cols()) - K * H;
-		Pp = IKH * P * IKH.transpose() + K * R * K.transpose();
-	}
-	else
-	{
-		Pp = P - K * HP;
-		Pp = (Pp + Pp.transpose()).eval() / 2;
+		Pp.block(begX, begX, numX, numX) = P.block(begX, begX, numX, numX) - K * HP;
+		
+		Pp.block(begX, begX, numX, numX) = (	  Pp.block(begX, begX, numX, numX) 
+												+ Pp.block(begX, begX, numX, numX).transpose()	).eval() / 2;
 	}
 
 
-	bool error = xp.array().isNaN().any();
+	bool error = xp.segment(begX, numX).array().isNaN().any();
 	if (error)
 	{
 		std::cout << std::endl << "xp:" << std::endl << xp << std::endl;
@@ -844,7 +886,7 @@ bool KFState::chiQC(
 	/* chi-square validation */
 	if (val > thres)
 	{
-		tracepdeex(1, trace, "\n ChiSquare error detected");
+		tracepdeex(6, trace, " ChiSquare error detected");
 
 // 		auto variations	= v.array().square();
 // 		Eigen::MatrixXf::Index index;
@@ -914,7 +956,7 @@ KFMeas KFState::combineKFMeasList(
 			noises++;
 		}
 		
-		MatrixXd R_A = MatrixXd::Zero(numMeas, noiseElementMap.size());
+		SparseMatrix<double> R_A = SparseMatrix<double>(numMeas, noiseElementMap.size());
 		
 		meas = 0;
 		for (auto& entry: kfEntryList)
@@ -923,12 +965,13 @@ KFMeas KFState::combineKFMeasList(
 			{
 				int noiseIndex = noiseIndexMap[obsKey];
 				
-				R_A(meas, noiseIndex) = value;
+				R_A.insert(meas, noiseIndex) = value;
 			}
 			
 			meas++;
 		}
 		
+		Instrument instrument("PPPnoisELment");
 // 		std::cout << R_A << std::endl;
 		kfMeas.R = R_A * uncorrelatedNoise.asDiagonal() * R_A.transpose();
 		
@@ -983,12 +1026,14 @@ bool ObsKey::operator <(const ObsKey& b) const
 	else					return false;
 }
 
+
 /** Kalman filter operation
 */
 int KFState::filterKalman(
-	Trace&			trace,				///< [out]	Trace file for output
-	KFMeas&			kfMeas,				///< [in]	Measurement object
-	bool			innovReady)			///< [in]	Innovation already constructed
+	Trace&				trace,					///< Trace file for output
+	KFMeas&				kfMeas,					///< Measurement object
+	bool				innovReady,				///< Innovation already constructed
+	list<FilterChunk>*	filterChunkList_ptr)	///< Optional ist of chunks for parallel processing of sub filters
 {
 	KFState& kfState = *this;
 
@@ -1020,34 +1065,67 @@ int KFState::filterKalman(
 		kfMeas.V = kfMeas.Y - kfMeas.A * kfState.x;
 	}
 
+	list<FilterChunk> dummyFilterChunkList;
+	if (filterChunkList_ptr == nullptr)
+	{
+		filterChunkList_ptr = &dummyFilterChunkList;
+	}
+	
+	auto& filterChunkList = *filterChunkList_ptr;
+	
+	if (filterChunkList.empty())
+	{
+		FilterChunk filterChunk;
+		filterChunk.trace_ptr = &trace;
+		
+		filterChunkList.push_back(filterChunk);
+	}
+	
+	for (auto& filterChunk : filterChunkList)
 	for (int i = 0; i < max_prefit_remv; i++)
 	{
+		auto& chunkTrace = *filterChunk.trace_ptr;
+		
+		if (filterChunk.numX < 0)	filterChunk.numX = x.rows();
+		if (filterChunk.numH < 0)	filterChunk.numH = kfMeas.A.rows();
+		
 //		cout << "A" << endl;
 //		cout << kfState.x.size() << endl;
 //		cout << kfState.P.size() << endl;
 //		cout << kfMeas.Y.size() << endl;
 //		cout << kfMeas.V.size() << endl;
-		int badIndex = kfState.preFitSigmaCheck(trace, kfMeas);
+		int badIndex = kfState.preFitSigmaCheck(trace, kfMeas, filterChunk.begX, filterChunk.numX, filterChunk.begH, filterChunk.numH);
 		if (badIndex < 0)	{	trace << std::endl << "PreSigma check passed" << std::endl;									break;		}
 		else				{	trace << std::endl << "PreSigma check failed.";	doRejectCallbacks(trace, kfMeas, badIndex);	continue;	}
 	}
 
-	MatrixXd Pp;
-	VectorXd xp;
-
+	MatrixXd Pp = P;
+	VectorXd xp = x;
+			 dx = VectorXd::Zero(x.rows());
+	
+	for (auto& filterChunk : filterChunkList)
 	for (int i = 0; i < max_filter_iter; i++)
 	{
-		bool pass = kfState.kFilter(trace, kfMeas, xp, Pp, dx);
+		auto& chunkTrace = *filterChunk.trace_ptr;
+		
+		if (filterChunk.numX < 0)	filterChunk.numX = x.rows();
+		if (filterChunk.numH < 0)	filterChunk.numH = kfMeas.A.rows();
+		
+		bool pass = kfState.kFilter(chunkTrace, kfMeas, xp, Pp, dx, filterChunk.begX, filterChunk.numX, filterChunk.begH, filterChunk.numH);
 
 		if (pass == false)
 		{
-			trace << "FILTER FAILED" << std::endl;
+			chunkTrace << "FILTER FAILED" << std::endl;
 			return 0;
 		}
+		
+		chunkTrace << "\nFrom " << filterChunk.begH << " for " << filterChunk.numH;
+		chunkTrace << "\nStat " << filterChunk.begX << " for " << filterChunk.numX;
+// 		outputStates(chunkTrace);
 
-		int badIndex = kfState.postFitSigmaCheck(trace, kfMeas, xp, dx, i);
-		if (badIndex < 0)	{	trace << std::endl << "Sigma check passed" << std::endl;									break;		}
-		else				{	trace << std::endl << "Sigma check failed.";	doRejectCallbacks(trace, kfMeas, badIndex);	continue;	}
+		int badIndex = kfState.postFitSigmaCheck(chunkTrace, kfMeas, xp, dx, i, filterChunk.begX, filterChunk.numX, filterChunk.begH, filterChunk.numH);	
+		if (badIndex < 0)	{	chunkTrace << std::endl << "Sigma check passed" << std::endl;											break;		}
+		else				{	chunkTrace << std::endl << "Sigma check failed.";	doRejectCallbacks(chunkTrace, kfMeas, badIndex);	continue;	}
 	}
 
 // 	if (pass)
@@ -1253,6 +1331,13 @@ void KFState::leastSquareInitStates(
 		{
 			w(i) = 0;
 		}
+	}
+
+	if	( leastSquareMeasSubs.A.cols() == 0
+		||leastSquareMeasSubs.A.rows() == 0)
+	{
+		trace << std::endl << "EMPTY DESIGN MATRIX DURING LEAST SQUARES";
+		return;
 	}
 
 	if (leastSquareMeasSubs.R.rows() < leastSquareMeasSubs.A.cols())
@@ -1498,19 +1583,18 @@ void KFState::leastSquareInitStatesA(
 /** Get a portion of the state vector by passing a list of keys
 */
 VectorXd KFState::getSubState(
-	list<KFKey>&	kfKeyList,	///< List of keys to return within substate
-	MatrixXd*		covarMat)	///< Optional pointer to a matrix for output of covariance submatrix
-
+	map<KFKey, int>&	kfKeyMap,	///< List of keys to return within substate
+	MatrixXd*			covarMat)	///< Optional pointer to a matrix for output of covariance submatrix
 {
 	vector<int> indices;
-	indices.reserve(kfKeyList.size());
+	indices.resize(kfKeyMap.size());
 
-	for (auto& kfKey : kfKeyList)
+	for (auto& [kfKey, mapIndex] : kfKeyMap)
 	{
-		int index = getKFIndex(kfKey);
-		if (index >= 0)
+		int stateIndex = getKFIndex(kfKey);
+		if (stateIndex >= 0)
 		{
-			indices.push_back(index);
+			indices[mapIndex] = stateIndex;
 		}
 	}
 
@@ -1525,7 +1609,9 @@ VectorXd KFState::getSubState(
 /** Output keys and states in human readable format
 */
 void KFState::outputStates(
-			Trace&		trace)   	///< Trace to output to
+		Trace&		trace,	///< Trace to output to
+		int			begX,	///< Index of first state element to process
+		int			numX)   ///< Number of state elements to process
 {
 	tracepdeex(2, trace, "\n\n");
 
@@ -1533,9 +1619,18 @@ void KFState::outputStates(
 	
 	tracepdeex(2, trace, "#\t%19s\t%20s\t%5s\t%3s\t%3s\t%13s\t%16s\t%10s\n", "Time", "Type", "Str", "Sat", "Num", "State", "Variance", "Adjust");
 
+	int endX;
+	if (numX < 0)	endX = x.rows();
+	else			endX = begX + numX;
+	
 	for (auto& [key, index] : kfIndexMap)
 	{
 		if (index >= x.rows())
+		{
+			continue;
+		}
+		if	( index <  begX
+			||index >= endX)
 		{
 			continue;
 		}
@@ -1614,18 +1709,23 @@ InitialState initialStateFromConfig(
 {
 	InitialState init = {};
 
-	if (index < kalmanModel.apriori_val	.size())		init.x	= 		kalmanModel.apriori_val	[index];
-	else												init.x	= 		kalmanModel.apriori_val	.back();
-	if (index < kalmanModel.sigma		.size())		init.P	= SQR(	kalmanModel.sigma		[index]);
-	else												init.P	= SQR(	kalmanModel.sigma		.back());
-	if (index < kalmanModel.proc_noise	.size())		init.Q	= SQR(	kalmanModel.proc_noise	[index]);
-	else												init.Q	= SQR(	kalmanModel.proc_noise	.back());
+	if (index < kalmanModel.apriori_val	.size())		init.x		= 		kalmanModel.apriori_val	[index];
+	else												init.x		= 		kalmanModel.apriori_val	.back();
+	if (index < kalmanModel.sigma		.size())		init.P		= SQR(	kalmanModel.sigma		[index]);
+	else												init.P		= SQR(	kalmanModel.sigma		.back());
+	if (index < kalmanModel.proc_noise	.size())		init.Q		= SQR(	kalmanModel.proc_noise	[index]);
+	else												init.Q		= SQR(	kalmanModel.proc_noise	.back());
+	if (index < kalmanModel.tau			.size())		init.tau	= 		kalmanModel.tau			[index];
+	else												init.tau	= 		kalmanModel.tau			.back();
+	if (index < kalmanModel.mu			.size())		init.mu		= 		kalmanModel.mu			[index];
+	else												init.mu		= 		kalmanModel.mu			.back();
 
 	return init;
 }
 
 KFState mergeFilters(
-	list<KFState*>& kfStatePointerList)
+	list<KFState*>& kfStatePointerList,
+	bool			includeTrop)
 {
 	map<KFKey, double>				stateValueMap;
 	map<KFKey, map<KFKey, double>>	stateCovarMap;
@@ -1637,7 +1737,15 @@ KFState mergeFilters(
 		for (auto& [key1, index1] : kfState.kfIndexMap)
 		{
 			if	( key1.type != KF::REC_POS
-				&&key1.type != KF::ONE)
+				&&key1.type != KF::ONE
+				&&key1.type != KF::TROP
+				&&key1.type != KF::TROP_GM)
+			{
+				continue;
+			}
+			if	(  includeTrop == false
+				&&(key1.type == KF::TROP
+				|| key1.type == KF::TROP_GM))
 			{
 				continue;
 			}
@@ -1646,7 +1754,15 @@ KFState mergeFilters(
 
 			for (auto& [key2, index2] : kfState.kfIndexMap)
 			{
-				if (key2.type != KF::REC_POS)
+				if	( key2.type != KF::REC_POS
+					&&key2.type != KF::TROP
+					&&key2.type != KF::TROP_GM)
+				{
+					continue;
+				}
+				if	(  includeTrop == false
+					&&(key2.type == KF::TROP
+					|| key2.type == KF::TROP_GM))
 				{
 					continue;
 				}

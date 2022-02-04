@@ -18,6 +18,7 @@
 #include <memory>
 #include <limits>
 #include <vector>
+#include <tuple>
 #include <array>
 #include <list>
 #include <map>
@@ -25,6 +26,7 @@
 
 using std::vector;
 using std::string;
+using std::tuple;
 using std::array;
 using std::list;
 using std::map;
@@ -70,6 +72,7 @@ struct InputOptions
 struct OutputOptions
 {
 	int		trace_level					= 0;
+	int		fatal_level					= 0;
 	bool	output_trace				= false;
 	string	trace_directory				= "./";
 	string	trace_filename				= "<STATION><YYYY><DDD><HH>.trace";
@@ -86,6 +89,7 @@ struct OutputOptions
     string  log_filename				= "log<LOGTIME>.json";
 
     bool	output_residuals 			= false;
+	bool	output_residual_chain		= true;
 
 	bool	output_config	 			= false;
 
@@ -97,18 +101,20 @@ struct OutputOptions
 	E_Ephemeris 	clocks_receiver_source  	= E_Ephemeris::KALMAN;
 	E_Ephemeris		clocks_satellite_source 	= E_Ephemeris::KALMAN;
 	string			clocks_directory			= "./";
-	string			clocks_filename				= "pea<YYYY><DDD><HH>.clk";
+	string			clocks_filename				= "pea<YYYY><DDD><HH>_<SYS>.clk";
 	bool			output_AR_clocks			= false;
 
-	bool			output_orbits 				= false;
-	bool			output_orbit_velocities		= false;
-	E_Ephemeris		orbits_data_source 			= E_Ephemeris::BROADCAST;
-	string			orbits_directory			= "./";
-	string			orbits_filename				= "pea<YYYY><DDD>.sp3";
+	bool			output_orbits 					 = false;
+	bool			output_orbit_velocities			 = false;
+	E_Ephemeris		orbits_data_source 				 = E_Ephemeris::BROADCAST;
+	string			orbits_directory				 = "./";
+	string			orbits_filename					 = "pea<YYYY><DDD>_<SYS>.sp3";
+	
+	bool	output_sys_combined			= true;
 
 	bool	output_rinex_obs			= false;
 	string	rinex_obs_directory			= "./";
-	string	rinex_obs_filename			= "RINEX_<STATION>_<YYYY><DDD><HH>.obs";
+	string	rinex_obs_filename			= "<STATION>_<YYYY><DDD>_<SYS>.<YY>O";
 	bool	rinex_obs_print_C_code		= true;
 	bool	rinex_obs_print_L_code		= true;
 	bool	rinex_obs_print_D_code	 	= true;
@@ -122,44 +128,50 @@ struct OutputOptions
 	string	ionex_directory				= "./";
 	string	ionex_filename				= "pea<YYYY><DDD><HH>.ionex";
 
+	bool	output_rinex_nav			= false;
+	string	rinex_nav_directory			= "./";
+	string	rinex_nav_filename			= "<YYYY><DDD>_nav_<SYS>.rnx";
+
 	bool	output_ionstec				= false;
 	string	ionstec_directory			= "./";
 	string	ionstec_filename			= "pea<YYYY><DDD><HH>.STEC";
 
-	bool	output_biasSINEX			= false;
-	string	biasSINEX_directory			= "./";
-	string	biasSINEX_filename			= "AUS0ACSRAP_<YYYY><DDD><HH>00_01D_30S_ABS.BIA";
+	bool			output_bias_sinex		= false;
+	string			bias_sinex_directory	= "./";
+	string			bias_sinex_filename		= "AUS0ACSRAP_<YYYY><DDD><HH>00_01D_30S_ABS.BIA";
 
-	bool	output_sinex				= false;
-	string 	sinex_directory				= "./";
-	string	sinex_filename				= "<CONFIG><WWWW><D>.snx";
+	bool			output_sinex			= false;
+	string 			sinex_directory			= "./";
+	string			sinex_filename			= "<CONFIG><WWWW><D>.snx";
+
+	bool			output_trop_sinex		= false;
+	E_Ephemeris 	trop_data_source  		= E_Ephemeris::KALMAN;
+	string			trop_sinex_directory	= "./";
+	string			trop_sinex_filename		= "<CONFIG><WWWW><D>.tro";
 
 	bool	output_persistance			= false;
 	bool	input_persistance			= false;
 	string 	persistance_directory		= "./";
 	string	persistance_filename		= "<CONFIG><WWWW><D>.persist";
 
-	bool	output_mongo_measurements				= false;
-	bool	output_mongo_states						= false;
-	bool	output_intermediate_rts_mongo_states	= false;
-	bool	output_mongo_metadata					= false;
-	bool	output_mongo_logs						= false;
-	bool	delete_mongo_history					= false;
-	string	mongo_rts_suffix						= "'";
-	string	mongo_uri								= "mongodb://localhost:27017";
-	string	mongo_suffix							= "";
+	bool	output_mongo_measurements	= false;
+	bool	output_mongo_states			= false;
+	bool	output_intermediate_rts		= false;
+	bool	output_mongo_metadata		= false;
+	bool	output_mongo_logs			= false;
+	bool	delete_mongo_history		= false;
+	string	mongo_rts_suffix			= "'";
+	string	mongo_uri					= "mongodb://localhost:27017";
+	string	mongo_suffix				= "";
+	string	mongo_database				= "<CONFIG>";
 };
 
 /** Options to be used only for debugging new features
 */
 struct DebugOptions
 {
-	bool	debug_cs		= false;
-	bool	debug_lom		= false;
-	bool	debug_csacc		= false;
-
-	int cscase = 0;         /* artificial CS case */
-	int csfreq = 3;         /* cycle slip detection and repair frequency */
+	int		cscase = 0;         /* artificial CS case */
+	int		csfreq = 3;         /* cycle slip detection and repair frequency */
 	
 	bool	check_plumbing	= false;
 };
@@ -192,6 +204,12 @@ struct GlobalOptions
 	string	analysis_center				= "Geoscience Australia";
 	string	analysis_program			= "AUSACS";
 	string	rinex_comment				= "AUSNETWORK1";
+	string	reference_system			= "igb14";
+	string	time_system					= "G";
+	string	ocean_tide_load				= "FES2004";
+	string	atmosph_tide_load			= "---";
+	string	geoid_model					= "EGM96";
+	string	grads_mapping_fn			= "Chen & Herring, 1992";
 
 	bool    print_stream_statistics     = false;
 	bool    caster_test                 = false;
@@ -199,6 +217,7 @@ struct GlobalOptions
 
 	bool	simulate_real_time			= false;
 
+	bool	process_preprocessor		= true;
 	bool	process_user				= false;
 	bool	process_network 			= false;
 	bool	process_minimum_constraints	= false;
@@ -207,13 +226,12 @@ struct GlobalOptions
 	bool	process_tests				= false;
 	bool	process_ppp					= false;
 
-	bool	process_sys	[E_Sys::NUM_SYS]	= {};
-	bool	process_freq[NUM_FTYPES]		= {};
+	map<E_Sys,	bool>	process_sys;
+	map<int,	bool>	process_freq;
 
 	double	elevation_mask	= 10 * D2R;
 
 	string	pivot_station	= "<AUTO>";
-	string	pivot_satellite	= "<AUTO>";
 
 	bool	tide_solid		= false;
 	bool	tide_otl		= false;
@@ -226,12 +244,13 @@ struct GlobalOptions
 	bool 	clock_jump		= false;
 
 	double	thres_slip   	= 0.05;
+	double	mw_proc_noise	= 0;	
 	double	max_inno     	= 30;
 	double	max_gdop     	= 30;
 	double	deweight_factor	= 100;
 	double	ratio_limit		= 4000;
 
-	double	wait_next_epoch		= 1;
+	double	wait_next_epoch		= 60;
 	double	wait_all_stations	= 0;
 	
 	bool	delete_old_ephemerides = false;
@@ -241,7 +260,7 @@ struct GlobalOptions
 
 	list<string>							station_files;
 
-	E_OffsetType ssr_input_antenna_offset = E_OffsetType::APC;
+	E_OffsetType ssr_input_antenna_offset = E_OffsetType::UNSPECIFIED;
 
 	vector<E_ObsCode>	code_priorities =
 	{
@@ -291,7 +310,8 @@ struct KalmanModel
 	vector<double>	sigma				= {0};	//{0} is very necessary
 	vector<double>	apriori_val			= {0};
 	vector<double>	proc_noise			= {0};
-	vector<double>	tau					= {0};
+	vector<double>	tau					= {-1};	//tau<0 (inf): Random Walk model; tau>0: First Order Gauss Markov model
+	vector<double>	mu					= {0};
 	
 	int				proc_noise_model;
 	bool			estimate 			= false;
@@ -314,8 +334,12 @@ struct NetworkOptions
 	string			rts_directory		= "./";
 	string			rts_filename		= "Network-<YYYY><DDD><HH>.rts";
 
+
 	KalmanModel		eop;
 	KalmanModel		eop_rates;
+	
+	bool			chunk_stations		= false;
+	int				chunk_size			= 0;
 };
 
 /** Options associated with the ionospheric modelling processing mode of operation
@@ -386,7 +410,7 @@ struct AmbROptions
 	bool readDSB	 = true;
 	bool readSSRbias = false;
 	bool readSATbias = true;
-	bool readRecBias = false;
+	bool readRecBias = true;
 	bool readHYBbias = false;
 
 	bool writeOSB     = false;
@@ -426,12 +450,16 @@ struct SatelliteOptions
 
 	KalmanModel		clk;
 	KalmanModel		clk_rate;
+	KalmanModel		clk_rate_gauss_markov;
 	KalmanModel		keplers;
 	KalmanModel		pos;
 	KalmanModel		pos_rate;
 	KalmanModel		orb;
+	KalmanModel		srp;
+	KalmanModel		pco;
+	KalmanModel		ant;
 	KalmanModel		code_bias;
-	KalmanModel		phas_bias;
+	KalmanModel		phase_bias;
 };
 
 /** Options to be applied to kalman filter states for individual receivers
@@ -446,15 +474,18 @@ struct ReceiverOptions
 	KalmanModel		pos_rate;
 	KalmanModel		clk;
 	KalmanModel		clk_rate;
+	KalmanModel		clk_rate_gauss_markov;
 	KalmanModel		keplers;
 	KalmanModel		dcb;
+	KalmanModel		pco;
+	KalmanModel		ant;
 	KalmanModel		ion;
 	KalmanModel		trop;
 	KalmanModel		trop_gauss_markov;
 	KalmanModel		trop_grads;
 	KalmanModel		trop_grads_gauss_markov;
 	KalmanModel		code_bias;
-	KalmanModel		phas_bias;
+	KalmanModel		phase_bias;
 
 	E_NoiseModel	error_model	= E_NoiseModel::UNIFORM;
 	vector<double>	code_sigmas	= {0.1};
@@ -474,7 +505,6 @@ struct MinimumStationOptions		//todo aaron, move to stations?
 */
 struct MinimumConstraintOptions
 {
-	E_FilterMode	filter_mode				= E_FilterMode::LSQ;
 	bool			estimate_scale			= false;
 	bool			estimate_rotation		= false;
 	bool			estimate_translation	= false;
@@ -497,31 +527,6 @@ struct PPPOptions
 	int			rts_lag				= 0;
 	string		rts_directory		= "./";
 	string		rts_filename		= "PPP-<Station>-<YYYY><DDD><HH>.rts";
-};
-
-/** Options associated with cycle slip detection and repair within the network filter
-*/
-struct CycleSlipOptions
-{
-	bool	enable							= false;
-	bool	print_activity					= false;
-	bool	debug							= false;
-	bool	timer_debug						= false;
-	double	freq_l1							= 0;
-	double	freq_l2							= 0;
-	int		new_channel_break_in_duration	= 0;
-	int		d_moving_ave_win				= 0;
-	string	common_mode_method				= "";
-	int		slip_classify_min_pts			= 0;
-	int		slip_classify_post_outlier_pts	= 0;
-	double	outlier_p_alpha					= 0;
-	double	t_alpha							= 0;
-	double	min_size_p_alpha				= 0;
-	int		outlier_detect_min_pts			= 0;
-	double	int_valid_pdf_thresh			= 0;
-	double	int_valid_outlier_alpha			= 0;
-	double	deweight_noise					= 0;
-	double	int_valid_combo_jump_alpha		= 0;
 };
 
 /** Options associated with SSR corrections and exporting RTCM messages
@@ -549,7 +554,7 @@ struct ForceModels
 struct ACSConfig : GlobalOptions, InputOptions, OutputOptions, DebugOptions
 {
 	YAML::Node	yaml;
-	map<string, string>	yamlDefaults;
+	map<string, tuple<string,string>>	yamlDefaults;
 	
 
 	string												configFilename;
@@ -578,7 +583,6 @@ struct ACSConfig : GlobalOptions, InputOptions, OutputOptions, DebugOptions
 	NetworkOptions				netwOpts;
 	MinimumConstraintOptions	minCOpts;
 	TestOptions					testOpts;
-	CycleSlipOptions			csOpts;
 	SsrOptions					ssrOpts;
 	AmbROptions					ambrOpts;
 	SlipOptions					excludeSlip;
@@ -605,10 +609,6 @@ void removePath(
 void tryAddRootToPath(
 	string& root,		///< Root path
 	string& path);		///< Filename to prepend root path to
-
-void replaceTimes(
-	string&						str,		///< String to replace macros within
-	boost::posix_time::ptime	time_time);	///< Time to use for replacements
 
 void replaceTags(
 	string&						str);		///< String to replace macros within

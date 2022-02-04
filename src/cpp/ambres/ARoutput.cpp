@@ -292,30 +292,10 @@ int Netwrk_iono_out(
 			continue;
 		}
 
-		double lam1 = 0;
-		double lam2 = 0;
-		E_FType f1 = F1;
-		E_FType f2 = F2;
-
-		switch (obs.Sat.sys)
-		{
-			case E_Sys::QZS:
-			case E_Sys::GPS:
-				lam1 = CLIGHT / FREQ1;
-				lam2 = CLIGHT / FREQ2;
-				break;
-
-			case E_Sys::GAL:
-				lam1 = CLIGHT / FREQ1;
-				lam2 = CLIGHT / FREQ5;
-				f2 = F5;
-				break;
-
-			case E_Sys::CMP:
-				lam1 = CLIGHT / FREQ1_CMP;
-				lam2 = CLIGHT / FREQ2_CMP;
-				break;
-		}
+		E_FType f1, f2, f3;
+		sys_frq(obs.Sat.sys, f1, f2, f3);
+		double lam1 = lam_carr[f1];
+		double lam2 = lam_carr[f2];
 
 		if (lam1 == 0)
 			continue;
@@ -429,7 +409,7 @@ int Satelt_bias_out(
 					def2 = E_ObsCode::L5Q;
 					break;
 
-				case E_Sys::CMP:
+				case E_Sys::BDS:
 					def1 = E_ObsCode::L2I;
 					def2 = E_ObsCode::L7I;
 					break;
@@ -438,6 +418,9 @@ int Satelt_bias_out(
 					def1 = E_ObsCode::L1C;
 					def2 = E_ObsCode::L2L;
 					break;
+					
+				default:
+					continue;
 			}
 
 			double lam1 = lambdas[def1];

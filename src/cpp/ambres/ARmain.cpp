@@ -4,7 +4,7 @@
 #define SMP2RESET	10
 
 
-map<E_Sys, bool> sys_solve;
+OutSys sys_solve;
 int NumEpocAR		   = 0;
 int NumEpocNL          = 0;
 int NEPOC2NL		   = 120;
@@ -16,8 +16,6 @@ bool AR_Iono_meas	= false;
 bool ENDUSR_MODE	= false;
 double biasOutrate	= 0;
 
-
-KFState KF_ARcopy;
 map<E_AmbTyp, ARState> ARcontr;
 
 /* extract default frequencies for each system */
@@ -29,6 +27,11 @@ int sys_frq(short int sys, E_FType& frq1, E_FType& frq2, E_FType& frq3)
 			frq1 = F1;
 			frq2 = F2;
 			frq3 = F5;
+			if (acsConfig.ionoOpts.iflc_freqs == +E_LinearCombo::L1L5_ONLY)
+			{
+				frq2 = F5; 
+				frq3 = F2;	
+			}
 			return 1;
 
 		case E_Sys::GLO:
@@ -47,9 +50,14 @@ int sys_frq(short int sys, E_FType& frq1, E_FType& frq2, E_FType& frq3)
 			frq1 = F1;
 			frq2 = F2;
 			frq3 = F5;
+			if (acsConfig.ionoOpts.iflc_freqs == +E_LinearCombo::L1L5_ONLY)
+			{
+				frq2 = F5; 
+				frq3 = F2;	
+			}
 			return 4;
 
-		case E_Sys::CMP:
+		case E_Sys::BDS:
 			frq1 = B1;
 			frq2 = B2;
 			frq3 = B3;
@@ -64,7 +72,7 @@ void start_from_acsConfig()
 	sys_solve[E_Sys::GPS] = acsConfig.ambrOpts.solvGPS;
 	sys_solve[E_Sys::GLO] = acsConfig.ambrOpts.solvGLO;
 	sys_solve[E_Sys::GAL] = acsConfig.ambrOpts.solvGAL;
-	sys_solve[E_Sys::CMP] = acsConfig.ambrOpts.solvBDS;
+	sys_solve[E_Sys::BDS] = acsConfig.ambrOpts.solvBDS;
 	sys_solve[E_Sys::QZS] = acsConfig.ambrOpts.solvQZS;
 
 	ARrefsta = "UNINIT";
@@ -308,8 +316,9 @@ int Load_rawmeas(Trace& trace, ObsList& obslst, KFState& kfState)
 		{
 			if (acsConfig.ionoOpts.corr_mode == +E_IonoMode::IONO_FREE_LINEAR_COMBO)
 			{
+				NLambKey = {KF::PHASE_BIAS, sat, rec, 12};
 				if (sat.sys == +E_Sys::GAL) 	NLambKey = {KF::PHASE_BIAS, sat, rec, 15};
-				else							NLambKey = {KF::PHASE_BIAS, sat, rec, 12};
+				if( sat.sys == +E_Sys::GPS && acsConfig.ionoOpts.iflc_freqs == +E_LinearCombo::L1L5_ONLY) NLambKey = {KF::PHASE_BIAS, sat, rec, 15};							
 			}
 		}
 		else
@@ -394,7 +403,7 @@ int networkAmbigResl(
 		if (acsConfig.process_ionosphere && acsConfig.ionFilterOpts.model != +E_IonoModel::NONE)
 			AR_Iono_meas = true;
 
-		if (acsConfig.output_biasSINEX && acsConfig.ambrOpts.biasOutrate > 0)		biasOutrate = acsConfig.ambrOpts.biasOutrate;
+		if (acsConfig.output_bias_sinex && acsConfig.ambrOpts.biasOutrate > 0)		biasOutrate = acsConfig.ambrOpts.biasOutrate;
 		else																	 	biasOutrate = 0;
 	}
 

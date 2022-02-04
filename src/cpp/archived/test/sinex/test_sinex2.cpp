@@ -92,11 +92,11 @@ int main(int argc, char* argv[])
 				yds[2] = sod;
 				result = getstnsnx(line, yds, &station);
 
-				if (result > 0)
+				if (result != E_SnxDataMissing::NONE_MISSING)
 				{
 					cout << "could not get all data for station " << line << ": error code " << result << endl;
 
-					if (result == 1)
+					if (result == E_SnxDataMissing::SITE_ID)
 						break;
 				}
 

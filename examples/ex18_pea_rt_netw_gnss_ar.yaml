@@ -10,8 +10,8 @@ input_files:
     snxfiles:   [ ./data/meta_gather.snx, cod21620.snx                     ]    # required
     blqfiles:   [ OLOAD_GO.BLQ                                            ]    # required if ocean loading is applied 
 
-    sp3files:   [ igu_prod/igu*.sp3                                       ] # most recent ultras as we are solving for clocks / or pod
-    erpfiles:   [ igu_prod/igu*.erp                                       ]    # erps that go with ultras
+    sp3files:   [ "igu_prod/igu*.sp3"                                       ] # most recent ultras as we are solving for clocks / or pod
+    erpfiles:   [ "igu_prod/igu*.erp"                                       ]    # erps that go with ultras
     
 station_data:
 

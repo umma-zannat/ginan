@@ -1,11 +1,21 @@
+
+//#pragma GCC optimize ("O0")
+
 #include "fileLog.hpp"
+
+#include <chrono>
+#include <ctime>
+
+#define BOOST_BIND_GLOBAL_PLACEHOLDERS
 
 #include <boost/log/sinks/sync_frontend.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/log/trivial.hpp>
-#include <chrono>
-#include <ctime>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
 
+using boost::property_tree::ptree;
+using boost::property_tree::write_json;
 namespace sinks = boost::log::sinks;
 
 
@@ -34,14 +44,18 @@ void FileLog::consume(
 		case boost::log::trivial::fatal:			logLevel = 0;			break;
 	}
 
-	std::ofstream logStream(FileLog::path_log,std::ofstream::app);
+	std::ofstream logStream(FileLog::path_log, std::ofstream::app);
 
-	logStream << "{\"label\": \"message\", \"timestamp\": \"";
-
-	std::time_t now = std::chrono::system_clock::to_time_t (std::chrono::system_clock::now());
-	logStream << std::put_time( std::localtime( &now ), "%F %X" );
-	logStream <<"\", \"level\": " << logLevel << ", \"str\": \"";
-	logStream << mess << "\"}" << std::endl;
+	if (!logStream)
+		return;
+	
+	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+	ptree root;
+	root.put("label", 		"message");
+	root.put("timestamp", 	std::put_time(std::localtime( &now ),"%F %X"));
+	root.put("level", 		logLevel);
+	root.put("str", 		mess);
+	write_json(logStream, root, false);
 }
 
 

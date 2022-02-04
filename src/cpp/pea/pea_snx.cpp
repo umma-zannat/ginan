@@ -1,3 +1,6 @@
+
+#pragma GCC optimize ("O0")
+
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -21,7 +24,9 @@ void sinexPostProcessing(
 	theSinex.acknowledgements.	clear();
 	theSinex.inputHistory.		clear();
 
-	sinex_check_add_ga_reference();
+	// FIXME: network solution could be different?
+	// TODO: replace 0.1 with some auto generated variable or config file entry, should be current version in bitbucket
+	sinex_check_add_ga_reference("PPP Solution", "0.1", false);
 
 	{
 		list<KFState*> kfStatePointers;
@@ -99,8 +104,8 @@ void sinexPostProcessing(
 					+ tmbuf->tm_hour	* 60 * 60;
 
 
-	sinex_update_header(acsConfig.analysis_agency, create_yds, data_agc, start, end, obsCode, constCode, solcont);
-	
+	sinex_update_header(acsConfig.analysis_agency, create_yds, data_agc, start, end, obsCode, constCode, solcont, 2.02); //Change this if the sinex format gets updated
+
 	string filename = acsConfig.sinex_filename;
 	replaceTimes(filename, acsConfig.start_epoch);
 	write_sinex(filename, &stationMap);
@@ -127,7 +132,7 @@ void sinexPerEpochPerStation(
 	
 	int result = getstnsnx(rec.id, yds, rec.snx);
 
-	if (result == 1)
+	if (result == E_SnxDataMissing::SITE_ID)
 	{
 // 		BOOST_LOG_TRIVIAL(error)
 // 		<< "Station " << rec.id << " not found in sinex file";		//todo aaron useful eeror
@@ -135,7 +140,7 @@ void sinexPerEpochPerStation(
 		return;
 	}
 
-	if (result == 6)
+	if (result == E_SnxDataMissing::ESTIMATE)
 	{
 		BOOST_LOG_TRIVIAL(debug)
 		<< "Station " << rec.id << " position not found in sinex file";

@@ -7,6 +7,7 @@
 #include <map>
 
 using std::map;
+using std::pair;
 
 #include "acsObsStream.hpp"
 #include "acsNavStream.hpp"

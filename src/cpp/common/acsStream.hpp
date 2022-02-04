@@ -79,9 +79,9 @@ struct NtripRtcmStream : NtripStream, RtcmStream
     NtripTrace ntripTrace;
     bool print_stream_statistics = false;
 	
-	NetworkData epochData;
-	NetworkData hourlyData;
-	NetworkData runData;
+	NetworkDataDownload epochData;
+	NetworkDataDownload hourlyData;
+	NetworkDataDownload runData;
 	
 	NtripRtcmStream(const string& url_str) : NtripStream(url_str)
 	{
@@ -169,23 +169,23 @@ struct NtripRtcmStream : NtripStream, RtcmStream
 	
 	void networkLog(std::string message) override
 	{
-        ntripTrace.networkLog(message);
-    }
-    
-    void connectionError(const boost::system::error_code& err, std::string operation) override;
-    void serverResponse(unsigned int status_code, std::string http_version) override;
+		ntripTrace.networkLog(message);
+	}
+
+	void connectionError(const boost::system::error_code& err, std::string operation) override;
+	void serverResponse(unsigned int status_code, std::string http_version) override;
  
-    void traceMakeNetworkOverview(Trace& trace,NetworkData& netData);
+	void traceMakeNetworkOverview(Trace& trace, NetworkDataDownload& netData);
 	
 	void traceWriteEpoch(Trace& trace)
-    {
-        traceMakeNetworkOverview(trace,runData);
-        ntripTrace.traceWriteEpoch(trace);
-    }
-    
-    void getJsonNetworkStatistics(GTime epochTime);
-    
-	void getNav()
+	{
+		traceMakeNetworkOverview(trace,runData);
+		ntripTrace.traceWriteEpoch(trace);
+	}
+
+	void getJsonNetworkStatistics(GTime now);
+
+	void getNav() override
 	{
 		//get all data available from the ntrip stream and convert it to an iostream for processing
 		getData();
@@ -241,6 +241,14 @@ struct FileRtcmStream : ACSFileStream, RtcmStream
 
 		lastObsListSize = obsList.size();
 		return obsList;
+	}
+    
+	void getNav() override
+	{
+// 		getData();	not needed for files
+		FileState fileState = openFile();
+		
+		parseRTCM(fileState.inputStream);
 	}
 
 	bool isDead() override

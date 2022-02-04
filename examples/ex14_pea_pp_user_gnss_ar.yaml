@@ -29,7 +29,6 @@ output_files:
 
     root_output_directory:          <CONFIG>/
 
-    # TO DO change trace_level to log_level
     output_trace:                   true
     trace_level:                    2
     trace_directory:                TUG/
@@ -37,6 +36,13 @@ output_files:
     output_residuals:               true
     output_sinex:                   true
     sinex_directory:                ./
+
+    output_mongo_measurements:      true
+    output_mongo_states:            true
+    output_mongo_metadata:          false
+    delete_mongo_history:           false
+    mongo_uri:                      mongodb://127.0.0.1:27017
+    mongo_suffix:                   _<BRANCH>
 
 output_options:
 
@@ -125,7 +131,7 @@ default_filter_parameters:
 
         clk:
             estimated:          true
-            sigma:              [0]
+            sigma:              [30]
             proc_noise:         [10] #where is this coming from?
 
         clk_rate:
@@ -146,8 +152,8 @@ default_filter_parameters:
 
         trop_grads:
             estimated:          true
-            sigma:              [1]
-            proc_noise:         [0.01]
+            sigma:              [0.02]
+            proc_noise:         [1.0E-6]
             proc_noise_dt:      second
 
     satellites:

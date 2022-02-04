@@ -64,7 +64,8 @@ bool	prange(
 
 	/* L1-L2 for GPS/GLO/QZS, L1-L5 for GAL/SBS */
 	if  ( sys == E_Sys::GAL
-		||sys == E_Sys::SBS)
+		||sys == E_Sys::SBS
+		||(sys == E_Sys::GPS && acsConfig.ionoOpts.iflc_freqs==+E_LinearCombo::L1L5_ONLY))
 	{
 		f_2 = F5;
 	}
@@ -159,6 +160,18 @@ int ionocorr(
 	ion = 0;
 	var = SQR(ERR_ION);
 	
+	/* tmp fix : KH
+	if (ionoopt ==  E_IonoMode::TOTAL_ELECTRON_CONTENT)
+	{
+		int res = iontec(time, &nav, pos, azel, 1, ion, var);
+		if (!res)
+		{
+			ion = 0;
+			var =	SQR(ERR_ION);
+		}
+		return res;
+	}
+	*/
 	//if (ionoopt != E_IonoMode::OFF)	fprintf(stderr,"SPP not unsupporting ionosphere mode %s", ionoopt._to_string());
 	
 	return 1;
@@ -418,7 +431,7 @@ int estpos(
 			}
 
 			double dtRec_m = 0;
-			kfState.getKFValue({KF::REC_SYS_BIAS,	{}, "", BiasGroup::GPS}, dtRec_m);
+			kfState.getKFValue({KF::REC_SYS_BIAS,	{}, "", E_BiasGroup::GPS}, dtRec_m);
 
 			tracepdeex(3, trace, "\n%f", dtRec_m);
 // 			kfState.outputStates(trace);
@@ -583,7 +596,7 @@ void sppos(
 	
 	//copy states to often-used vectors
 	for (short i = 0; i < 3;				i++)	{	sol.sppState.getKFValue({KF::REC_POS,		{}, "", i}, sol.sppRRec[i]);	}
-	for (short i = 0; i < BiasGroup::NUM;	i++)	{	sol.sppState.getKFValue({KF::REC_SYS_BIAS,	{}, "", i}, sol.dtRec_m[i]);	}
+	for (short i = 0; i < E_BiasGroup::NUM;	i++)	{	sol.sppState.getKFValue({KF::REC_SYS_BIAS,	{}, "", i}, sol.dtRec_m[i]);	}
 
 	TestStack::testMat("sol.sppRRec", sol.sppRRec);
 	tracepdeex(3, trace,    "\nsppos  sol: %f %f %f",	sol.sppRRec[0], sol.sppRRec[1], sol.sppRRec[2]);

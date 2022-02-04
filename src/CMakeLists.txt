@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 cmake_policy(SET CMP0063 NEW)
+cmake_policy(SET CMP0054 OLD)
 
 project(ginan)
 macro(print_all_variables)
@@ -12,7 +13,6 @@ macro(print_all_variables)
 endmacro()
 
 enable_language(Fortran)
-message("Fortran default extensions = ${CMake_Fortran_SOURCE_FILE_EXTENSIONS}")
 if ( ${CMAKE_SYSTEM_NAME} MATCHES "Darwin") 
 	message("found DARWIN")
 endif ()
@@ -26,7 +26,7 @@ set (CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/../../bin")
 file(GLOB_RECURSE sources fortran/*.f90 fortran/*.F90 fortran/*.f fortran/*.f95 fortran/*.for fortran/*.F)
 foreach (file ${sources})
 	if ( ${CMAKE_SYSTEM_NAME} MATCHES "Darwin") 
-	execute_process(COMMAND /usr/bin/basename    ${file} OUTPUT_VARIABLE fortranfile)
+		execute_process(COMMAND /usr/bin/basename    ${file} OUTPUT_VARIABLE fortranfile)
 		#message("found DARWIN")
 	else()
 		execute_process(COMMAND /usr/bin/basename -z ${file} OUTPUT_VARIABLE fortranfile)
@@ -36,15 +36,36 @@ foreach (file ${sources})
 	#message("set fortran/${fortranfile} to fortran compile")
 endforeach (file ${sources})
 
-set(CMAKE_MODULE_PATH					"${CMAKE_SOURCE_DIR}/cmake")
-set(CMAKE_CXX_VISIBILITY_PRESET     	hidden)
-set(CMAKE_VERBOSE_MAKEFILE				ON)
+	set(CMAKE_MODULE_PATH					"${CMAKE_SOURCE_DIR}/cmake")
+	set(CMAKE_CXX_VISIBILITY_PRESET     	hidden)
+	set(CMAKE_VERBOSE_MAKEFILE				OFF)
 
-#set(CMAKE_CXX_FLAGS					"${CMAKE_CXX_FLAGS} -std=c++1z -ggdb3 -fpermissive -Wno-write-strings -Wno-deprecated-declarations -Wno-format-overflow -Wno-c++11-narrowing -Wno-dangling-else -Wno-switch")
-set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -std=c++1z -ggdb3 -fpermissive -Wall -Wno-write-strings -Wno-deprecated-declarations -Wno-format-overflow -Wno-c++11-narrowing -Wno-unused-but-set-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-unused-variable")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -std=c++2a")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -ggdb3")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -fpermissive")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wall")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wno-write-strings")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wno-format-overflow")
+# 	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wno-c++11-narrowing")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wno-unused-but-set-variable")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wno-sign-compare")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wno-stringop-truncation")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wno-unused-variable")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wno-switch")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wno-dangling-else")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -Wno-misleading-indentation")
+	set(CMAKE_CXX_FLAGS						"${CMAKE_CXX_FLAGS} -fno-var-tracking-assignments")
 
-#set (CMAKE_Fortran_FLAGS				"-g -frecursive -fall-intrinsics -fcheck=all -fbacktrace")
-set (CMAKE_Fortran_FLAGS				"-g -frecursive -fall-intrinsics -Wall -fcheck=all -fbacktrace")
+	set (CMAKE_Fortran_FLAGS				"${CMAKE_Fortran_FLAGS} -g")
+	set (CMAKE_Fortran_FLAGS				"${CMAKE_Fortran_FLAGS} -frecursive")
+	set (CMAKE_Fortran_FLAGS				"${CMAKE_Fortran_FLAGS} -fall-intrinsics")
+	set (CMAKE_Fortran_FLAGS				"${CMAKE_Fortran_FLAGS} -Wall")
+	set (CMAKE_Fortran_FLAGS				"${CMAKE_Fortran_FLAGS} -fcheck=all")
+	set (CMAKE_Fortran_FLAGS				"${CMAKE_Fortran_FLAGS} -fbacktrace")
+	set (CMAKE_Fortran_FLAGS				"${CMAKE_Fortran_FLAGS} -Wno-unused-dummy-argument")
+	set (CMAKE_Fortran_FLAGS				"${CMAKE_Fortran_FLAGS} -Wno-conversion")
+	set (CMAKE_Fortran_FLAGS				"${CMAKE_Fortran_FLAGS} -Wno-surprising")
 
 # Uncomment these for Linux (e.g. CentOS 7) where boost 1.69.0 is packaged as boost169 (and boost is 1.53.0 for e.g.)
 #set(BOOST_INCLUDEDIR /data/work/lib/boost-1.70.0/include)
@@ -52,14 +73,36 @@ set (CMAKE_Fortran_FLAGS				"-g -frecursive -fall-intrinsics -Wall -fcheck=all -
 set(Boost_NO_SYSTEM_PATHS ON)
 set(Boost_USE_STATIC_LIBS ON)
 
+# first we can indicate the documentation build as an option and set it to ON by default
+option(BUILD_DOC                "Build documentation"       OFF)
 option(ENABLE_UNIT_TESTS        "ENABLE_UNIT_TESTS"         OFF)
 option(ENABLE_MONGODB           "ENABLE_MONGODB"            ON)
 option(ENABLE_PARALLELISATION   "ENABLE_PARALLELISATION"    ON)
 option(ENABLE_OPTIMISATION      "ENABLE_OPTIMISATION"       ON)
 
+if(ENABLE_UNIT_TESTS)
+	message(STATUS "Setting unit tests      on")
+endif()
+
 if(ENABLE_OPTIMISATION)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
-	set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3")
+	message(STATUS "Setting optimisation    on")
+	set(CMAKE_CXX_FLAGS					"${CMAKE_CXX_FLAGS} -O3")
+	set(CMAKE_C_FLAGS					"${CMAKE_C_FLAGS} -O3")
+	set(CMAKE_Fortran_FLAGS				"${CMAKE_Fortran_FLAGS} -O3")
+endif()
+
+if(ENABLE_PARALLELISATION)
+	message(STATUS "Setting parallelisation on")
+	find_package(OpenMP REQUIRED)
+	set (CMAKE_CXX_FLAGS				"${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+	set (CMAKE_C_FLAGS					"${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+	set (CMAKE_Fortran_FLAGS			"${CMAKE_Fortran_FLAGS} ${OpenMP_Fortran_FLAGS}")
+endif()
+
+if(ENABLE_MONGODB)
+	message(STATUS "Setting mongo           on")
+	find_package(mongocxx	REQUIRED)
+	find_package(bsoncxx	REQUIRED)
 endif()
 
 #set debug if nothing else is set.
@@ -71,8 +114,8 @@ endif()
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
 if (CMAKE_USE_PTHREADS_INIT)
-	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
-	set (CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -pthread")
+	set (CMAKE_CXX_FLAGS				"${CMAKE_CXX_FLAGS} -pthread")
+	set (CMAKE_Fortran_FLAGS			"${CMAKE_Fortran_FLAGS} -pthread")
 endif()
 
 set(YAML_CPP_USE_STATIC_LIBS ON)
@@ -82,32 +125,52 @@ find_package(OpenSSL REQUIRED)
 
 find_package(Boost 1.73.0 REQUIRED COMPONENTS log log_setup date_time filesystem system thread program_options serialization timer)
 
-#find_package(OPENBLAS REQUIRED)
-
 find_package(Eigen3 3.3.0)
 include_directories(${EIGEN3_INCLUDE_DIRS})
 
-find_package(OpenMP)
 
-if(ENABLE_MONGODB)
-	find_package(libmongocxx REQUIRED)
-	find_package(libbsoncxx REQUIRED)
-endif()
 
 set(OPENBLAS_USE_STATIC_LIBS ON)
 set (BLA_VENDOR OpenBLAS)
+
 find_package(BLAS)
 if(BLAS_FOUND)
-set(LAPACK_LIBRARIES "")
-message(STATUS "Found Vendor specific OpenBLAS")
+	set(LAPACK_LIBRARIES "")
+	message(STATUS "Found BLAS library:       " ${BLA_VENDOR})
 else()
-set (BLA_VENDOR "")
-find_package(LAPACK REQUIRED)
-find_package(BLAS REQUIRED)  
-message(STATUS "Found LAPACK and BLAS")
+	set (BLA_VENDOR "")
+	find_package(LAPACK REQUIRED)
+	find_package(BLAS   REQUIRED)  
+	message(STATUS "Found LAPACK and BLAS")
 endif()
 
-MESSAGE( STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+if (YAML_CPP_LIB)
+	message(STATUS "Found YAML library:       " ${YAML_CPP_LIB})
+else()
+	message(STATUS "YAML was not found")
+endif()
+
+if (Eigen3_FOUND)
+	message(STATUS "Found Eigen version:      " ${Eigen3_VERSION})
+else()
+	message(STATUS "Eigen was not found")
+endif()
+
+if (Boost_FOUND)
+	message(STATUS "Found Boost version:      " ${Boost_VERSION})
+else()
+	message(STATUS "Boost was not found")
+endif()
+
+if (mongocxx_FOUND)
+	message(STATUS "Found Mongocxx version:   " ${mongocxx_VERSION})
+else()
+	message(STATUS "Mongocxx was not found")
+endif()
+
+	message(STATUS "Found C++ compiler:       " ${CMAKE_CXX_COMPILER_VERSION})
+
+
 IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../.git)
 	FIND_PACKAGE(Git)
 	IF(GIT_FOUND)
@@ -129,8 +192,8 @@ IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../.git)
 		OUTPUT_VARIABLE "GINAN_COMMIT_DATE"
 		OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-		MESSAGE( STATUS "Git version: ${GINAN_COMMIT_VERSION}")
-		MESSAGE( STATUS "Git branch: ${GINAN_BRANCH_NAME}")
+		MESSAGE(STATUS "Git branch tag:           ${GINAN_COMMIT_VERSION}")
+		MESSAGE(STATUS "Git branch:               ${GINAN_BRANCH_NAME}")
 	ELSE(GIT_FOUND)
 		SET(GINAN_COMMIT_VERSION 0)
 		SET(GINAN_BRANCH_NAME "unknown branch")
@@ -510,6 +573,11 @@ add_executable(test_yaml
 
 add_executable(pea
 		cpp/3rdparty/enum.h
+
+		cpp/3rdparty/egm96/EGM96.c
+		cpp/3rdparty/egm96/EGM96.h
+		cpp/3rdparty/egm96/EGM96_data.h
+		
 		cpp/common/acsConfig.hpp
 		cpp/common/acsConfig.cpp
 		cpp/common/acsFileStream.hpp
@@ -551,6 +619,8 @@ add_executable(pea
 		cpp/common/fileLog.hpp
 		cpp/common/gTime.cpp
 		cpp/common/gTime.hpp
+		cpp/common/instrument.cpp
+		cpp/common/instrument.hpp
 		cpp/common/linearCombo.cpp
 		cpp/common/linearCombo.hpp
 		cpp/common/mongo.cpp
@@ -568,7 +638,6 @@ add_executable(pea
 		cpp/common/orbits.cpp
 		cpp/common/orbits.hpp
 		cpp/common/preceph.cpp
-		cpp/common/preceph.hpp
 		cpp/common/rtsSmoothing.cpp
 		cpp/common/rtcmEncoder.cpp
 		cpp/common/rtcmEncoder.hpp
@@ -579,6 +648,7 @@ add_executable(pea
 		cpp/common/satSys.hpp
 		cpp/common/snx.hpp
 		cpp/common/snx.cpp
+		cpp/common/tropSinex.cpp
 		cpp/common/sp3.cpp
 		cpp/common/ssr.hpp
 		cpp/common/station.hpp
@@ -588,11 +658,12 @@ add_executable(pea
 		cpp/common/testUtils.hpp
 		cpp/common/writeClock.cpp
 		cpp/common/writeClock.hpp
-		cpp/common/writeRinex.cpp
-		cpp/common/writeRinex.hpp
+		cpp/common/writeRinexNav.cpp
+		cpp/common/writeRinexNav.hpp
+		cpp/common/writeRinexObs.cpp
+		cpp/common/writeRinexObs.hpp
 		cpp/common/writeSp3.cpp
 		cpp/common/writeSp3.hpp
-
 
 		cpp/iono/ionoMeas.cpp
 		cpp/iono/ionoModel.cpp
@@ -630,10 +701,12 @@ add_executable(pea
 		cpp/pea/minimumConstraints.hpp
 		cpp/pea/networkEstimator.cpp
 		cpp/pea/networkEstimator.hpp
-		cpp/pea/newLambda.cpp
 		cpp/pea/pea_snx.cpp
 		cpp/pea/ppp.cpp
 		cpp/pea/ppppp.cpp
+		cpp/pea/ppppp_obs.cpp
+		cpp/pea/ppppp_ambres.cpp
+		cpp/pea/ppppp_pseudoobs.cpp
 		cpp/pea/ppp_user.cpp
 		cpp/pea/ppp_network.cpp
 		cpp/pea/ppp.hpp
@@ -657,13 +730,16 @@ add_executable(pea
 		)
 
 target_include_directories(pea PUBLIC
-		cpp/pea
-		cpp/common
 		cpp/3rdparty
-		cpp/iono
+		cpp/3rdparty/egm96
+		
 		cpp/ambres
-		cpp/rtklib
+		cpp/common
+		cpp/iono
 		cpp/orbprop
+		cpp/pea
+		cpp/rtklib
+		
 		${EIGEN3_INCLUDE_DIRS}
 		${LAPACK_INCLUDE_DIRS}
 		${OPENBLAS_INCLUDE_DIRS}
@@ -725,7 +801,6 @@ endif()
 
 target_compile_definitions(pea PRIVATE
 							EIGEN_USE_BLAS=1
-							DEBUGLOM
 						)
 
 target_compile_definitions(brdc2sp3 PRIVATE
@@ -839,8 +914,7 @@ target_link_libraries(pea PUBLIC
 						${LAPACK_LIBRARIES}
 						${YAML_CPP_LIBRARIES}
 						${YAML_CPP_LIB}
-						${LIBMONGOCXX_LIBRARIES}
-						${LIBBSONCXX_LIBRARIES}
+						mongo::mongocxx_shared
 						${BLAS_LIBRARY_DIRS}
 						${OPENSSL_LIBRARY_DIRS}
 						${OPENSSL_LIBRARIES}
@@ -854,18 +928,16 @@ target_link_libraries(brdc2sp3 PUBLIC
 						${LAPACK_LIBRARIES}
 						${YAML_CPP_LIBRARIES}
 						${YAML_CPP_LIB}
-						${LIBMONGOCXX_LIBRARIES}
-						${LIBBSONCXX_LIBRARIES}
+						mongo::mongocxx_shared
 						${BLAS_LIBRARY_DIRS}
 						${OPENSSL_LIBRARY_DIRS}
 						${OPENSSL_LIBRARIES}
 					)
 
 
-# first we can indicate the documentation build as an option and set it to ON by default
-option(BUILD_DOC "Build documentation" ON)
 
 # check if Doxygen is installed
+if (BUILD_DOC)
 find_package(Doxygen)
 if (DOXYGEN_FOUND)
 
@@ -893,9 +965,10 @@ if (DOXYGEN_FOUND)
 
 else (DOXYGEN_FOUND)
 
-message("Doxygen need to be installed to generate the doxygen documentation")
+	message("Doxygen need to be installed to generate the doxygen documentation")
 
 endif (DOXYGEN_FOUND)
+endif()
 
 list(APPEND CTEST_CUSTOM_WARNING_EXCEPTION
 ".*warning: ignoring loop annotation.*"
@@ -911,7 +984,7 @@ if(ENABLE_PARALLELISATION)
 	target_compile_definitions(pea PRIVATE ENABLE_PARALLELISATION=1)
 endif()
 
-link_directories(/usr/lib64 ${CMAKE_BINARY_DIR}/../../build/lib)
+link_directories(/usr/lib64 ${CMAKE_BINARY_DIR}/../lib)
 
 target_include_directories(pod PUBLIC
 	.
@@ -950,10 +1023,20 @@ set_target_properties(brdc2ecef 	PROPERTIES LINKER_LANGUAGE Fortran)
 set_target_properties(timesystem 	PROPERTIES LINKER_LANGUAGE Fortran)
 set_target_properties(test_yaml 	PROPERTIES LINKER_LANGUAGE Fortran)
 
+if (OpenMP_Fortran_FOUND)
+	target_link_libraries(pod PUBLIC OpenMP::OpenMP_Fortran)
+endif()
+
 target_compile_definitions(pod 			PRIVATE LAPACK BLAS)
 target_compile_definitions(crs2trs 		PRIVATE)
 target_compile_definitions(brdc2ecef 	PRIVATE)
 target_compile_definitions(timesystem 	PRIVATE)
 target_compile_definitions(test_yaml 	PRIVATE)
 
-#print_all_variables()
+
+	
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+message(STATUS "CMAKE_CXX_FLAGS:         ${CMAKE_CXX_FLAGS}")
+message(STATUS "CMAKE_Fortran_FLAGS:     ${CMAKE_Fortran_FLAGS}")
+
+# print_all_variables()

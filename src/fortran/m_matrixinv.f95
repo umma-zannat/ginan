@@ -71,7 +71,8 @@ SUBROUTINE matrixinv (Amatrix, AmatrixInv, An)
       REAL (KIND = prec_d) :: WORK(An) 
       REAL (KIND = prec_q) :: Nmatrix(An,An)
       REAL (KIND = prec_q) :: NmatrixInv(An,An)
-      INTEGER (KIND = prec_int2) :: AllocateStatus, DeAllocateStatus	  
+      INTEGER (KIND = prec_int2) :: AllocateStatus
+!       , DeAllocateStatus	  
 
 
 ! External procedures in LAPACK library

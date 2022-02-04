@@ -4,8 +4,7 @@
 
 
 #include "acsObsStream.hpp"
-
-#include "preceph.hpp"
+#include "ephemeris.hpp"
 
 /** Interface for rinex streams
 */

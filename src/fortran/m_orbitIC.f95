@@ -68,6 +68,7 @@ SUBROUTINE orbitIC (fname, IC_matrix, PRNmatrix)
 ! Local variables declaration
 ! ----------------------------------------------------------------------
       INTEGER (KIND = prec_int8) :: i, ipulse, j, k
+      INTEGER (KIND = prec_int8) :: ipulse_r, ipulse_t, ipulse_n, ipulse_read
       INTEGER (KIND = prec_int2) :: UNIT_IN, ios, ios_ith, ios_data, ios_line, indx
       INTEGER (KIND = prec_int8) :: sz1, sz2, sz3
       CHARACTER (LEN=1024) :: line_ith	  
@@ -78,6 +79,7 @@ SUBROUTINE orbitIC (fname, IC_matrix, PRNmatrix)
       INTEGER (KIND = prec_int8) :: isat, iparam, jsat
       CHARACTER (LEN=3) :: PRN_i
       CHARACTER (LEN=1) :: char1
+      CHARACTER (LEN=6) :: PRi, PTi, PNi
       INTEGER (KIND = prec_int8) :: mjd_i
       REAL (KIND = prec_q) :: sec00_i, xo, yo, zo, Vxo, Vyo, Vzo	  
       REAL (KIND = prec_q) :: ERP_OFF_ic(4), ERP_RATE_ic(4), t_off
@@ -140,11 +142,16 @@ if (word1_ln == "#ERP_d0") then
 end if
 
 !#ERP_RATE_d0  MJD  XP(arcsec/d) YP(arcsec/d) UT1-UTC(sec/d):  58683.0  -2.9690873374217608e-07    -7.9299473350610306e-07    -1.34996665e-07
-if (word1_ln == "#ERP_RATE_d0") then
-   indx=index(line_ith,':')+1
-   read(line_ith(indx:),*) ERP_RATE_ic(1:4)
-!   READ (line_ith, '(5a,4f10.0)' , IOSTAT=ios_data) word_i, word_i, word_i, word_i, word_i, ERP_RATE_ic(1:4)
-   erp_rates_read = .true.
+!#ERP_RATE_d0    MJD XP(arcsec/day) YP(arcsec/day) UT1-UTC(sec/day): ----> UNESTIMATED <---- 
+indx = 0
+if (word1_ln == "#ERP_RATE_d0" ) then
+   indx=index(line_ith,'UNESTIMATED')
+   if (indx .eq. 0 ) then     
+      indx=index(line_ith,':')+1
+      read(line_ith(indx:),*) ERP_RATE_ic(1:4)
+!     READ (line_ith, '(5a,4f10.0)' , IOSTAT=ios_data) word_i, word_i, word_i, word_i, word_i, ERP_RATE_ic(1:4)
+      erp_rates_read = .true.
+   endif
 end if
 
 ! ----------------------------------------------------------------------
@@ -342,6 +349,7 @@ END IF
 word1_ln = ''
 line_ith = ''
 ipulse = 0
+ipulse_read = 0
 END IF
 
 jsat = 0
@@ -350,8 +358,37 @@ jsat = 0
 
 IF (word1_ln == "#IC_PULSE_INFO") THEN
         ipulse = ipulse + 1
-READ (line_ith, * , IOSTAT=ios_data) word_i, PRN_i
+READ (line_ith, * , IOSTAT=ios_data) word_i, PRN_i, word_i, word_i, word_i,PRi,PTi,PNi
 READ (PRN_i,'(1A,I2)') char1, jsat
+READ (PRi, '(2x,I2)') ipulse_r
+READ (PTi, '(2x,I2)') ipulse_t
+READ (PNi, '(2x,I2)') ipulse_n
+! sanity check make sure ipulse_? vars are ipulse or 0
+if (ipulse_r .ne. ipulse) then
+    if (ipulse_r .ne. 0) then
+        write (*, *) "bad read for pulse parameter ", ipulse, " for sat ", PRN_i
+        STOP
+    end if
+end if
+if (ipulse_r .ne. 0) ipulse_read= ipulse_read+1
+if (ipulse_t .ne. ipulse) then
+    if (ipulse_t .ne. 0) then
+        write (*, *) "bad read for pulse parameter ", ipulse, " for sat ", PRN_i
+        STOP
+    end if
+end if
+if (ipulse_t .ne. 0) ipulse_read= ipulse_read+1
+if (ipulse_n .ne. ipulse) then
+    if (ipulse_n .ne. 0) then
+        write (*, *) "bad read for pulse parameter ", ipulse, " for sat ", PRN_i
+        STOP
+    end if
+end if
+if (ipulse_n .ne. 0) ipulse_read= ipulse_read+1
+if (ipulse_read .ne. yml_pulse_parameter_count) then
+    write (*,*), "Wrong number of pulse parameters read, ", ipulse_read, " should be ", yml_pulse_parameter_count
+    STOP
+end if
 READ (line_ith, * , IOSTAT=ios_data) word_i, word_i, word_i, word_i, word_i, &
                                   &  word_i, word_i, word_i, IC_pulse_matrix_glb(jsat,ipulse,&
                                   1:yml_pulse_parameter_count*yml_pulse_epoch_number+2)

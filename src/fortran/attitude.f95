@@ -273,6 +273,7 @@ READ (PRNsat, FMT='(A1,I2.2)' , IOSTAT=ios) GNSSid, PRN_num
 ! 				GLONASS:	33-64
 !				Galileo:	65-100
 !				BeiDou:		101-136
+! TODO:                         QZSS: ???
 ! ----------------------------------------------------------------------
 If (GNSSid == 'G') then
     PRN_eclips = PRN_num
@@ -285,7 +286,8 @@ Else if (GNSSid == 'C') then
 End If
 ! ----------------------------------------------------------------------
 
-
+!write (*,*) "r_CRS:", r_CRS(1), r_CRS(2), r_CRS(3), "v_CRS: ", v_CRS(1), v_CRS(2), v_CRS(3), &
+!        "r_sun_crs: ", r_sun_crs(1), r_sun_crs(2), r_sun_crs(3)
 ! ----------------------------------------------------------------------
 ! Beta angle
 CALL beta_angle (r_CRS, v_CRS, r_sun_crs, beta)

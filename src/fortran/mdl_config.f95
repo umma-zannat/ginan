@@ -4,21 +4,21 @@ MODULE mdl_config
 ! Purpose:
 !  Module for setting the major configuration parameters to the POD source code 
 ! ---------------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-!			Geoscience Australia, Frontier-SI
-! Created:	24 May 2019
+! Author :  Dr. Thomas Papanikolaou
+!                 Geoscience Australia, Frontier-SI
+! Created:  24 May 2019
 ! ----------------------------------------------------------------------
 
 
       USE mdl_precision
       IMPLICIT NONE
-      SAVE 			
-	  
+      SAVE              
+        
 ! ----------------------------------------------------------------------
 ! POD major configuration file
 ! ----------------------------------------------------------------------
-	  CHARACTER (LEN=100) :: POD_fname_cfg
-	  CHARACTER (LEN=200) :: yaml_config
+        CHARACTER (LEN=100) :: POD_fname_cfg
+        CHARACTER (LEN=200) :: yaml_config
       LOGICAL yaml_found
 ! ----------------------------------------------------------------------
 ! POD Tool mode
@@ -28,7 +28,7 @@ MODULE mdl_config
 ! 3. Orbit Integration (Equation of Motion only)
 ! 4. Orbit Integration and Partials (Equation of Motion and Variational Equations)
 ! ----------------------------------------------------------------------
-!      INTEGER (KIND = prec_int2) :: POD_MODE_cfg	  	  
+!      INTEGER (KIND = prec_int2) :: POD_MODE_cfg             
 ! ----------------------------------------------------------------------
 
 ! ----------------------------------------------------------------------
@@ -37,17 +37,17 @@ MODULE mdl_config
 ! 1. Input a-priori orbit in sp3 format (applied as pseudo-observations)
 ! 2. Input file with Initial Conditions (State Vector and Parameters at initial epoch per satellite) 
 ! ----------------------------------------------------------------------
-!      INTEGER (KIND = prec_int2) :: IC_MODE_cfg	  	  
-	  
+!      INTEGER (KIND = prec_int2) :: IC_MODE_cfg              
+        
 ! Initial Conditions reference frame
-      CHARACTER (LEN=100) :: IC_REF_cfg				
+      CHARACTER (LEN=100) :: IC_REF_cfg                     
 ! Initial Conditions file name
 !      CHARACTER (LEN=300) :: IC_filename_cfg
 ! Initial Conditions matrix (global variable)
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: IC_matrix_glb
       REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE :: IC_pulse_matrix_glb
 ! ----------------------------------------------------------------------
-	  
+        
 ! ----------------------------------------------------------------------
 ! Orbit arc length (in hours) 
 ! ----------------------------------------------------------------------
@@ -78,29 +78,29 @@ MODULE mdl_config
 ! Earth Orientation Parameters (EOP)
 ! ---------------------------------------------------------------------------
 ! EOP data solution options:
-! 1. IERS C04 										: EOP_sol=1
-! 2. IERS RS/PC Daily 								: EOP_sol=2
-! 3. IGS ultra-rapid ERP + IERS RS/PC Daily (dX,dY)	: EOP_sol=3
+! 1. IERS C04                                                           : EOP_sol=1
+! 2. IERS RS/PC Daily                                             : EOP_sol=2
+! 3. IGS ultra-rapid ERP + IERS RS/PC Daily (dX,dY)   : EOP_sol=3
 !      INTEGER (KIND = prec_int1) :: EOP_solution_cfg
 ! ---------------------------------------------------------------------------
 ! EOP filename by IERS EOP :: Solutions 1 and 2
-! EOP_filename              eopc04_14_IAU2000.62-now 		! EOP_sol=1: eopc04_08_IAU2000.62-now	! EOP_sol=2: finals2000A.daily
+! EOP_filename              eopc04_14_IAU2000.62-now        ! EOP_sol=1: eopc04_08_IAU2000.62-now     ! EOP_sol=2: finals2000A.daily
       CHARACTER (LEN=512) :: EOP_fname_cfg
 
 ! ERP filename (Earth Rotation Parameters by IGS) :: Solution 3 (requires also finals2000A.daily data from EOP_sol=2 for Precession-Nutation corrections)
 ! ERP_filename              igu18543_12.erp
       CHARACTER (LEN=512) :: ERP_fname_cfg
 
-! EOP data interpolation number of points	  
+! EOP data interpolation number of points   
       !INTEGER (KIND = prec_int4) :: EOP_Nint_cfg
 ! ---------------------------------------------------------------------------
 
 ! ---------------------------------------------------------------------------
 ! IAU Precession-Nutation model:
 ! ---------------------------------------------------------------------------
-! 1. IAU2000A:		iau_pn_model = 2000
-! 2. IAU2006/2000A:	iau_pn_model = 2006
-! iau_pn_model              2000	  
+! 1. IAU2000A:          iau_pn_model = 2000
+! 2. IAU2006/2000A:     iau_pn_model = 2006
+! iau_pn_model              2000      
 !      INTEGER (KIND = prec_int2) :: iau_model_cfg
 ! ---------------------------------------------------------------------------
 
@@ -109,10 +109,10 @@ MODULE mdl_config
 ! Configuration files of Orbit modelling (2 basic initial files):
 ! ----------------------------------------------------------------------
 ! Equation of Motion (EQM.in)
-      CHARACTER (LEN=100) :: EQM_fname_cfg				
+      CHARACTER (LEN=100) :: EQM_fname_cfg                        
 
 ! Variational Equations (VEQ.in)
-      CHARACTER (LEN=100) :: VEQ_fname_cfg				
+      CHARACTER (LEN=100) :: VEQ_fname_cfg                        
 ! ----------------------------------------------------------------------
 
 
@@ -129,7 +129,7 @@ MODULE mdl_config
 ! 1. Celestial Reference System :: ICRS
 ! 2. Terrestrial Reference System :: ITRS
 ! ----------------------------------------------------------------------
-!      CHARACTER (LEN=4) :: VEQ_REFSYS_cfg				
+!      CHARACTER (LEN=4) :: VEQ_REFSYS_cfg                        
 ! ----------------------------------------------------------------------
 
 
@@ -138,7 +138,7 @@ MODULE mdl_config
 ! ----------------------------------------------------------------------
 ! 0. sat_vel = 0 :: Do not write Velocity vector to sp3 orbit
 ! 1. sat_vel > 0 :: Write Velocity vector to sp3 orbit
-!      INTEGER (KIND = prec_int2) :: sp3_velocity_cfg	  	  
+!      INTEGER (KIND = prec_int2) :: sp3_velocity_cfg         
 ! ----------------------------------------------------------------------
 
 ! ----------------------------------------------------------------------
@@ -146,13 +146,13 @@ MODULE mdl_config
 ! ----------------------------------------------------------------------
 ! 0. partials_velocity_cfg = 0 :: Do not write Velocity vector's partials elements
 ! 1. partials_velocity_cfg > 0 :: Write Velocity vector's partials elements
-!      INTEGER (KIND = prec_int2) :: partials_velocity_cfg	  	  
+!      INTEGER (KIND = prec_int2) :: partials_velocity_cfg          
 ! ----------------------------------------------------------------------
 
 ! ----------------------------------------------------------------------
 ! Leap Second filename (leapsec_filename)
 ! need to keep this because brdc uses it
-      CHARACTER (LEN=512) :: leapsec_filename_cfg				
+      CHARACTER (LEN=512) :: leapsec_filename_cfg                       
 ! ----------------------------------------------------------------------
 
 ! ----------------------------------------------------------------------

@@ -1,4 +1,6 @@
 
+// #pragma GCC optimize ("O0")
+
 #include <functional>
 
 #include "GNSSambres.hpp"
@@ -15,7 +17,7 @@ map<E_Sys, E_ObsCode> defaultCodesL1 =
 	{E_Sys::GPS, E_ObsCode::L1C},
 	{E_Sys::GLO, E_ObsCode::L1C},
 	{E_Sys::GAL, E_ObsCode::L1C},
-	{E_Sys::CMP, E_ObsCode::L2I},
+	{E_Sys::BDS, E_ObsCode::L2I},
 	{E_Sys::QZS, E_ObsCode::L1C}
 };
 
@@ -24,7 +26,7 @@ map<E_Sys, E_ObsCode> defaultCodesL2 =
 	{E_Sys::GPS, E_ObsCode::L2W},
 	{E_Sys::GLO, E_ObsCode::L2C},
 	{E_Sys::GAL, E_ObsCode::L5Q},
-	{E_Sys::CMP, E_ObsCode::L7I},
+	{E_Sys::BDS, E_ObsCode::L7I},
 	{E_Sys::QZS, E_ObsCode::L2L}
 };
 
@@ -133,7 +135,6 @@ int read_biasSINEX_line(
 	{
 		//this seems to be a receiver
 		id = name;
-		id += Sat.sysChar();
 	}
 	else if (sat != "   ")
 	{
@@ -152,7 +153,8 @@ int read_biasSINEX_line(
 		//no valid identifier
 		return 0;
 	}
-
+	
+	id += Sat.sysChar();
 
 	double lam1		= 0;
 	E_MeasType dummy;
@@ -314,7 +316,7 @@ int read_biasnx_fil(
 * args     :       char*   file    I   Files to read
 *                  int     opt     I   bias I/O options
 * ---------------------------------------------------------------------------*/
-int read_bias_SINEX(
+int readBiasSinex(
 	string& file)
 {
 	bias_io_opt opt;
@@ -365,7 +367,7 @@ bool getOSBBias(
 		{
 			//end time is satisfactory
 			output = bias;
-			tracepdeex(lvl, trace, "\nFound bias for %d %S  %s - %s", bias.cod1, measType == PHAS ? "phase" : "code ", bias.tini.to_string(0), bias.tfin.to_string(0));
+			tracepdeex(lvl, trace, " - Found bias for %s %s %s - %s", bias.cod1._to_string(), measType == PHAS ? "phase" : "code ", bias.tini.to_string(0), bias.tfin.to_string(0));
 			return true;
 		}
 
@@ -524,21 +526,20 @@ bool getDSBBias(
 */
 void inpt_hard_bias(
 	Trace& 			trace,		///< Trace to output to
-	Obs& 			obs, 		///< Observation to find biases for
+	GTime			time,		///< Time of bias to look up
+	string			id,			///< The id of the device to retrieve the bias of
+	SatSys			Sat,		///< The satellite to retrieve the bias of
 	E_ObsCode 		obsCode,	///< Specific code of observation to find biases for
 	double* 		bias,		///< hardware bias
 	double* 		var,		///< hardware bias variance
-	bias_io_opt 	opt)		///< Specific biases to find
+	bias_io_opt 	opt,		///< Specific biases to find
+	SatNav*			satNav_ptr)	///< Pointer to satellite navigation data
 {
 	const int lv = 3;
 
-	GTime time = obs.time;
-	SatNav& satNav	= *obs.satNav_ptr;
+	SatNav& satNav	= *satNav_ptr;
 
-	bias[CODE] = 0;
-	bias[PHAS] = 0;
-	var [CODE] = 0;
-	var [PHAS] = 0;
+	id += Sat.sysChar();
 
 	if (opt.SSR_biases)
 	{
@@ -554,8 +555,8 @@ void inpt_hard_bias(
 			{
 				auto& ssrBiasEntry = ssrbias.codeBias_map[obsCode];
 				
-				bias[CODE] += -ssrBiasEntry.bias;
-				var [CODE] +=  ssrBiasEntry.var;
+				bias[CODE] = -ssrBiasEntry.bias;
+				var [CODE] =  ssrBiasEntry.var;
 			}
 		}
 
@@ -571,37 +572,37 @@ void inpt_hard_bias(
 			{
 				auto& ssrBiasEntry = ssrbias.codeBias_map[obsCode];
 				
-				bias[PHAS] += -ssrBiasEntry.bias;
-				var [PHAS] +=  ssrBiasEntry.var;
+				bias[PHAS] = -ssrBiasEntry.bias;
+				var [PHAS] =  ssrBiasEntry.var;
 			}
 		}
 	}
 
 	if (opt.OSB_biases)
 	{
-		tracepdeex(lv, trace, "\nReading OSB bias for sat %s, code %s ... ", obs.Sat.id().c_str(), obsCode._to_string());
+		tracepdeex(lv, trace, "\nReading OSB bias for %5s, code %s ... ", id.c_str(), obsCode._to_string());
 
 		if (opt.COD_biases)
 		{
 			SinexBias foundCodeBias;
-			bool pass = getOSBBias(trace, time, obs.Sat.id(), CODE, foundCodeBias, obsCode);
+			bool pass = getOSBBias(trace, time, id, CODE, foundCodeBias, obsCode);
 			if (pass)
 			{
-				bias[CODE] += foundCodeBias.bias;
-				var [CODE] += foundCodeBias.var;
-				tracepdeex(lv, trace, "found CODE: %11.4f", foundCodeBias.bias);
+				bias[CODE] = foundCodeBias.bias;
+				var [CODE] = foundCodeBias.var;
+				tracepdeex(lv, trace, " found CODE: %11.4f", foundCodeBias.bias);
 			}
 		}
 
 		if (opt.PHS_biases)
 		{
 			SinexBias foundPhasBias;
-			bool pass = getOSBBias(trace, time, obs.Sat.id(), PHAS, foundPhasBias, obsCode);
+			bool pass = getOSBBias(trace, time, id, PHAS, foundPhasBias, obsCode);
 			if (pass)
 			{
-				bias[PHAS] += foundPhasBias.bias;
-				var [PHAS] += foundPhasBias.var;
-				tracepdeex(lv, trace, "found PHAS: %11.4f", foundPhasBias.bias);
+				bias[PHAS] = foundPhasBias.bias;
+				var [PHAS] = foundPhasBias.var;
+				tracepdeex(lv, trace, " found PHAS: %11.4f", foundPhasBias.bias);
 			}
 		}
 	}
@@ -609,11 +610,10 @@ void inpt_hard_bias(
 	if	( opt.DSB_biases
 		&&opt.COD_biases)
 	{
-		tracepdeex(lv, trace, "\nReading DSB bias for sat %s, code %d ...", obs.Sat.id().c_str(), obsCode._to_string());
+		tracepdeex(lv, trace, "\nReading DSB bias for %4s, code %d ...", id, obsCode._to_string());
 
-		auto sys = obs.Sat.sys;
-		auto defaultCodeL1 = defaultCodesL1[sys];
-		auto defaultCodeL2 = defaultCodesL2[sys];
+		auto defaultCodeL1 = defaultCodesL1[Sat.sys];
+		auto defaultCodeL2 = defaultCodesL2[Sat.sys];
 		double lam1 = satNav.lamMap[ftypes[defaultCodeL1]];
 		double lam2 = satNav.lamMap[ftypes[defaultCodeL2]];		//todo aaron remove later (LCs)
 
@@ -621,85 +621,88 @@ void inpt_hard_bias(
 		double c1 = c2 - 1;
 
 		SinexBias foundCodeBias;
-		bool pass = getDSBBias(trace, time, obs.Sat.id(), CODE, foundCodeBias, obsCode, defaultCodeL1);
+		bool pass = getDSBBias(trace, time, id, CODE, foundCodeBias, obsCode, defaultCodeL1);
 		if (pass)
 		{
-			tracepdeex(lv, trace, "found CODE: %11.4f", foundCodeBias.bias);
+			tracepdeex(lv, trace, " found CODE: %11.4f", foundCodeBias.bias);
 			if (opt.LC12_correction)
 			{
 				SinexBias foundCodeBias2;
-				pass = getDSBBias(trace, time, obs.Sat.id(), CODE, foundCodeBias2, defaultCodeL1, defaultCodeL2);
+				pass = getDSBBias(trace, time, id, CODE, foundCodeBias2, defaultCodeL1, defaultCodeL2);
 
 				foundCodeBias.bias	+=	   c2	* foundCodeBias2.bias;
 				foundCodeBias.var	+= SQR(c2)	* foundCodeBias2.var;
 // 				printf("\nadd %f, from %f", c2 * foundCodeBias2.bias, foundCodeBias2.bias);
 			}
 
-			bias[CODE] += foundCodeBias.bias;
-			var [CODE] += foundCodeBias.var;
-			tracepdeex(lv, trace, "found CODE: %11.4f", foundCodeBias.bias);
+			bias[CODE] = foundCodeBias.bias;
+			var [CODE] = foundCodeBias.var;
+			tracepdeex(lv, trace, " found CODE: %11.4f", foundCodeBias.bias);
 		}
 		else
 		{
 			//biases not valid, try to generate
+			tracepdeex(lv, trace, "DSB bias not found, looking for RINEX DCB ... ");
+
 			auto ft = ftypes[obsCode];
 
-			auto& rbias = stationRBiasMap[obs.mount][sys];
-
-			tracepdeex(lv, trace, "DSB bias note found, looking for RINEX DCB ... ");
-
-			if (satNav.cBias_P1_P2 != 0)
+			array<double, 3>* rbias_ptr = nullptr;
+			if (opt.REC_biases)
 			{
-				tracepdeex(lv, trace, "P1-P2 DCB found ... ");
-
-				if (ft == F1)
+				try
 				{
-					if (opt.SAT_biases)			bias[CODE] += c2 * satNav.cBias_P1_P2;
-					if (opt.REC_biases)			bias[CODE] += c2 * rbias[0];
-				}
+					auto& biasMap = stationRBiasMap.at(id).at(Sat.sys);
 
-				if (ft == F2)
-				{
-					if (opt.SAT_biases)			bias[CODE] += c1 * satNav.cBias_P1_P2;
-					if (opt.REC_biases)			bias[CODE] += c1 * rbias[0];
+					rbias_ptr = &biasMap;
 				}
+				catch (...)	{}
+			
 			}
-
-			if (obs.Sat.sys == +E_Sys::GPS)
+			if (rbias_ptr)
 			{
-				if (obsCode == +E_ObsCode::L2C)
-				{
-					tracepdeex(lv, trace, "P2-C2 DCB found ... ");
+				auto& rbias = *rbias_ptr;
+				
+				tracepdeex(lv, trace, "DSB bias note found, looking for RINEX DCB ... ");
 
-					if (opt.SAT_biases)			bias[CODE] -= satNav.cBiasMap[F2];		//these are negative
-					if (opt.REC_biases)			bias[CODE] -= rbias[1];
+				if (satNav.cBias_P1_P2 != 0)
+				{
+					tracepdeex(lv, trace, "P1-P2 DCB found ... ");
+
+					if (ft == F1)						{	bias[CODE] = rbias[0] * c2;													}
+					if (ft == F2)						{	bias[CODE] = rbias[0] * c1;													}
 				}
 
-				if (obsCode == +E_ObsCode::L1W)
+	// 			if (obs.Sat.sys == +E_Sys::GPS)
 				{
-					tracepdeex(lv, trace, "P1-C1 DCB found ... ");
-
-					if (opt.SAT_biases)			bias[CODE] += satNav.cBiasMap[F1];
-					if (opt.REC_biases)			bias[CODE] += rbias[2];
+					if (obsCode == +E_ObsCode::L2C)		{	bias[CODE] = -rbias[1];		tracepdeex(lv, trace, "P2-C2 DCB found ... ");		}//these are negative
+					if (obsCode == +E_ObsCode::L1W)		{	bias[CODE] = +rbias[2];		tracepdeex(lv, trace, "P1-C1 DCB found ... ");		}
 				}
+	// 			else if (obs.Sat.sys == +E_Sys::GLO)	
+	// 			{	
+	// 				if (obsCode == +E_ObsCode::L2P)		{	bias[CODE] = rbias[1];		tracepdeex(lv, trace, "P2-C2 DCB found ... ");		}	
+	// 				if (obsCode == +E_ObsCode::L1P)		{	bias[CODE] = rbias[2];		tracepdeex(lv, trace, "P1-C1 DCB found ... ");		}	
+// 				}
 			}
-			else if (obs.Sat.sys == +E_Sys::GLO)
+			if (opt.SAT_biases)
 			{
-				if (obsCode == +E_ObsCode::L2P)
+				if (satNav.cBias_P1_P2 != 0)
 				{
-					tracepdeex(lv, trace, "P2-C2 DCB found ... ");
+					tracepdeex(lv, trace, "P1-P2 DCB found ... ");
 
-					if (opt.SAT_biases)			bias[CODE] += satNav.cBiasMap[F2];
-					if (opt.REC_biases)			bias[CODE] += rbias[1];
+					if (ft == F1)						{		bias[CODE] = satNav.cBias_P1_P2 * c2;			}		
+					if (ft == F2)						{		bias[CODE] = satNav.cBias_P1_P2 * c1;			}
 				}
 
-				if (obsCode == +E_ObsCode::L1P)
+	// 			if (obs.Sat.sys == +E_Sys::GPS)
 				{
-					tracepdeex(lv, trace, "P1-C1 DCB found ... ");
-
-					if (opt.SAT_biases)			bias[CODE] += satNav.cBiasMap[F1];
-					if (opt.REC_biases)			bias[CODE] += rbias[2];
-				}
+					if (obsCode == +E_ObsCode::L2C)		{		bias[CODE] = -satNav.cBiasMap[F2];			tracepdeex(lv, trace, "P2-C2 DCB found ... ");		}			//these are negative		
+					if (obsCode == +E_ObsCode::L1W)		{		bias[CODE] = +satNav.cBiasMap[F1];			tracepdeex(lv, trace, "P1-C1 DCB found ... ");		}		
+				}	
+	// 			else if (obs.Sat.sys == +E_Sys::GLO)	
+	// 			{	
+	// 				if (obsCode == +E_ObsCode::L2P)		{		bias[CODE] = satNav.cBiasMap[F2];			tracepdeex(lv, trace, "P2-C2 DCB found ... ");		}	
+	// 				if (obsCode == +E_ObsCode::L1P)		{		bias[CODE] = satNav.cBiasMap[F1];			tracepdeex(lv, trace, "P1-C1 DCB found ... ");		}
+	// 			}
 			}
 		}
 	}

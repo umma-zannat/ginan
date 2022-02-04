@@ -1,4 +1,6 @@
 
+//#pragma GCC optimize ("O0")
+
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
@@ -127,7 +129,7 @@ GTime yds2time(const int* yds)
 	int doy		= yds[1];
 	int sec		= yds[2];
 	
-	if (year<1970||2099<year||doy<1||356<doy) 
+	if (year<1970||2099<year||doy<1||366<doy) 
 		return {};
 
 	/* leap year if year%4==0 in 1901-2099 */
@@ -546,7 +548,7 @@ double setdigits(const double n)
 *
 * reference:       [3]
 *----------------------------------------------------------------------------*/
-extern void jd2ymdhms(const double jd, double *ep)
+void jd2ymdhms(const double jd, double *ep)
 {
 	int b,c,d,e;
 	double t1,t2,i1;

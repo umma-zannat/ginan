@@ -299,7 +299,8 @@ SUBROUTINE read_sinex_file (UNIT_IN)
       IMPLICIT NONE
 
       INTEGER (KIND = prec_int4) :: UNIT_IN
-      INTEGER (KIND = prec_int2) :: s_SVNID, s_BLKID
+      INTEGER (KIND = prec_int2) :: s_BLKID
+!       , s_SVNID
       CHARACTER(LEN=1) :: gnss, gnss_tmp, etype
       CHARACTER(LEN=3) :: satprn
       CHARACTER(LEN=4) :: satsvn

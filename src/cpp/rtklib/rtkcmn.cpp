@@ -188,7 +188,11 @@ int getbitsInc(
 	return ans;
 }
 
-void pos2ecef(const double *pos, double *r)
+/** Transform geodetic postion to ecef
+*/
+void pos2ecef(
+	const double*	pos,	///< geodetic position {lat,lon,h} (rad,m)
+	Vector3d&		r)		///< ecef position {x,y,z} (m)
 {
 	double sinp	= sin(pos[0]);
 	double cosp	= cos(pos[0]);
@@ -789,7 +793,7 @@ void updatenav(
 		obs.satNav_ptr->lamMap[F2]		= CLIGHT / (FREQ2_GLO + DFRQ2_GLO * obs.satNav_ptr->geph_ptr->frq);
 		obs.satNav_ptr->lamMap[F5]		= CLIGHT / (FREQ3_GLO);
 	}
-	else if	(sys == +E_Sys::CMP)
+	else if	(sys == +E_Sys::BDS)
 	{
 		obs.satNav_ptr->lamMap[F1]		= CLIGHT / FREQ1_CMP; /* B1 */
 		obs.satNav_ptr->lamMap[F2]		= CLIGHT / FREQ2_CMP; /* B2 */
@@ -829,7 +833,7 @@ double satwavelen(SatSys Sat, int frq, SatNav* satNav_ptr)
 			else							return 0;
 		}
 	}
-	else if	(sys == +E_Sys::CMP)
+	else if	(sys == +E_Sys::BDS)
 	{
 		if      (frq == 0) return CLIGHT / FREQ1_CMP; /* B1 */
 		else if (frq == 1) return CLIGHT / FREQ2_CMP; /* B2 */
@@ -1143,12 +1147,35 @@ void sunmoonpos(
 
 	/* eci to ecef transformation matrix */
 	Matrix3d U;
-	double gmst_;
-	eci2ecef(tutc, erpv, U, &gmst_);
+	eci2ecef(tutc, erpv, U, gmst);
 
 	/* sun and moon postion in ecef */
 	if (rsun )		*rsun	= U * rs;
 	if (rmoon)		*rmoon	= U * rm;
-	if (gmst )		*gmst	= gmst_;
+}
+
+/** Low pass filter values
+*/
+void lowPassFilter(
+	Average&	avg,
+	double		meas,
+	double		procNoise,
+	double		measVar)
+{
+	if (avg.var == 0)
+	{
+		avg.mean	= meas;
+		avg.var		= measVar;
+		return;
+	}
+	
+	avg.var += SQR(procNoise);
+	
+	double delta	= meas - avg.mean;
+	double varFrac	= 1 / (measVar + avg.var);
+	
+	avg.mean += delta * varFrac;
+	
+	avg.var = 1 / (1 / measVar + 1 / avg.var);
 }
 

@@ -7,7 +7,7 @@ import plotly.graph_objs as go
 from app import app
 
 from datasets import db
-
+import apps.utilities as util
 possible_plot = ['Line', 'Scatter']
 dropdown_type = html.Div([
         dcc.Dropdown(
@@ -19,6 +19,21 @@ dropdown_type = html.Div([
     ],
     style={'width': '10%', 'display': 'inline-block'}
 )
+
+
+import plotly.express as px
+
+colorscales = px.colors.named_colorscales()
+
+
+def exclude_start():
+    return html.Div([
+        html.P('Exclude the first points',style={'display':'inline-block','margin-right':20}),
+        dcc.Input(id='exclude_npt', value='0', type='text', size='2'),
+        html.P(' points',style={'display':'inline-block','margin-right':5}),
+    ],
+        style={'width': '10%', 'display': 'inline-block'}
+    )
 
 
 def dropdown_site(site_list):
@@ -126,7 +141,7 @@ def generate_trace(graph_type, x, y, label):
         # print(label, mode, graph_type)
         trace = go.Scatter(x=x,  y=y, mode=mode, name=label)
     elif(graph_type =="POLAR"):
-        trace = go.Scatterpolar(r=y, theta=x, mode="markers", name=label)
+        trace = go.Scatterpolar(r=y, theta=x, mode="markers")#, name=label)
     return trace
 
 
@@ -140,9 +155,21 @@ def generate_trace(graph_type, x, y, label):
         State('mespolar_dropdown_key_C', 'value'),
         State('mespolar_dropdown_site', 'options'),
         State('mespolar_dropdown_sat', 'options'),
+        State('symbol_size', 'value'),
+        State('input_min','value'),
+        State('input_max', 'value'),
+        State('exclude_npt', 'value'),
+        State('colorscale', 'value')
     ])
-def update_graph_measurements(click,  site, sat, caxis, list_site, list_sat):
+def update_graph_measurements(click,  site, sat, caxis, list_site, list_sat, sym_size, input_min, input_max, exclude, cmap):
+    try:
+        exclude = int(exclude)
+    except:
+        exclude = 0
 
+    if exclude < 0:
+        exclude = 0
+    # print("Pt exclude",exclude)
     site = [i['value'] for i in list_site] if site == 'ALL' else [site]
     sat = [i['value'] for i in list_sat] if sat == 'ALL' else [sat]
     # print("HELLO Cplot",  site, sat, caxis)
@@ -155,28 +182,42 @@ def update_graph_measurements(click,  site, sat, caxis, list_site, list_sat):
         min_ = 0
         max_ = 0
         # print("looking for min max ")
+        # print(input_min, input_max)
         for z in z_:
-            min_ = min(min_, z.min())
-            max_ = max(max_, z.max())
-        # print('... MIN, MAX', min_, max_)
+            print(z[exclude:].max())
+            min_ = min(min_, z[exclude:].min())
+            max_ = max(max_, z[exclude:].max())
+        # print(z_[0])
+        # print(z_[0].max(), z_[0][exclude:].max(), np.argmax(z_[0]))
         min_ = np.floor(min_)
         max_ = np.ceil(max_)
+        # print(min_, max_)
+        if input_min is not None:
+            min_ = input_min
+        if input_max is not None:
+            max_ = input_max
+        # print('... MIN, MAX', min_, max_)
+
         for i in range(len(x_)):
             # print(i, ' out of ', len(x_))
             # x_[i] = x[i]*np.pi/180.0
             # y_[i] = y[i]*np_pi/180
             # trace.append(generate_trace(graph_type, x_[i], y_[i], f'{site_[i]}-{sat_[i]}'))
-            trace.append( go.Scatterpolar(r=y_[i], theta=x_[i], mode="markers",
+            _x, _y, _z = x_[i][exclude:], y_[i][exclude:], z_[i][exclude:]
+            trace.append(go.Scatterpolar(r=_y, theta=_x, mode="markers",
                                           marker=dict(
-                                              size=3,
-                                              colorscale='Viridis',
-                                              color=z_[i],
+                                              size=sym_size,
+                                              colorscale=cmap,
+                                              color=_z,
                                               showscale=True,
-                                            cmin = min_,
-                                            cmax = max_)
-                                          ))
+                                              cmin = min_,
+                                              cmax = max_),
+                                          name=f'{site_[i]}-{sat_[i]}',
+                                         hovertemplate='r:%{r:.3f} <br>theta:%{theta:.3f}<br>c: %{marker.color:.3f} ',
+                                         ))
         fig = go.Figure(data=trace)
-        fig.update_layout(xaxis=dict(rangeslider=dict(visible=True)), yaxis=dict(fixedrange=False),
+        fig.update_layout(xaxis=dict(rangeslider=dict(visible=True)), yaxis=dict(fixedrange=False), height=600,
+                          coloraxis_colorbar_x=-1.0,
                           polar=dict(
                               radialaxis_tickfont_size=8,
                               angularaxis=dict(
@@ -184,9 +225,16 @@ def update_graph_measurements(click,  site, sat, caxis, list_site, list_sat):
                                   rotation=90,
                                   direction="clockwise"
                               ),
-                              radialaxis= dict(range=[90,0])
-                          ))
-        fig.layout.autosize = True
+                              radialaxis=dict(range=[90, 0]),
+
+                          ),
+                          legend=dict(
+                              yanchor="top",
+                              y=0.99,
+                              xanchor="left",
+                              x=0.85)
+                          )
+    fig.layout.autosize = True
 
     return fig
 
@@ -201,8 +249,39 @@ def layout():
                 dropdown_site(db.DB_SITE),
                 dropdown_sat(db.DB_SAT),
                 dropdown_key_x(),
+                    html.Div(children=[util.namedSlider(
+                        name='Symbol size',
+                        id='symbol_size',
+                        min=1,
+                        max=8,
+                        step=1,
+                        value=3,
+                        marks={i: str(i) for i in range(1, 9)},
+                    )],
+                         style={'width': '20%', 'display': 'inline-block'}
+                         ),
+
                 # dropdown_key_y(),
+                dcc.Input(
+                    id="input_min",
+                    type="number",
+                    placeholder="Min Value",
+                ),
+                dcc.Input(
+                    id="input_max",
+                    type="number",
+                    placeholder="Max value",
+                ),
+                exclude_start(),
+                html.P("Color Scale"),
+                dcc.Dropdown(
+                    id='colorscale',
+                    options=[{"value": x, "label": x}
+                             for x in colorscales],
+                    value='viridis'
+                ),
                 update_button,
+
                 dcc.Graph(
                     id='plot_polar',
                     figure=get_empty_graph("select information first")

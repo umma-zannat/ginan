@@ -2,27 +2,27 @@
 
 
 ! ----------------------------------------------------------------------
-! Program:	main_pod.f03
+! Program:  main_pod.f03
 ! ----------------------------------------------------------------------
 ! Purpose:
 !  Precise Orbit Determination (POD) of GNSS satellites 
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-!			Geoscience Australia, CRC-SI
-! Created:	13 September 2017
+! Author :  Dr. Thomas Papanikolaou
+!           Geoscience Australia, CRC-SI
+! Created:  13 September 2017
 ! ----------------------------------------------------------------------
 ! POD version major modifications highlights: 
 ! Last modified  
 ! - Dr. Thomas Papanikolaou, 3 May 2018
-! 	Preliminary version of GNSS dynamic orbit determination	
+!   Preliminary version of GNSS dynamic orbit determination 
 ! - Dr. Thomas Papanikolaou, 25 June 2018
-! 	Version with minor revisions
+!   Version with minor revisions
 ! - Dr. Thomas Papanikolaou, 30 November 2018
-! 	Precise Orbit Determination (POD) version: Estimation of empirical forces parameters (bias, cycle-per-rev) that lead to mm-cm level orbital accuracy w.r.t. IGS precise orbits
+!   Precise Orbit Determination (POD) version: Estimation of empirical forces parameters (bias, cycle-per-rev) that lead to mm-cm level orbital accuracy w.r.t. IGS precise orbits
 ! - Dr. Thomas Papanikolaou, 30 January 2019
-! 	POD version upgrade: Ocean tides effect revision that has significant impact on longer orbit arcs e.g. 3 days 
+!   POD version upgrade: Ocean tides effect revision that has significant impact on longer orbit arcs e.g. 3 days 
 ! - Dr. Thomas Papanikolaou, 29 March 2019
-! 	POD version upgrade to a multi-GNSS multi-satellite POD version 
+!   POD version upgrade to a multi-GNSS multi-satellite POD version 
 ! ----------------------------------------------------------------------
 
 
@@ -38,55 +38,66 @@
       USE m_writearray2
       USE m_write_orbres
       USE m_writeorbit
-	  USE m_write_orb2sp3
-	  USE m_clock_read
-	  USE m_attitude_orb
-	  USE m_write_orbex	  
-	  USE m_satmetadata	  
-	  USE m_interpclocks	  
+      USE m_write_orb2sp3
+      USE m_clock_read
+      USE m_attitude_orb
+      USE m_write_orbex   
+      USE m_satmetadata   
+      USE m_interpclocks      
       IMPLICIT NONE
-	  
+      
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d) :: CPU_t0, CPU_t1
-      CHARACTER (LEN=100) :: EQMfname, VEQfname, PODfname, ORBMODfname				
-      CHARACTER (LEN=100) :: EQMfname_initial, VEQfname_initial				
-      INTEGER (KIND = prec_int2) :: ios_line, ios_key, ios_data
-      REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orb_icrf, orb_itrf  
-      REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: veqSmatrix, veqPmatrix
+      CHARACTER (LEN=100) :: EQMfname, VEQfname, PODfname
+!       , ORBMODfname               
+!       CHARACTER (LEN=100) :: EQMfname_initial
+!       , VEQfname_initial              
+      INTEGER (KIND = prec_int2) :: ios_key
+!       , ios_line, ios_data
+!       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orb_icrf, orb_itrf  
+!       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: veqSmatrix, veqPmatrix
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orbits_ics_icrf  
-      REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: Vres  
-      REAL (KIND = prec_d), DIMENSION(3) :: Vrms 	    
-	  !REAL (KIND = prec_d), DIMENSION(5,6) :: stat_XYZ_extC, stat_RTN_extC, stat_Kepler_extC, stat_XYZ_extT
+!       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: Vres  
+!       REAL (KIND = prec_d), DIMENSION(3) :: Vrms      
+      !REAL (KIND = prec_d), DIMENSION(5,6) :: stat_XYZ_extC, stat_RTN_extC, stat_Kepler_extC, stat_XYZ_extT
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=2) :: GNSS_id
-	  INTEGER (KIND = prec_int2) :: ORB_mode
+!       CHARACTER (LEN=2) :: GNSS_id
+!       INTEGER (KIND = prec_int2) :: ORB_mode
 ! ----------------------------------------------------------------------
-	  INTEGER (KIND = prec_int8) :: Nsat, isat
-	  INTEGER (KIND = prec_int8) :: iepoch, iparam
-	  INTEGER (KIND = prec_int8) :: i
-	  INTEGER (KIND = prec_int8) :: sz1, sz2, Nepochs, N2_orb, N2_veqSmatrix, N2_veqPmatrix, N2sum  
+!       INTEGER (KIND = prec_int8) ::  isat
+      !    ,   Nsat
+!       INTEGER (KIND = prec_int8) :: iparam
+!       , iepoch
+      INTEGER (KIND = prec_int8) :: i
+      INTEGER (KIND = prec_int8) :: sz1
+!       , Nepochs, N2_orb, N2_veqSmatrix, N2_veqPmatrix
+!       , N2sum  
+!     , sz2
       REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE :: orbits_partials_icrf  
       REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE :: orbits_partials_itrf  
-	  CHARACTER (LEN=3), ALLOCATABLE :: PRNmatrix(:)
-      INTEGER (KIND = prec_int2) :: AllocateStatus, DeAllocateStatus  
+      CHARACTER (LEN=3), ALLOCATABLE :: PRNmatrix(:)
+      INTEGER (KIND = prec_int2) ::  DeAllocateStatus  
+!       ,AllocateStatus,
       INTEGER (KIND = prec_int2) :: sp3_velocity_cfg, partials_velocity_cfg
-	  CHARACTER (LEN=3) :: PRN_isat
-	  INTEGER :: ios
-      CHARACTER (LEN=512) :: orbits_fname, orbits_partials_fname				
-      CHARACTER (LEN=100) :: fname_write				
-      CHARACTER (LEN=512) :: filename				
+!     CHARACTER (LEN=3) :: PRN_isat
+!       INTEGER :: ios
+      CHARACTER (LEN=512) ::  orbits_partials_fname
+!       ,             orbits_fname,   
+!       CHARACTER (LEN=100) :: fname_write                
+      CHARACTER (LEN=512) :: filename               
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=512) :: fname_sp3, ORBpseudobs_fname, ORBEXT_fname				
-	  INTEGER :: year, month, day
-	  INTEGER :: Iyear, Imonth, Iday
-      REAL (KIND = prec_d) :: Sec_00 	    
+!       CHARACTER (LEN=512) ::  ORBpseudobs_fname, ORBEXT_fname 
+!       ,       fname_sp3    
+!       INTEGER :: year, month, day
+!       INTEGER :: Iyear, Imonth, Iday
+!       REAL (KIND = prec_d) :: Sec_00      
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=50) :: fname_id				
-      CHARACTER (LEN=100) :: param_id				
-      CHARACTER (LEN=512) :: param_value				
-      REAL (KIND = prec_d) :: Zo(6) 
+      CHARACTER (LEN=50) :: fname_id                
+      CHARACTER (LEN=100) :: param_id               
+      CHARACTER (LEN=512) :: param_value                
+!       REAL (KIND = prec_d) :: Zo(6) 
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=512) :: ORB2sp3_fname				
+      CHARACTER (LEN=512) :: ORB2sp3_fname              
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orbit_resR  
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orbit_resT  
@@ -97,19 +108,19 @@
       INTEGER (KIND = prec_int8) :: GPS_week, GPSweek_mod1024
       REAL (KIND = prec_d) :: GPS_wsec, GPS_day
 ! ----------------------------------------------------------------------
-	  INTEGER (KIND = prec_int8) :: Ncommon  
-      REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: dorb_icrf, dorb_itrf 
-      REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: dorb_RTN, dorb_Kepler
+!       INTEGER (KIND = prec_int8) :: Ncommon  
+!       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: dorb_icrf, dorb_itrf 
+!       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: dorb_RTN, dorb_Kepler
 ! ----------------------------------------------------------------------
       !REAL (KIND = prec_d) :: ORBPRED_ARC_glb
-      REAL (KIND = prec_d) :: orbarc_sum
-      INTEGER (KIND = prec_int2) :: IC_MODE	  	  
-      CHARACTER (LEN=500) :: IC_REF				
+!       REAL (KIND = prec_d) :: orbarc_sum
+!       INTEGER (KIND = prec_int2) :: IC_MODE       
+!       CHARACTER (LEN=500) :: IC_REF             
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE :: orbdiff2
 ! ----------------------------------------------------------------------
       LOGICAL :: pod_config_exists
-	  CHARACTER (LEN=100) :: pgm_name
+      CHARACTER (LEN=100) :: pgm_name
 ! ----------------------------------------------------------------------
       CHARACTER (len=300) :: str
       INTEGER (KIND = prec_int2) :: j, k, first_real_sat
@@ -119,7 +130,7 @@
       INTEGER (KIND = prec_int2) :: CLKformat
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE :: attitude_array  
-      CHARACTER (LEN=100) :: ORBEX_fname				
+      CHARACTER (LEN=100) :: ORBEX_fname                
 ! ----------------------------------------------------------------------
       INTEGER (KIND = prec_int4), ALLOCATABLE :: SVN_array(:)
       CHARACTER (LEN=20), ALLOCATABLE :: BLOCK_array(:)
@@ -157,7 +168,7 @@ CALL read_cmdline
 if (trim(yaml_config) .eq. '') then
 ! Check if non-default config file given on the command line
 If ( trim(POD_fname_cfg) .ne. 'DEFAULT' ) then
-	PODfname = trim(POD_fname_cfg)
+    PODfname = trim(POD_fname_cfg)
 End If
 
 ! Check for existance of POD config file
@@ -166,17 +177,14 @@ INQUIRE(FILE=PODfname, EXIST=pod_config_exists)
 
 pgm_name = 'pod'
 If ( .not. pod_config_exists) then
-	call get_command_argument( 0, pgm_name )
+    call get_command_argument( 0, pgm_name )
     write(*,'(3a)') 'No Default config file found (POD.in)  - Type: ',trim(pgm_name),' --help'
     write(*,'(3a)') 'If using a non-default config.filename - Type: ',trim(pgm_name),' -c config.filename'
-	STOP
+    STOP
 End If
 else
-pgm_name = 'pod'
-end if
-
 !call get_command_argument(yaml_config)
-if (trim(yaml_config) .ne. "") then
+pgm_name = 'pod'
 call get_yaml(yaml_config)
 FMOD_GRAVFIELD = 0
 if (yml_gravity_model > CENTRAL_MODEL) FMOD_GRAVFIELD = 1
@@ -316,9 +324,9 @@ READ ( param_value, FMT = * , IOSTAT=ios_key ) yml_orbit_arc_backwards
 ! Earth Orientation Parameters (EOP)
 ! ---------------------------------------------------------------------------
 ! EOP data solution options:
-! 1. IERS C04 										: EOP_sol=1
-! 2. IERS RS/PC Daily 								: EOP_sol=2
-! 3. IGS ultra-rapid ERP + IERS RS/PC Daily (dX,dY)	: EOP_sol=3
+! 1. IERS C04                                       : EOP_sol=1
+! 2. IERS RS/PC Daily                               : EOP_sol=2
+! 3. IGS ultra-rapid ERP + IERS RS/PC Daily (dX,dY) : EOP_sol=3
 param_id = 'EOP_solution_cfg'
 CALL readparam (PODfname, param_id, param_value)
 READ ( param_value, FMT = * , IOSTAT=ios_key ) yml_eop_option
@@ -333,7 +341,7 @@ param_id = 'ERP_fname_cfg'
 CALL readparam (PODfname, param_id, param_value)
 READ ( param_value, FMT = * , IOSTAT=ios_key ) ERP_fname_cfg 
 
-! EOP data interpolation number of points	  
+! EOP data interpolation number of points     
 param_id = 'EOP_Nint_cfg'
 CALL readparam (PODfname, param_id, param_value)
 READ ( param_value, FMT = * , IOSTAT=ios_key ) yml_eop_int_points
@@ -342,8 +350,8 @@ READ ( param_value, FMT = * , IOSTAT=ios_key ) yml_eop_int_points
 ! ---------------------------------------------------------------------------
 ! IAU Precession-Nutation model:
 ! ---------------------------------------------------------------------------
-! 1. IAU2000A:		iau_pn_model = 2000
-! 2. IAU2006/2000A:	iau_pn_model = 2006
+! 1. IAU2000A:      iau_pn_model = 2000
+! 2. IAU2006/2000A: iau_pn_model = 2006
 param_id = 'iau_model_cfg'
 CALL readparam (PODfname, param_id, param_value)
 READ ( param_value, FMT = * , IOSTAT=ios_key ) yml_iau_model

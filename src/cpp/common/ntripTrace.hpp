@@ -9,43 +9,82 @@
 #include <string>
 #include <vector>
 #include <boost/date_time/posix_time/posix_time.hpp>
+
+using std::string;
+
 #include <boost/asio/buffer.hpp>
 #include <boost/asio.hpp>
 
-
-struct NetworkData
+struct NetworkDataUpload
 {
-	std::string streamName;
+	string	streamName;
+	string	previousJSON;
 	
-	GTime startTime;
-	GTime endTime;
-    long int	numPreambleFound	= 0;
-    long int	numFramesFailedCRC	= 0;
-    long int	numFramesPassCRC	= 0;
-    long int	numFramesDecoded	= 0;
-    long int	numNonMessBytes		= 0;
+	GTime	startTime;
+	GTime	endTime;
+	int		disconnectionCount 	= 0;
+	int 	numberErroredChunks	= 0;
+	int 	numberChunks		= 0;
+	
+	boost::posix_time::time_duration connectedDuration		= boost::posix_time::hours(0);
+	boost::posix_time::time_duration disconnectedDuration	= boost::posix_time::hours(0);
+
+	void clearStatistics(
+		GTime tStart,
+		GTime tEnd);
+	
+	void accumulateStatisticsFrom(
+		NetworkDataUpload& dataToAdd);
+
+	string getJsonNetworkStatistics(
+		GTime	now,
+		string	label);
+	
+	void printTraceNetworkStatistics(
+		Trace& trace);
+};
+
+struct NetworkDataDownload
+{
+	string 		streamName;
+	string		previousJSON;
+
+	GTime 		startTime;
+	GTime 		endTime;
+	long int	numPreambleFound	= 0;
+	long int	numFramesFailedCRC	= 0;
+	long int	numFramesPassCRC	= 0;
+	long int	numFramesDecoded	= 0;
+	long int	numNonMessBytes		= 0;
 	long int	numMessagesLatency	= 0;	
 	double		totalLatency		= 0;
 
-    int disconnectionCount = 0;
+	int 		disconnectionCount	= 0;
+	int 		numberErroredChunks	= 0; 
+	int 		numberChunks		= 0;
+
     boost::posix_time::time_duration connectedDuration		= boost::posix_time::hours(0);
     boost::posix_time::time_duration disconnectedDuration	= boost::posix_time::hours(0);
+
+	void clearStatistics(
+		GTime tStart,
+		GTime tEnd);
+
+	void accumulateStatisticsFrom(
+		NetworkDataDownload& dataToAdd);
+
+	string getJsonNetworkStatistics(
+		GTime	now,
+		string	label);
 	
-    int numberErroredChunks = 0; 
-	int numberChunks = 0;
-	
-	void clearStatistics(GTime tStart, GTime tEnd);
-	void accumulateStatisticsFrom(NetworkData& dataToAdd);
-	
-	std::string previousJSON;
-	std::string getJsonNetworkStatistics(GTime now,std::string label);
-	void printTraceNetworkStatistics(Trace& trace);
+	void printTraceNetworkStatistics(
+		Trace& trace);
 };
 
 struct NtripTrace 
 {
-	int level_trace = 0;
-	std::string mountPoint;
+	int 	level_trace = 0;
+	string	mountPoint;
 	
 	boost::asio::streambuf ssrPhBBuf;
 	boost::asio::streambuf ssrCoBBuf;
@@ -57,26 +96,42 @@ struct NtripTrace
 	boost::asio::streambuf messErrChunkBuf;
 	boost::asio::streambuf messErrRtcmBuf;
 	boost::asio::streambuf messErrRtcmByteBuf;
-	
-	void traceSsrEph(SatSys Sat,SSREph ssrEph);
-	void traceSsrClk(SatSys Sat,SSRClk ssrClk);
-	void traceSsrCodeB(SatSys Sat,E_ObsCode mode, SSRBias ssrBias);
-	void traceSsrPhasB(SatSys Sat,E_ObsCode mode, SSRBias ssrBias);
-	void traceBroEph(Eph eph,E_Sys sys);
-	
-	
-	void networkLog(std::string message)
+
+	void traceSsrEph(
+		SatSys Sat,
+		SSREph ssrEph);
+
+	void traceSsrClk(
+		SatSys Sat,
+		SSRClk ssrClk);
+
+	void traceSsrCodeB(
+		SatSys Sat,
+		E_ObsCode mode,
+		SSRBias ssrBias);
+
+	void traceSsrPhasB(
+		SatSys Sat,
+		E_ObsCode mode,
+		SSRBias ssrBias);
+
+	void traceBroEph(
+		Eph eph,
+		E_Sys sys);
+
+	void networkLog(
+		string message)
 	{
 		if( level_trace < 3 )
 			return;
 		
-		//BOOST_LOG_TRIVIAL(debug) << "NtripTrace::networkLog : " << message << std::endl;
 		std::ostream outStream(&netConnBuf);
 		outStream << boost::posix_time::from_time_t(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
 		outStream << " " << message << std::endl;
 	}
 	
-	void messageChunkLog(std::string message)
+	void messageChunkLog(
+		string message)
 	{
 		if( level_trace < 3 )
 			return;
@@ -86,7 +141,8 @@ struct NtripTrace
 		outStream << " " << message << std::endl;
 	}
 	
-	void messageRtcmLog(std::string message)
+	void messageRtcmLog(
+		string message)
 	{
 		if( level_trace < 3 )
 			return;
@@ -96,7 +152,8 @@ struct NtripTrace
 		outStream << " " << message << std::endl;
 	}
 
-	void messageRtcmByteLog(std::string message)
+	void messageRtcmByteLog(
+		string message)
 	{
 		if( level_trace < 3 )
 			return;
@@ -106,6 +163,7 @@ struct NtripTrace
 		outStream << " " << message << std::endl;
 	}   
 
-	void traceWriteEpoch(Trace& trace);
+	void traceWriteEpoch(
+		Trace& trace);
 };
 #endif

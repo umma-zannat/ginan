@@ -14,17 +14,15 @@ struct NtripStream : NtripSocket
 private:
 	// This mutex ensures that the main thread and the io_service thread do
 	// not alter the receivedDataBuffer buffer at the same time.
-	std::mutex receivedDataBufferMtx; 
-		
-	vector<char> receivedDataBuffer;
-
-	
+	std::mutex		receivedDataBufferMtx;
+	vector<char>	receivedDataBuffer;
 
 public:
-	vector<char>                receivedData;
+	vector<char>	receivedData;
 	
 	
-	NtripStream(const string& url_str) : 
+	NtripStream(
+		const string& url_str) : 
 		NtripSocket(url_str)
 	{
 		std::stringstream request_stream;
@@ -51,12 +49,31 @@ public:
 	*/
 	void getData();
 	
-	void connected() override;
-	bool dataChunkDownloaded(vector<char> dataChunk) override;
-	virtual void messageChunkLog(string message) override {}
-	virtual void networkLog		(string message) override {}
-	virtual void connectionError(const boost::system::error_code& err, string operation) override {}
-	virtual void serverResponse(unsigned int status_code, string http_version) override {}	
+	void connected()
+	override;
+	
+	bool dataChunkDownloaded(
+		vector<char> dataChunk)
+	override;
+	
+	virtual void messageChunkLog(
+		string message)
+	override {}
+	
+	virtual void networkLog(
+		string message)
+	override {}
+	
+	virtual void connectionError(
+		const boost::system::error_code& 	err,
+		string 								operation)
+	override {}
+	
+	virtual void serverResponse(
+		unsigned int	status_code,
+		string 			http_version)
+	override {}	
+	
 	/*
 	* Due to boost::asio::io_service::work being added to boost::asio::io_service
 	* io_service.run() blocks the thread in NtripStream::connect() and uses it in 

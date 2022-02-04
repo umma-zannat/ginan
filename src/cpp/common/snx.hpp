@@ -213,6 +213,7 @@ struct Sinex_antenna_t
 	string  sitecode;
 	string  ptcode;   // physical monument used at the site (2)
 	string  solnnum;
+	string  calibModel;
 	char    typecode;
 	int     antstart[3];        /* antenna start time YY:DOY:SOD */
 	int     antend[3];          /* antenna end time YY:DOY:SOD */
@@ -575,6 +576,46 @@ struct Sinex_satpc_t
 	char   model;   // F(ull)/E(levation model only)
 } ;
 
+//=============================================================================
+/*
++TROP/DESCRIPTION
+*_________KEYWORD_____________ __VALUE(S)_______________________________________
+ELEVATION CUTOFF ANGLE                             7
+SAMPLING INTERVAL                                300
+SAMPLING TROP                                    300
+TROP MAPPING FUNCTION         WET GMF               
+SOLUTION_FIELDS_1             TROTOT STDDEV TGNTOT STDDEV TGETOT STDDEV
+*/
+struct SinexTropDesc
+{
+	map<string, string>			strings;		//1X,A22
+	map<string, int>			ints;			//1X,I22
+	map<string, double>			doubles;		//1X,F22
+	map<string, vector<string>>	vecStrings;		//1X,n(1X,A6)
+	map<string, vector<double>>	vecDoubles;		//1X,F5.2,1X,F5.2,1X,F8.1
+	bool isEmpty = true;
+};
+
+//=============================================================================
+/*
++TROP/SOLUTION
+*SITE ____EPOCH___ TROTOT STDDEV  TGNTOT STDDEV  TGETOT STDDEV
+WIDC 21:014:00000 2270.0    2.8  -0.186  0.376   0.788  0.464
+*/
+struct SinexTropSol
+{
+	string	site;
+	int		epoch[3]; //yr:doy:sod
+	struct TropSolutionEntry	//first Sinex_tropsol_t entry also used in TROP/DESCRIPTION block
+	{
+		string	type;
+		double	value;
+		double	units;
+		int		width;
+	};
+	vector<TropSolutionEntry> solutions; //map not used b/c may have multiple STDDEV entries
+};
+
 struct Sinex
 {
 	/* header block */
@@ -589,8 +630,10 @@ struct Sinex
 	int     numparam;         /* number of estimated parameters */
 	char    ConstCode;  /* constraint code */
 	string  solcont;    /* solution types S O E T C A */
+	string	markerName;
 
 	KFState	kfState;
+	KFState	tropKFState;
 
 	list<string>                  		historyComments;
 	list<string>                  		filesComments;
@@ -667,6 +710,20 @@ struct Sinex
 	};
 	
 	bool	primary = false;	///< Set true while a primary sinex file is being read.
+
+	// Troposphere Sinex data
+	map<string, int>				tropSiteCoordBodyFPosMap;
+	map<string, int>				tropSolFootFPosMap;
+	list<string>					tropSiteIdCommentList;
+	list<string>					tropSiteRecCommentList;
+	list<string>					tropSiteAntCommentList;
+	list<string>					tropSiteCoordCommentList;
+	list<string>					tropSiteEccCommentList;
+	list<string>					tropDescCommentList;
+	list<string>					tropSolCommentList;
+	SinexTropDesc					tropDesc = {};
+	map<string, map<int, double>>	tropSiteCoordMapMap; //indexed by station ID, then axis #
+	list<SinexTropSol>				tropSolList;
 };
 
 struct Sinex_stn_soln_t
@@ -766,7 +823,7 @@ int  write_sinex(
 	Sinex_sat_snx_t*			psat			= nullptr,
 	bool 						comm_override	= true);
 
-int getstnsnx	(string station, int yds[3], Sinex_stn_snx_t& snx);
+E_SnxDataMissing getstnsnx	(string station, int yds[3], Sinex_stn_snx_t& snx);
 int getsatsnx	(string prn, int yds[3], Sinex_sat_snx_t&snx);
 void sinex_report(Trace& trace);
 int sinex_sat_count();
@@ -776,7 +833,7 @@ void sinex_update_estimate(const Sinex_stn_snx_t& station, E_Estimate e, double 
 void sinex_update_matrix	(matrix_type mt, matrix_value mv, int row, int col, int nvals, double val[3]);
 void sinex_add_statistic(const string& what, const int		value);
 void sinex_add_statistic(const string& what, const double	value);
-int sinex_check_add_ga_reference();
+int sinex_check_add_ga_reference(string solType, string peaVer, bool isTrop);
 void sinex_add_acknowledgement(const string& who, const string& description);
 void sinex_add_comment(const string& what);
 void sinex_add_file(const string& who, const GTime& when, const string& filename, const string& description);
@@ -789,7 +846,8 @@ void sinex_update_header(
 	int			soln_end[3],
 	const char	obsCode,
 	const char	constCode,
-	string&		contents);
+	string&		contents,
+	double		sinexVer);
 
 void sinexPostProcessing(
 	GTime&					tsync,
@@ -800,6 +858,26 @@ void sinexPerEpochPerStation(
 	GTime&		tsync,
 	Station&	rec);
 
+
+// Trop sinex
+void outputTropSinex(
+	string					filename,
+	GTime&					tsync,
+	map<string, Station>&	stationMap,
+	KFState&				netKFState,
+	string					markerName = "MIX",
+	bool					isSmoothed = false);
+
+// snx.cpp fns used in tropSinex.cpp
+void write_as_comments(
+	std::ofstream&	out,
+	list<string>&	comments);
+
+void write_pretty_line(
+	std::ofstream&	out);
+
+int write_snx_reference(
+	std::ofstream&	out);
 
 extern Sinex theSinex; // the one and only sinex object.
 

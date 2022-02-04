@@ -30,24 +30,7 @@ string cod2str(
 	return outstr;
 }
 
-static void printExponent(
-	Trace&	trace, 
-	double	d,
-	bool	sigma)
-{
-	/* If someone knows how to make C++ print with just one digit as exponent... */
-	int		exponent	= 0;
-	double	base   		= 0;
-	
-	if (d != 0) 
-	{
-		exponent	= (int) floor( log10( fabs(d) ) );
-		base		= d * pow(10, -1 * exponent);
-	}
 
-	if (sigma)	tracepdeex(0, trace, " %8.6fE%+01d",	base, exponent);
-	else		tracepdeex(0, trace, " %18.15fE%+01d",	base, exponent);
-}
 
 /* convert time to yds (doy in bias SINEX starts at 1) */
 void sinex_time(
@@ -156,8 +139,8 @@ int write_bSINEX_line(
 			tend[2], 
 			"ns");
 	
-	printExponent(trace,      bias.bias * (1E9/CLIGHT),	false);
-	printExponent(trace, sqrt(bias.var) * (1E9/CLIGHT),	true);
+	traceFormatedFloat(trace,  bias.bias * (1E9/CLIGHT), " %18.15fE%+01d");
+	traceFormatedFloat(trace, sqrt(bias.var) * (1E9/CLIGHT), " %8.6fE%+01d");
 	
 	tracepdeex(0, trace, "\n");
 	return 1;
@@ -169,7 +152,7 @@ int write_bSINEX_line(
 *                  int     opt         I       bias I/O options
 * return   :       number of written biases (-1 if file not found)
 * ---------------------------------------------------------------------------*/
-int write_bias_SINEX(
+int writeBiasSinex(
 	Trace&		trace,
 	GTime		time,
 	string&		biasfile,
@@ -289,7 +272,7 @@ void outp_bias(
 
 	SinexBias entry;
 	int week;
-	double tow = time2gpst (time, &week);
+	double tow = time2gpst(time, &week);
 	tow = updateInterval * floor (tow / updateInterval);
 
 	entry.biasType  = type;
@@ -309,10 +292,10 @@ void outp_bias(
 
 	tracepdeex (2, trace, "\nLoading bias for %s %s %s %d %d %s ", Sat.id().c_str(), Sat.svn().c_str(), receiver.c_str(), code1, code2, entry.tini.to_string (0));
 
-	auto& BiasMap = SINEXBiases_out[key];
+	auto& biasMap = SINEXBiases_out[key];
 	int found = -1;
 
-	for (auto& [ind, bias] : BiasMap)
+	for (auto& [ind, bias] : biasMap)
 	{
 		if (bias.tini 		!= entry.tini)			continue;
 		if (bias.measType 	!= entry.measType)		continue;
@@ -323,7 +306,7 @@ void outp_bias(
 
 	if (found < 0)
 	{
-		found = BiasMap.size();
+		found = biasMap.size();
 
 		if		(type == +E_BiasType::OSB)		abs_nbia++;
 		else if	(type == +E_BiasType::DSB)		rel_nbia++;
@@ -336,6 +319,6 @@ void outp_bias(
 	}
 
 	tracepdeex (2, trace, "\n");
-	BiasMap[found] = entry;
+	biasMap[found] = entry;
 }
 

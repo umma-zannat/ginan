@@ -49,7 +49,7 @@ PRN_CATEGORY = _CategoricalDtype(categories = [
         'C57', 'C58', 'C59', 'C60', 'C61'])
 
 STATE_TYPES_CATEGORY = _CategoricalDtype(categories =[
-        'ONE', 'PHASE_BIAS', 'REC_POS', 'REC_SYS_BIAS', 'TROP'])
+        'ONE', 'PHASE_BIAS', 'REC_POS', 'REC_CLOCK', 'TROP'])
 
 PL_TYPE = _CategoricalDtype(categories=['P12','P15',      'L12','L15',
                                         'P1', 'P2', 'P5', 'L1', 'L2', 'L5'])

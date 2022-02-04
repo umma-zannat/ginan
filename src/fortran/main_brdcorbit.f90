@@ -45,7 +45,8 @@ PROGRAM  main_brdcorbit
       INTEGER (KIND = prec_int4) :: ISAT
       INTEGER (KIND = prec_int4) :: IYEAR4,MONTH,IDAY
       REAL (KIND = prec_d),DIMENSION(4)::IONALPHA, IONBETA
-      REAL (KIND = prec_q) :: AVE(8),STD(8)
+      REAL (KIND = prec_q) :: AVE(8)
+!       ,STD(8)
 !      REAL (KIND = prec_d),DIMENSION(:,:,:),ALLOCATABLE ::EPH, CLK
 !      REAL (KIND = prec_q) ::EPH(32,4000,220),CLK(32,4000,220)
       REAL (KIND = prec_q) ::EPH(32,5000,220),CLK(3,5000,220)
@@ -62,7 +63,8 @@ PROGRAM  main_brdcorbit
       REAL (KIND = prec_d) :: DTGAL,XT, KKK
       
       INTEGER (KIND = prec_int4) :: MAXNSAT, MAXNPAR, MAXEPO
-      INTEGER (KIND = prec_int4) :: sz1, sz2, sz3, IREC, NDT
+      INTEGER (KIND = prec_int4) ::  IREC, NDT
+!       ,sz1, sz2, sz3,
       INTEGER (KIND = prec_int4) :: IG, IR, IE, IC, IJ, TOTG
       INTEGER (KIND = prec_int4) :: IGAL, IBDS, IQZSS, IGLN
 !------------------------------------------------------------------
@@ -92,8 +94,8 @@ PROGRAM  main_brdcorbit
       REAL (KIND = prec_d) :: eop(7)
       INTEGER (KIND = prec_int2) :: iau_model
 !----------------------------------------------------------------
-      REAL (KIND = prec_q), DIMENSION(3) :: rbody
-      REAL (KIND = prec_q), DIMENSION(3) :: rSun
+!       REAL (KIND = prec_q), DIMENSION(3) :: rbody
+!       REAL (KIND = prec_q), DIMENSION(3) :: rSun
       DOUBLE PRECISION  JD, Zbody(6)
       INTEGER NTARG_SUN, NCTR
       CHARACTER (LEN=100) :: fname_header, fname_data, fname_out

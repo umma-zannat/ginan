@@ -1,11 +1,18 @@
 
-#include <boost/utility/binary.hpp>
-#include <boost/filesystem.hpp>
-
+// #pragma GCC optimize ("O0")
 #include <map>
 
 using std::multimap;
 using std::map;
+
+#define BOOST_BIND_GLOBAL_PLACEHOLDERS
+
+#include <boost/filesystem.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
+
+using boost::property_tree::ptree;
+using boost::property_tree::write_json;
 
 #include "acsRtcmStream.hpp"
 #include "rtcmEncoder.hpp"
@@ -191,7 +198,7 @@ map<E_Sys, map<uint8_t, SignalInfo>> signal_id_mapping =
 		}
 	},
 
-	{	E_Sys::CMP,
+	{	E_Sys::BDS,
 		{
 			{2,		{2,		B1,		E_ObsCode::L2I}},
 			{3,		{3,		B1,		E_ObsCode::L2Q}},
@@ -294,7 +301,7 @@ map<E_Sys, map<E_ObsCode, E_FType>> codeTypeMap =
 		}
 	},
 
-	{	E_Sys::CMP,
+	{	E_Sys::BDS,
 		{
 			{E_ObsCode::L2I,	B1	},
 			{E_ObsCode::L2Q,	B1	},
@@ -348,7 +355,7 @@ map<E_Sys, map<E_FType, double>> signal_phase_alignment =
 		}
 	},
 
-	{	E_Sys::CMP,
+	{	E_Sys::BDS,
 		{
 			{B1,		1.561098E9},
 			{B2,		1.207140E9},
@@ -502,7 +509,7 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 	setTime(messTime, epochTime);
 	traceLatency(messTime);
 
-	E_Sys::_enumerated sys = E_Sys::NONE;
+	E_Sys sys = E_Sys::NONE;
 	if 		( message_number == +RtcmMessageType::GPS_SSR_ORB_CORR
 			||message_number == +RtcmMessageType::GPS_SSR_CLK_CORR
 			||message_number == +RtcmMessageType::GPS_SSR_COMB_CORR
@@ -535,7 +542,7 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 		case E_Sys::GLO: np=5; ni= 8; nj= 0; offp=  0; break;
 		case E_Sys::GAL: np=6; ni=10; nj= 0; offp=  0; break;
 		case E_Sys::QZS: np=4; ni= 8; nj= 0; offp=192; break;
-		case E_Sys::CMP: np=6; ni=10; nj=24; offp=  1; break;
+		case E_Sys::BDS: np=6; ni=10; nj=24; offp=  1; break;
 		case E_Sys::SBS: np=6; ni= 9; nj=24; offp=120; break;
 		default: BOOST_LOG_TRIVIAL(error) << "Error: unrecognised system in SSRDecoder::decode()";
 	}
@@ -686,8 +693,8 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 				try
 				{
 					E_ObsCode code;
-					if		(sys == E_Sys::GPS)		{	code = mCodes_gps.right.at(rtcm_code);	}
-					else if (sys == E_Sys::GAL)		{	code = mCodes_gal.right.at(rtcm_code);	}
+					if		(sys == +E_Sys::GPS)		{	code = mCodes_gps.right.at(rtcm_code);	}
+					else if (sys == +E_Sys::GAL)		{	code = mCodes_gal.right.at(rtcm_code);	}
 					else
 					{
 						BOOST_LOG_TRIVIAL(error) << "Error: unrecognised system in SSRDecoder::decode()";
@@ -726,8 +733,8 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 			ssrPhase.dispBiasConistInd	= dispBiasConistInd;
 			ssrPhase.MWConistInd		= dispBiasConistInd;
 			ssrPhase.nbias				= getbituInc(data, i, 5);
-			ssrPhase.yawAngle			= getbituInc(data, i, 9)/256;
-			ssrPhase.yawRate			= getbitsInc(data, i, 8)/8192;
+			ssrPhase.yawAngle			= getbituInc(data, i, 9)/256.0	*PI;
+			ssrPhase.yawRate			= getbitsInc(data, i, 8)/8192.0	*PI;
 
 			ssrBiasPhas.ssrPhase = ssrPhase;
 
@@ -743,11 +750,11 @@ void SSRDecoder::decodeSSR(uint8_t* data, unsigned int message_length)
 				try
 				{
 					E_ObsCode code;
-					if ( sys == E_Sys::GPS )
+					if		(sys == +E_Sys::GPS)
 					{
 						code = mCodes_gps.right.at(rtcm_code);
 					}
-					else if ( sys == E_Sys::GAL )
+					else if (sys == +E_Sys::GAL)
 					{
 						code = mCodes_gal.right.at(rtcm_code);
 					}
@@ -783,7 +790,7 @@ void EphemerisDecoder::decodeEphemeris(uint8_t* data, unsigned int message_lengt
 	int i = 0;
 	int message_number		= getbituInc(data, i, 12);
 
-	E_Sys::_enumerated sys = E_Sys::NONE;
+	E_Sys sys = E_Sys::NONE;
 	if 		( message_number == RtcmMessageType::GPS_EPHEMERIS )
 	{
 		sys = E_Sys::GPS;
@@ -798,7 +805,7 @@ void EphemerisDecoder::decodeEphemeris(uint8_t* data, unsigned int message_lengt
 		BOOST_LOG_TRIVIAL(error) << "Error: unrecognised message in EphemerisDecoder::decode()";
 	}
 
-	if (sys == E_Sys::GPS)
+	if (sys == +E_Sys::GPS)
 	{
 		if (i + 476 > message_length * 8)
 		{
@@ -856,7 +863,7 @@ void EphemerisDecoder::decodeEphemeris(uint8_t* data, unsigned int message_lengt
 		eph.toc		= gpst2time(eph.week,toc);
 		eph.A		= SQR(sqrtA);
 	}
-	else if (sys == E_Sys::GAL)
+	else if (sys == +E_Sys::GAL)
 	{
 		if ( message_number == RtcmMessageType::GAL_FNAV_EPHEMERIS )
 		{
@@ -1050,7 +1057,7 @@ ObsList MSM7Decoder::decodeMSM7(
 		case 108:	rtcmsys = E_Sys::GLO;				break;
 		case 109:	rtcmsys = E_Sys::GAL;				break;
 		case 111:	rtcmsys = E_Sys::QZS;				break;
-		case 112:	rtcmsys = E_Sys::CMP; tow += 14;	break;
+		case 112:	rtcmsys = E_Sys::BDS; tow += 14;	break;
 	}
 
 	GTime tobs;
@@ -1465,7 +1472,7 @@ void RtcmStream::parseRTCM(std::istream& inputStream)
 			std::replace( logtime.begin(), logtime.end(), '/', '-');
 
 			string path_rtcm = rtcm_filename;
-			replaceString(path_rtcm, "<LOGTIME>", logtime);
+			replaceString(path_rtcm, "<LOGTIME>", logtime);		//todo aaron, remove
 
 			std::ofstream ofs(path_rtcm, std::ofstream::app);
 
@@ -1533,6 +1540,7 @@ void RtcmStream::parseRTCM(std::istream& inputStream)
 						//if the delay is shorter than the global, go back and wait until it is longer
 						if (thisDeltaTime < rtcmDeltaTime)
 						{
+// 							printf("%ld\n", thisDeltaTime);
 							inputStream.seekg(pos);
 							return;
 						}
@@ -1723,7 +1731,7 @@ void	calcSsrCorrections(
 		pass = satpos(trace, time, teph, obs, E_Ephemeris::BROADCAST, 					E_OffsetType::APC, nav, pcoMap_ptr);
 		if (pass == true)
 		{
-			Eph* eph = seleph<Eph>(teph, sat, -1, nav);
+			Eph* eph = seleph<Eph>(trace, teph, sat, -1, nav);
 			double tk = time - eph->toc;
 			ssrOut.ssrClk.broadcast	= (eph->f0 + eph->f1 * tk + eph->f2 * tk * tk) * CLIGHT;
 
@@ -2051,16 +2059,23 @@ void NtripRtcmStream::connectionError(const boost::system::error_code& err, std:
 
 	std::ofstream logStream(acsConfig.log_filename, std::ofstream::app);
 
+	if (!logStream)
+	{
+		BOOST_LOG_TRIVIAL(warning) << "Error opening log file.\n";
+		return;
+	}
+	
 	auto time = std::chrono::system_clock::to_time_t(system_clock::now());
 
-	logStream << "{";
-	logStream << "\"label\": \"connectionError\",";
-	logStream << "\"Stream\": \"" << url.path.substr(1,url.path.length()) << "\",";
-	logStream << "\"Time\" : \"" << std::put_time( std::localtime( &time ), "%F %X" ) << "\",";
-	logStream << "\"BoostSysErrCode\": " << err.value() << ",";
-	logStream << "\"BoostSysErrMess\": \"" << err.message() << "\",";
-	logStream << "\"SocketOperation\": \"" << operation << "\"";
-	logStream << "}\n";
+	ptree root;
+	root.put("label", 			"connectionError");
+	root.put("Stream", 			url.path.substr(1,url.path.length()));
+	root.put("Time", 			std::put_time(std::localtime( &time ), "%F %X"));
+	root.put("BoostSysErrCode", err.value());
+	root.put("BoostSysErrMess", err.message());
+	root.put("SocketOperation", operation);
+	
+	write_json(logStream, root, false);
 }
 
 void NtripRtcmStream::serverResponse(unsigned int status_code, std::string http_version)
@@ -2069,16 +2084,22 @@ void NtripRtcmStream::serverResponse(unsigned int status_code, std::string http_
 		return;
 
 	std::ofstream logStream(FileLog::path_log, std::ofstream::app);
+	
+	if (!logStream)
+	{
+		BOOST_LOG_TRIVIAL(warning) << "Error opening log file.\n";
+		return;
+	}
 
 	auto time = std::chrono::system_clock::to_time_t(system_clock::now());
 
-	logStream << "{";
-	logStream << "\"label\": \"serverResponse\",";
-	logStream << "\"Stream\": \"" << url.path.substr(1,url.path.length()) << "\",";
-	logStream << "\"Time\" : \"" << std::put_time( std::localtime( &time ), "%F %X" ) << "\",";
-	logStream << "\"ServerStatus\": " << status_code << ",";
-	logStream << "\"VersionHTTP\": \"" << http_version << "\"";
-	logStream << "}" << std::endl;
+	ptree root;
+	root.put("label", 			"serverResponse");
+	root.put("Stream", 			url.path.substr(1,url.path.length()));
+	root.put("Time", 			std::put_time(std::localtime( &time ), "%F %X"));
+	root.put("ServerStatus", 	status_code);
+	root.put("VersionHTTP",		http_version);
+	write_json(logStream, root, false);
 }
 
 
@@ -2090,14 +2111,18 @@ void NtripRtcmStream::getJsonNetworkStatistics(GTime now)
 
 	std::ofstream logStream(FileLog::path_log, std::ofstream::app);
 
-
+	if (!logStream)
+	{
+		BOOST_LOG_TRIVIAL(warning) << "Error opening log file.\n";
+		return;
+	}
+	
 	// Copy statistics into total run based statics.
 	if (runData.startTime.time == 0)
 	{
 		GTime start;
 		start.time = boost::posix_time::to_time_t(startTime);
-		start.sec	= (	  startTime.time_of_day().total_milliseconds()
-						- startTime.time_of_day().total_seconds()*1000) / 1000.0;
+		start.sec	= (startTime.time_of_day().total_milliseconds() - startTime.time_of_day().total_milliseconds())/ 1000.0;
 		runData		.startTime = start;
 		hourlyData	.startTime = start;
 		epochData	.startTime = start;
@@ -2194,14 +2219,14 @@ void NtripRtcmStream::getJsonNetworkStatistics(GTime now)
 	runData		.accumulateStatisticsFrom(epochData);
 
 	std::string strJson;
-	strJson = epochData.getJsonNetworkStatistics(now,"epochData");		logStream << strJson << std::endl;
-	strJson = hourlyData.previousJSON;									logStream << strJson << std::endl;
-	strJson = runData.getJsonNetworkStatistics(now,"runData");			logStream << strJson << std::endl;
+	strJson = epochData.getJsonNetworkStatistics(now,"epochData");		logStream << strJson;
+	strJson = hourlyData.previousJSON;									logStream << strJson;
+	strJson = runData.getJsonNetworkStatistics(now,"runData");			logStream << strJson;
 }
 
 
 
-void NtripRtcmStream::traceMakeNetworkOverview(Trace& trace, NetworkData& netData)
+void NtripRtcmStream::traceMakeNetworkOverview(Trace& trace, NetworkDataDownload& netData)
 {
 	netData.printTraceNetworkStatistics(trace);
 }

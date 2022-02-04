@@ -1,5 +1,8 @@
 
 
+// #pragma GCC optimize ("O0")
+
+
 #include "ionoModel.hpp"
 #include "acsConfig.hpp"
 #include "constants.hpp"
@@ -34,10 +37,8 @@ static double ion_vtec(
 		case E_IonoModel::SPHERICAL_HARMONICS:		return ion_vtec_sphhar(time, Ion_pp, layer, vtecstd, kfState);
 		case E_IonoModel::SPHERICAL_CAPS:			return ion_vtec_sphcap(time, Ion_pp, layer, vtecstd, kfState);
 		case E_IonoModel::BSPLINE:					return ion_vtec_bsplin(time, Ion_pp, layer, vtecstd, kfState);
-		case E_IonoModel::NONE:						return 0;
+		default:									return 0;
 	}
-
-	return 0;
 }
 
 static int write_ionex_head(
@@ -56,7 +57,7 @@ static int write_ionex_head(
 	tracepdeex(2, trace, "  ..IONEX Header.. \n");
 
 
-	tecrms = (double*) malloc(ionex_latres * ionex_lonres * acsConfig.ionFilterOpts.layer_heights.size() * sizeof(double));
+	tecrms = (double*) malloc(ionex_latres * ionex_lonres * acsConfig.ionFilterOpts.layer_heights.size() * sizeof(double));		//aah, todo delete
 
 	double hght1 = acsConfig.ionFilterOpts.layer_heights.front()	/ 1000;
 	double hght2 = acsConfig.ionFilterOpts.layer_heights.back()	/ 1000;
@@ -72,7 +73,7 @@ static int write_ionex_head(
 	tracepdeex(0, ionex, "%8.1f%52sBASE RADIUS\n", RE_WGS84 / 1000.0, " ");
 	tracepdeex(0, ionex, "%6d%54sMAP DIMENSION\n", acsConfig.ionFilterOpts.layer_heights.size() > 1 ? 3 : 2, " ");
 	tracepdeex(0, ionex, "  %6.1f%6.1f%6.1f%40sHGT1 / HGT2 / DHGT\n",			hght1,			hght2,			dhght, " ");
-	tracepdeex(0, ionex, "  %6.1f%6.1f%6.1f%40sLAT1 / LAT2 / DLAT\n", ionex_latmin, ionex_latmin + ionex_latinc * (ionex_latres - 1), ionex_latinc, " ");
+	tracepdeex(0, ionex, "  %6.1f%6.1f%6.1f%40sLAT1 / LAT2 / DLAT\n", ionex_latmin + ionex_latinc * (ionex_latres - 1), ionex_latmin, -ionex_latinc, " ");
 	tracepdeex(0, ionex, "  %6.1f%6.1f%6.1f%40sLON1 / LON2 / DLON\n", ionex_lonmin, ionex_lonmin + ionex_loninc * (ionex_lonres - 1), ionex_loninc, " ");
 	tracepdeex(0, ionex, "%6d%54sEXPONENT\n", IONEX_NEXP, "");
 	tracepdeex(0, ionex, "%-60s%s\n", acsConfig.rinex_comment,												"COMMENT");
@@ -86,19 +87,21 @@ static int write_ionex_epoch(
 	GTime time,
 	KFState& kfState)
 {
-	double std0 = 9999;
+	double sigma0 = 9999;
 
 	KFKey std0Key;
 	std0Key.type	= KF::IONOSPHERIC;
 	std0Key.num		= 0;
-	kfState.getKFSigma(std0Key, std0);
+	kfState.getKFSigma(std0Key, sigma0);
 
-	if (std0 > 1.0) 	return -1;
+	if (sigma0 > 1.0) 	
+		return -1;
 
 	double tow	= time2gpst(time);
 	int timeseg = floor(tow / acsConfig.ionFilterOpts.time_res);
 
-	if (last_ionex >= 0 && timeseg == last_ionex) return 0;
+	if (last_ionex >= 0 && timeseg == last_ionex) 
+		return 0;
 
 	last_ionex = timeseg;
 

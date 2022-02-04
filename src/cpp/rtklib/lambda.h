@@ -12,7 +12,7 @@ int lambda(
 	double *F, 
 	double *s,
 	double Pf,
-	int *index);
+	bool& pass);
 
 int newLambda(
 	Trace&			trace,			

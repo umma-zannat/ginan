@@ -1,3 +1,6 @@
+
+// #pragma GCC optimize ("O0")
+
 /**------------------------------------------------------------------------------
 * reference :
 *     [1] P.J.G.Teunissen, The least-square ambiguity decorrelation adjustment:
@@ -10,9 +13,10 @@
 #include <iostream>
 #include <math.h>
 
+#include "eigenIncluder.hpp"
+#include "streamTrace.hpp"
 #include "algebra.hpp"
 #include "common.hpp"
-#include "streamTrace.hpp"
 
 
 /* constants/macros ----------------------------------------------------------*/
@@ -762,3 +766,78 @@ return 1;//return early for now
 
     return error;
 }
+
+
+void lambdacalcs(
+	KFState& kfState)
+{
+	printf("\n");
+	const int numsols = 2;
+// 	if (0)
+	{
+		vector<int> indices;
+		for (auto& [key, index] : kfState.kfIndexMap)
+		{
+			if (key.type == KF::AMBIGUITY)
+			{
+				indices.push_back(index);
+			}
+		}
+
+		VectorXd	parameters = kfState.x(indices);
+		MatrixXd	covariance = kfState.P(indices, indices);
+		MatrixXd	zTransform = kfState.Z(indices, indices);
+
+		MatrixXd solutions(indices.size(), numsols);
+
+		MatrixXd sumResiduals(numsols, 1);
+		int index = -1;
+
+		newLambda(std::cout,
+			indices.size(),
+			numsols,
+			parameters,
+			covariance,
+			zTransform,
+			solutions.data(),
+			sumResiduals.data(),
+			0.01,
+			&index);
+
+		
+		for (int row = 0; row < zTransform.rows(); row++)
+		for (int col = 0; col < zTransform.cols(); col++)
+		{
+			int r = indices[row];
+			int c = indices[col];
+			
+			kfState.Z(r,c) = zTransform(row,col);
+		}
+		
+// 		std::cout		<< std::endl << std::endl
+// 		<< parameters	<< std::endl << std::endl 
+// 		<< sumResiduals << std::endl << std::endl 
+// 		<< index		<< std::endl << std::endl 
+// 		<< solutions	<< std::endl << std::endl 
+// 		<< (solutions.col(0) - solutions.col(1))	<< std::endl << std::endl;
+		
+		
+
+		printf("\n");
+	}
+}
+
+
+
+/* Lambda speed -
+ * for N processors,
+ * use log_2 (N) levels of lambda for one direction only (remove SGN)
+ * report back to root process with worst best solution often.
+ * 
+ * 
+ *
+ * 
+ * Do a test to see the difference between doing innovation ready or not on measurement noise coming out of OMC (using eg recpos state) vs more extended version
+ * Just do it in demo.cpp
+ */
+

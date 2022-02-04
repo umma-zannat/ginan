@@ -1,14 +1,25 @@
 
 #include <string>
 
+#define BOOST_BIND_GLOBAL_PLACEHOLDERS
+
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
+
+using boost::property_tree::ptree;
+using boost::property_tree::write_json;
+
 using std::string;
 
+#include "acsNtripBroadcast.hpp"
 #include "acsStream.hpp"
 #include "acsConfig.hpp"
 #include "common.hpp"
 
 
-void NtripTrace::traceSsrEph(SatSys Sat,SSREph ssrEph)
+void NtripTrace::traceSsrEph(
+	SatSys Sat,
+	SSREph ssrEph)
 {
 	std::ostream oSsrEph(&ssrEphBuf);
 
@@ -27,7 +38,9 @@ void NtripTrace::traceSsrEph(SatSys Sat,SSREph ssrEph)
 	oSsrEph << str << std::endl;
 }
 
-void NtripTrace::traceSsrClk(SatSys Sat,SSRClk ssrClk)
+void NtripTrace::traceSsrClk(
+	SatSys Sat,
+	SSRClk ssrClk)
 {
 	std::ostream oSsrClk(&ssrClkBuf);
 
@@ -41,7 +54,10 @@ void NtripTrace::traceSsrClk(SatSys Sat,SSRClk ssrClk)
 	tracepdeex(5, oSsrClk, "% 14.6f\n",	ssrClk.dclk[2]);
 }
 
-void NtripTrace::traceSsrCodeB(SatSys Sat, E_ObsCode code, SSRBias ssrBias)
+void NtripTrace::traceSsrCodeB(
+	SatSys		Sat,
+	E_ObsCode	code,
+	SSRBias		ssrBias)
 {
 	std::ostream oSsrCoB(&ssrCoBBuf);
 
@@ -54,7 +70,10 @@ void NtripTrace::traceSsrCodeB(SatSys Sat, E_ObsCode code, SSRBias ssrBias)
 	tracepdeex(5, oSsrCoB, "% 8.4f\n",				ssrBias.codeBias_map[code].bias);
 }
 
-void NtripTrace::traceSsrPhasB(SatSys Sat, E_ObsCode code, SSRBias ssrBias)
+void NtripTrace::traceSsrPhasB(
+	SatSys		Sat,
+	E_ObsCode	code,
+	SSRBias		ssrBias)
 {
 	std::ostream oSsrPhB(&ssrPhBBuf);
 
@@ -67,7 +86,9 @@ void NtripTrace::traceSsrPhasB(SatSys Sat, E_ObsCode code, SSRBias ssrBias)
 	tracepdeex(5, oSsrPhB, "% 8.4f\n",				ssrBias.codeBias_map[code].bias);
 }
 
-void NtripTrace::traceBroEph(Eph eph,E_Sys sys)
+void NtripTrace::traceBroEph(
+	Eph		eph,
+	E_Sys	sys)
 {
 	std::ostream oBroEph(&broEphBuf);
 
@@ -134,12 +155,12 @@ void NtripTrace::traceBroEph(Eph eph,E_Sys sys)
 			see section - 2.5.3 User Range Accuracy
 		*/
 		double ura = 0;
-		if (eph.sva <= 6)
+		if		(eph.sva <= 6)
 		{
 			ura = 10*pow(2, 1+((double)eph.sva/2.0));
 			ura = round(ura)/10.0;
 		}
-		else if ( eph.sva != 15 )
+		else if	( eph.sva != 15 )
 			ura = pow(2,(double)eph.sva-2.0);
 		else
 			ura = -1;
@@ -372,69 +393,258 @@ void NtripTrace::traceWriteEpoch(
 		}
 	}
 }
-
-
-void NetworkData::accumulateStatisticsFrom(NetworkData& dataToAdd)
+void NetworkDataDownload::accumulateStatisticsFrom(
+	NetworkDataDownload& dataToAdd)
 {
-    numPreambleFound		+= dataToAdd.numPreambleFound;
-    numFramesFailedCRC		+= dataToAdd.numFramesFailedCRC;
-    numFramesPassCRC		+= dataToAdd.numFramesPassCRC;
-    numFramesDecoded		+= dataToAdd.numFramesDecoded;
-    numNonMessBytes			+= dataToAdd.numNonMessBytes;
+	numPreambleFound		+= dataToAdd.numPreambleFound;
+	numFramesFailedCRC		+= dataToAdd.numFramesFailedCRC;
+	numFramesPassCRC		+= dataToAdd.numFramesPassCRC;
+	numFramesDecoded		+= dataToAdd.numFramesDecoded;
+	numNonMessBytes			+= dataToAdd.numNonMessBytes;
 	totalLatency			+= dataToAdd.totalLatency;
 	numMessagesLatency		+= dataToAdd.numMessagesLatency;
 
-    disconnectionCount		+= dataToAdd.disconnectionCount;
-    connectedDuration		+= dataToAdd.connectedDuration;
-    disconnectedDuration	+= dataToAdd.disconnectedDuration;
+	disconnectionCount		+= dataToAdd.disconnectionCount;
+	connectedDuration		+= dataToAdd.connectedDuration;
+	disconnectedDuration	+= dataToAdd.disconnectedDuration;
 
-    numberErroredChunks		+= dataToAdd.numberErroredChunks;
+	numberErroredChunks		+= dataToAdd.numberErroredChunks;
 	numberChunks			+= dataToAdd.numberChunks;
 }
 
-void NetworkData::clearStatistics(GTime tStart, GTime tEnd)
+void NetworkDataDownload::clearStatistics(
+	GTime tStart,
+	GTime tEnd)
 {
-	startTime	= tStart;
-	endTime		= tEnd;
-    numPreambleFound	= 0;
-    numFramesFailedCRC	= 0;
-    numFramesPassCRC	= 0;
-    numFramesDecoded	= 0;
-    numNonMessBytes		= 0;
-	totalLatency		= 0;
-	numMessagesLatency	= 0;
-    disconnectionCount	= 0;
+	startTime				= tStart;
+	endTime					= tEnd;
+	numPreambleFound		= 0;
+	numFramesFailedCRC		= 0;
+	numFramesPassCRC		= 0;
+	numFramesDecoded		= 0;
+	numNonMessBytes			= 0;
+	totalLatency			= 0;
+	numMessagesLatency		= 0;
+	disconnectionCount		= 0;
 
-    connectedDuration		= boost::posix_time::hours(0);
-    disconnectedDuration	= boost::posix_time::hours(0);
+	connectedDuration		= boost::posix_time::hours(0);
+	disconnectedDuration	= boost::posix_time::hours(0);
 
-    numberErroredChunks	= 0;
-	numberChunks		= 0;
+	numberErroredChunks		= 0;
+	numberChunks			= 0;
 }
 
-string NetworkData::getJsonNetworkStatistics(GTime now, string label)
+string NetworkDataDownload::getJsonNetworkStatistics(
+	GTime	now,
+	string	label)
 {
 	//if( previousJSON.length() != 0 && endTime.time > now.time )
 	//	return previousJSON;
+	
+	ptree root;
 
+	root.put("label", 			label);
+	root.put("Stream", 			streamName);
+	root.put("Epoch", 			std::put_time(std::localtime(&now.time), "%F %X"));
+	root.put("Start", 			std::put_time(std::localtime(&startTime.time), "%F %X"));
+	root.put("Finish", 			std::put_time(std::localtime(&endTime.time), "%F %X"));
+	root.put("Network", 		acsConfig.analysis_agency);
+	root.put("Downloading", 	true);
 
-    std::stringstream networkJson;
-    networkJson << "{";
-	networkJson << "\"label\": \"" << label << "\",";
-    networkJson << "\"Stream\": \"" << streamName << "\",";
-    networkJson << "\"Epoch\": \"" << std::put_time( std::localtime( &now.time ), "%F %X" ) << "\",";
-	networkJson << "\"Start\": \"" << std::put_time( std::localtime( &startTime.time ), "%F %X" ) << "\",";
-	networkJson << "\"Finish\": \"" << std::put_time( std::localtime( &endTime.time ), "%F %X" ) << "\",";
-    networkJson << "\"Network\": \"" <<  acsConfig.analysis_agency << "\",";
-    networkJson << "\"Downloading\": \"true\",";
-
-    auto timeNow = boost::posix_time::from_time_t(system_clock::to_time_t(system_clock::now()));
-    boost::posix_time::time_duration totalTime = timeNow - boost::posix_time::from_time_t(startTime.time);
+	auto timeNow = boost::posix_time::from_time_t(system_clock::to_time_t(system_clock::now()));
+	boost::posix_time::time_duration totalTime = timeNow - boost::posix_time::from_time_t(startTime.time);
 
 
 	double connRatio;
-	if	(  disconnectionCount == 0
+	if (disconnectionCount == 0
 		&& numberChunks > 0)
+	{
+		connRatio = 1;
+	}
+	else
+	{
+		if (totalTime.total_milliseconds() == 0)
+			connRatio = 0;
+		else
+			connRatio = (double)connectedDuration.total_milliseconds() / (double)totalTime.total_milliseconds();
+	}
+
+
+	double meanReconn = 0;
+	if (disconnectionCount != 0)
+		meanReconn = (double)disconnectedDuration.total_milliseconds() / (60.0 * 1000.0 * disconnectionCount);
+
+	root.put("Disconnects", 	disconnectionCount);
+	root.put("MeanDowntime", 	meanReconn);
+	root.put("ConnectedRatio", 	connRatio);
+
+	double chunkRatio = 0;
+
+	if (numberChunks != 0)
+		chunkRatio = (double)numberErroredChunks / (double)(numberChunks);
+
+	root.put("Chunks", 			numberChunks);
+	root.put("ChunkErrors", 	numberErroredChunks);
+	root.put("ChunkErrorRatio", chunkRatio);
+	
+	root.put("RtcmExtraBytes", 	numNonMessBytes);
+	root.put("RtcmFailCrc", 	numFramesFailedCRC);
+	root.put("RtcmPassedCrc", 	numFramesPassCRC);
+	root.put("RtcmDecoded", 	numFramesDecoded);
+	root.put("RtcmPreamble", 	numPreambleFound);
+
+
+	double FailedToPreambleRatio = 0;
+	if (numPreambleFound != 0)
+		FailedToPreambleRatio = (double)numFramesFailedCRC / (double)numPreambleFound;
+
+	root.put("RtcmFailedCrcToPreambleRatio", FailedToPreambleRatio);
+
+	if (numMessagesLatency != 0)
+	{
+		double meanLatency = totalLatency / numMessagesLatency;
+		root.put("meanLatency", 	meanLatency);
+	}
+	else
+	{
+		root.put("meanLatency", 	0.0);
+	}
+	
+	std::stringstream ss;
+    write_json(ss, root, false);
+	previousJSON = ss.str();
+	return ss.str();
+}
+
+void NetworkDataDownload::printTraceNetworkStatistics(
+	Trace& trace)
+{
+	std::stringstream traceStr;
+	traceStr << "Start  :  " << std::put_time(std::localtime(&startTime.time), "%F %X") << std::endl;
+	traceStr << "Finish :  " << std::put_time(std::localtime(&endTime.time), "%F %X") 	<< std::endl;
+
+	auto timeNow = boost::posix_time::from_time_t(system_clock::to_time_t(system_clock::now()));
+	boost::posix_time::time_duration totalTime = timeNow - boost::posix_time::from_time_t(startTime.time);
+
+
+	double connRatio;
+	if (disconnectionCount == 0
+		&& numberChunks > 0)
+	{
+		connRatio = 1;
+	}
+	else
+	{
+		if (totalTime.total_milliseconds() == 0)
+			connRatio = 0;
+		else
+			connRatio = (double)connectedDuration.total_milliseconds() / (double)totalTime.total_milliseconds();
+	}
+
+
+	double meanReconn = 0;
+	if (disconnectionCount != 0)
+		meanReconn = (double)disconnectedDuration.total_milliseconds() / (60.0 * 1000.0 * disconnectionCount);
+
+	traceStr << "Disconnects    : " << disconnectionCount 	<< std::endl;
+	traceStr << "MeanDowntime   : " << meanReconn 			<< std::endl;
+	traceStr << "ConnectedRatio : " << connRatio 			<< std::endl;
+
+	double chunkRatio = 0;
+
+	if (numberChunks != 0)
+		chunkRatio = (double)numberErroredChunks / (double)(numberChunks);
+
+	traceStr << "Chunks		     : " << numberChunks		<< std::endl;
+	traceStr << "ChunkErrors	 : " << numberErroredChunks	<< std::endl;
+	traceStr << "ChunkErrorRatio : " << chunkRatio			<< std::endl;
+	traceStr << "RtcmExtraBytes  : " << numNonMessBytes		<< std::endl;
+	traceStr << "RtcmFailCrc     : " << numFramesFailedCRC 	<< std::endl;
+	traceStr << "RtcmPassedCrc   : " << numFramesPassCRC	<< std::endl;
+	traceStr << "RtcmDecoded     : " << numFramesDecoded	<< std::endl;
+	traceStr << "RtcmPreamble    : " << numPreambleFound	<< std::endl;
+
+	double FailedToPreambleRatio = 0;
+	if (numPreambleFound != 0)
+		FailedToPreambleRatio = (double)numFramesFailedCRC / (double)numPreambleFound;
+	traceStr << "RtcmFailedCrcToPreambleRatio : " << FailedToPreambleRatio << std::endl;
+
+	if (numMessagesLatency != 0)
+	{
+		double meanLatency = totalLatency / numMessagesLatency;
+		traceStr << "meanLatency     : " << meanLatency	<< std::endl;
+	}
+	else
+	{
+		traceStr << "meanLatency     : " << 0.0			<< std::endl;
+	}
+
+	bool printToTerminal = false;
+	if	( FailedToPreambleRatio > 0.01
+		||chunkRatio > 0.01
+		||connRatio < 0.99)
+	{
+		printToTerminal = true;
+	}
+
+	if (printToTerminal
+		&& acsConfig.print_stream_statistics)
+	{
+		BOOST_LOG_TRIVIAL(debug) << traceStr.str();
+	}
+
+	string messLine;
+	while (std::getline(traceStr, messLine))
+		tracepde(3, trace, (messLine + "\n").c_str());
+}
+
+void NetworkDataUpload::accumulateStatisticsFrom(
+	NetworkDataUpload& dataToAdd)
+{
+	disconnectionCount		+= dataToAdd.disconnectionCount;
+	connectedDuration		+= dataToAdd.connectedDuration;
+	disconnectedDuration	+= dataToAdd.disconnectedDuration;
+
+	numberErroredChunks		+= dataToAdd.numberErroredChunks;
+	numberChunks			+= dataToAdd.numberChunks;
+}
+
+void NetworkDataUpload::clearStatistics(
+	GTime tStart,
+	GTime tEnd)
+{
+	startTime	= tStart;
+	endTime		= tEnd;
+
+	disconnectionCount	= 0;
+
+	connectedDuration		= boost::posix_time::hours(0);
+	disconnectedDuration	= boost::posix_time::hours(0);
+
+	numberErroredChunks	= 0;
+	numberChunks		= 0;
+}
+
+string NetworkDataUpload::getJsonNetworkStatistics(
+	GTime	now,
+	string 	label)
+{
+	ptree root;
+
+	root.put("label", 		label);
+	root.put("Stream", 		streamName);
+	root.put("Epoch", 		std::put_time(std::localtime(&now.time), 		"%F %X" ));
+	root.put("Start", 		std::put_time(std::localtime(&startTime.time), 	"%F %X" ));
+	root.put("Finish", 		std::put_time(std::localtime(&endTime.time), 	"%F %X" ));
+	root.put("Network", 	acsConfig.analysis_agency);
+	root.put("Downloading", "false");
+
+	auto timeNow = boost::posix_time::from_time_t(system_clock::to_time_t(system_clock::now()));
+	boost::posix_time::time_duration totalTime = timeNow - boost::posix_time::from_time_t(startTime.time);
+
+	double connRatio;
+	if (disconnectionCount == 0	&&
+		numberChunks 		> 0)
 	{
 		connRatio = 1;
 	}
@@ -446,64 +656,42 @@ string NetworkData::getJsonNetworkStatistics(GTime now, string label)
 			connRatio = (double)connectedDuration.total_milliseconds() / (double) totalTime.total_milliseconds();
 	}
 
+	double meanReconn = 0;
+	if (disconnectionCount != 0)
+		meanReconn = (double)disconnectedDuration.total_milliseconds()/(60.0*1000.0*disconnectionCount);
 
-    double meanReconn = 0;
-    if (disconnectionCount != 0)
-        meanReconn = (double)disconnectedDuration.total_milliseconds()/(60.0*1000.0*disconnectionCount);
+	root.put("Disconnects", 	disconnectionCount);
+	root.put("MeanDowntime", 	meanReconn);
+	root.put("ConnectedRatio", 	connRatio);
 
-    networkJson << "\"Disconnects\": " << disconnectionCount << ",";
-    networkJson << "\"MeanDowntime\": " << meanReconn << ",";
-    networkJson << "\"ConnectedRatio\": " << connRatio << ",";
+	double chunkRatio = 0;
+	if (numberChunks != 0)
+		chunkRatio = (double)numberErroredChunks/(double)(numberChunks);
 
-    double chunkRatio = 0;
+	root.put("Chunks", 			numberChunks);
+	root.put("ChunkErrors", 	numberErroredChunks);
+	root.put("ChunkErrorRatio", chunkRatio);
 
-    if (numberChunks != 0)
-        chunkRatio = (double)numberErroredChunks/(double)(numberChunks);
-
-    networkJson << "\"Chunks\": "			<< numberChunks			<< ",";
-    networkJson << "\"ChunkErrors\": "		<< numberErroredChunks	<< ",";
-    networkJson << "\"ChunkErrorRatio\": "	<< chunkRatio			<< ",";
-
-    networkJson << "\"RtcmExtraBytes\": "	<< numNonMessBytes		<< ",";
-    networkJson << "\"RtcmFailCrc\": "		<< numFramesFailedCRC	<< ",";
-    networkJson << "\"RtcmPassedCrc\": "	<< numFramesPassCRC		<< ",";
-    networkJson << "\"RtcmDecoded\": "		<< numFramesDecoded		<< ",";
-    networkJson << "\"RtcmPreamble\": "		<< numPreambleFound		<< ",";
-
-    double FailedToPreambleRatio = 0;
-    if ( numPreambleFound != 0 )
-        FailedToPreambleRatio = (double) numFramesFailedCRC / (double) numPreambleFound;
-
-    networkJson << "\"RtcmFailedCrcToPreambleRatio\": " << FailedToPreambleRatio << ",";
-
-	if (numMessagesLatency != 0)
-	{
-		double meanLatency = totalLatency / numMessagesLatency;
-		networkJson << "\"meanLatency\": " << meanLatency;
-	}
-	else
-	{
-		networkJson << "\"meanLatency\": " << 0.0;
-	}
-
-    networkJson << "}";
-    previousJSON = networkJson.str();
-    return networkJson.str();
+    std::stringstream ss;
+    write_json(ss, root, false);
+	previousJSON = ss.str();
+	return ss.str();
 }
 
-void NetworkData::printTraceNetworkStatistics(Trace& trace)
+void NetworkDataUpload::printTraceNetworkStatistics(
+	Trace& trace)
 {
 	std::stringstream traceStr;
-	traceStr << "Start\":  " << std::put_time( std::localtime( &startTime.time ), "%F %X" ) << "\",";
-	traceStr << "Finish :  " << std::put_time( std::localtime( &endTime.time ), "%F %X" ) << "\",";
+	traceStr << "Start  :  " << std::put_time( std::localtime( &startTime.time ), "%F %X" )	 << std::endl;
+	traceStr << "Finish :  " << std::put_time( std::localtime( &endTime.time ), "%F %X" )	 << std::endl;
 
-    auto timeNow = boost::posix_time::from_time_t(system_clock::to_time_t(system_clock::now()));
-    boost::posix_time::time_duration totalTime = timeNow - boost::posix_time::from_time_t(startTime.time);
+	auto timeNow = boost::posix_time::from_time_t(system_clock::to_time_t(system_clock::now()));
+	boost::posix_time::time_duration totalTime = timeNow - boost::posix_time::from_time_t(startTime.time);
 
 
 	double connRatio;
-	if (disconnectionCount == 0
-		&& numberChunks > 0)
+	if	( disconnectionCount == 0
+		&&numberChunks > 0)
 	{
 		connRatio = 1;
 	}
@@ -518,54 +706,20 @@ void NetworkData::printTraceNetworkStatistics(Trace& trace)
 
 	double meanReconn = 0;
 	if (disconnectionCount != 0)
-	    meanReconn = (double)disconnectedDuration.total_milliseconds()/(60.0*1000.0*disconnectionCount);
+		meanReconn = (double)disconnectedDuration.total_milliseconds() / (60.0 * 1000.0 * disconnectionCount);
 
-	traceStr << "Disconnects    : " << disconnectionCount << std::endl;
-	traceStr << "MeanDowntime   : " << meanReconn  << std::endl;
-	traceStr << "ConnectedRatio : " << connRatio  << std::endl;
+	traceStr << "Disconnects    : "		<< disconnectionCount	<< std::endl;
+	traceStr << "MeanDowntime   : "		<< meanReconn			<< std::endl;
+	traceStr << "ConnectedRatio : "		<< connRatio			<< std::endl;
 
 	double chunkRatio = 0;
 
 	if (numberChunks != 0)
-	    chunkRatio = (double)numberErroredChunks/(double)(numberChunks);
+		chunkRatio = (double)numberErroredChunks / (double)(numberChunks);
 
 	traceStr << "Chunks		     : "	<< numberChunks			 << std::endl;
 	traceStr << "ChunkErrors	 : "	<< numberErroredChunks	 << std::endl;
 	traceStr << "ChunkErrorRatio : "	<< chunkRatio			 << std::endl;
-	traceStr << "RtcmExtraBytes  : "	<< numNonMessBytes		 << std::endl;
-	traceStr << "RtcmFailCrc     : "	<< numFramesFailedCRC	 << std::endl;
-	traceStr << "RtcmPassedCrc   : "	<< numFramesPassCRC		 << std::endl;
-	traceStr << "RtcmDecoded     : "	<< numFramesDecoded		 << std::endl;
-	traceStr << "RtcmPreamble    : "	<< numPreambleFound		 << std::endl;
-
-	double FailedToPreambleRatio = 0;
-	if (numPreambleFound != 0 )
-	    FailedToPreambleRatio = (double) numFramesFailedCRC / (double) numPreambleFound;
-	traceStr << "RtcmFailedCrcToPreambleRatio : " << FailedToPreambleRatio << std::endl;
-
-	if (numMessagesLatency != 0)
-	{
-		double meanLatency = totalLatency / numMessagesLatency;
-		traceStr << "meanLatency     : " << meanLatency;
-	}
-	else
-	{
-		traceStr << "meanLatency     : " << 0.0;
-	}
-
-	bool printToTerminal = false;
-	if	( FailedToPreambleRatio > 0.01
-		||chunkRatio > 0.01
-		||connRatio < 0.99)
-	{
-		printToTerminal = true;
-	}
-
-	if	( printToTerminal
-		&& acsConfig.print_stream_statistics)
-	{
-		BOOST_LOG_TRIVIAL(debug) << traceStr.str();
-	}
 
 	string messLine;
 	while (std::getline(traceStr, messLine))
@@ -574,8 +728,7 @@ void NetworkData::printTraceNetworkStatistics(Trace& trace)
 
 
 void recordNetworkStatistics(
-	std::multimap<string,
-	std::shared_ptr<NtripRtcmStream>> downloadStreamMap)
+	std::multimap<string,std::shared_ptr<NtripRtcmStream>> downloadStreamMap)
 {
 	for (auto& [id, s] : downloadStreamMap )
 	{
@@ -583,13 +736,20 @@ void recordNetworkStatistics(
 
 		downStream.getJsonNetworkStatistics(tsync);
 	}
+
+	for (auto& [id, s] : outStreamManager.ntripUploadStreams)
+	{
+		NtripBroadcaster::NtripUploadClient& upStream = *s;
+
+		upStream.getJsonNetworkStatistics(tsync);
+	}
 }
 
 
 #include "acsNtripBroadcast.hpp"
 
 void writeNetworkTraces(
-	StationMap&		stationMap)
+	StationMap& stationMap)
 {
 	// Observations or not provide trace information on the downloading station stream.
 
@@ -603,7 +763,7 @@ void writeNetworkTraces(
 	
 		auto trace = getTraceFile(rec);
 		
-		trace << std::endl << "<<<<<<<<<<< Network Trace : Epoch " << epoch << " >>>>>>>>>>>" << std::endl;
+		trace << std::endl << "------=============== Network Trace : Epoch " << epoch << " =============-----------" << std::endl;
 
 		auto& [dummyId, downStream] = *down_it;
 		
@@ -616,7 +776,7 @@ void writeNetworkTraces(
 		
 		auto trace = getTraceFile(uploadStream);
 		
-		trace << std::endl << "<<<<<<<<<<< Network Trace : Epoch " << epoch << " >>>>>>>>>>>" << std::endl;
+		trace << std::endl << "------=============== Network Trace : Epoch " << epoch << " =============-----------" << std::endl;
 		
 		uploadStream.traceWriteEpoch(trace);
 	}

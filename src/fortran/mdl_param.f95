@@ -19,12 +19,12 @@ MODULE mdl_param
 !      use iso_c_binding, only : c_int, c_long, c_double, c_short
       IMPLICIT NONE
       SAVE 			
-	  
+
 ! ---------------------------------------------------------------------------
       REAL (KIND = prec_d) :: ORBPRED_ARC_glb
 
 ! ---------------------------------------------------------------------------
-	  
+
 ! ---------------------------------------------------------------------------
 ! Time System of orbit ouput files defined by the input configuration file
 !      CHARACTER (LEN=3) :: TIME_SCALE
@@ -191,7 +191,7 @@ INTEGER (KIND = prec_int8) :: NPARAM_glb
 ! ----------------------------------------------------------------------
 
       integer (kind=4) :: max_blk   ! Max number of block types indices
-                          ! 0-10 GPS, 11-20 Glonass, 21-30 Galileo, 31-40 BDS, 41-50 QZSS
+                          ! 1-10 GPS, 11-20 Glonass, 21-30 Galileo, 31-40 BDS, 41-50 QZSS
       parameter ( max_blk = 50 ) 
 !
 !     EARTH AND SATELLITE PROPERTIES

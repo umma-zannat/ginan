@@ -3,18 +3,18 @@
 
 
 #include <fstream>
-#include <set>
 
-using std::set;
 
+#include "writeRinexObs.hpp"
+#include "writeClock.hpp"
 #include "GNSSambres.hpp"
 #include "navigation.hpp"
+#include "ephemeris.hpp"
 #include "acsConfig.hpp"
 #include "constants.hpp"
 #include "writeSp3.hpp"
 #include "station.hpp"
 #include "algebra.hpp"
-#include "preceph.hpp"
 #include "enums.h"
 
 /* macro defintions */
@@ -31,18 +31,16 @@ struct Sp3Entry
 
 typedef map<int, Sp3Entry> Sp3SatList;
 
-struct Sp3fileData
-{
-	set<SatSys> sats	= {};
-	long numEpoch		= 0;
-	long numEpoch_pos	= 0;
-};
+
+Sp3FileData sp3CombinedFileData;
+map<E_Sys, Sp3FileData> sp3SytemFileData;
 
 void writeSp3Header(
-	std::fstream& 	sp3Stream,
-	Sp3SatList&		entryList,
-	GTime			time,
-	Sp3fileData&	outFileDat)
+	std::fstream& 		sp3Stream,
+	Sp3SatList&			entryList,
+	GTime				time,
+	OutSys				outSys,
+	Sp3FileData&		outFileDat)
 {
 	double ep[6] = {};
 	time2epoch(time, ep);
@@ -57,7 +55,7 @@ void writeSp3Header(
 	outFileDat.numEpoch_pos = sp3Stream.tellp();
 
 	//TODO Check, coordinate system and Orbit Type from example product file.
-	tracepdeex(0, sp3Stream, "%7d ORBIT IGS14 HLM %4s\n",   outFileDat.numEpoch,   acsConfig.analysis_agency);
+	tracepdeex(0, sp3Stream, "%7d ORBIT IGS14 HLM %4s\n",   outFileDat.numEpoch,   acsConfig.analysis_agency.c_str());
 
 	int week;
 	double tow_sec = time2gpst(time, &week);
@@ -69,10 +67,11 @@ void writeSp3Header(
 			   mjdate,
 			   mjdate - floor(mjdate));
 
-	if (acsConfig.process_sys[E_Sys::GPS])		for (int prn = 1; prn <= NSATGPS; prn++)	{SatSys s(E_Sys::GPS, prn); outFileDat.sats.insert(s);}
-	if (acsConfig.process_sys[E_Sys::GLO])		for (int prn = 1; prn <= NSATGLO; prn++)	{SatSys s(E_Sys::GLO, prn);	outFileDat.sats.insert(s);}
-	if (acsConfig.process_sys[E_Sys::GAL])		for (int prn = 1; prn <= NSATGAL; prn++)	{SatSys s(E_Sys::GAL, prn);	outFileDat.sats.insert(s);}
-	if (acsConfig.process_sys[E_Sys::CMP])		for (int prn = 1; prn <= NSATCMP; prn++)	{SatSys s(E_Sys::CMP, prn);	outFileDat.sats.insert(s);}
+	
+	if (outSys[E_Sys::GPS])		for (int prn = 1; prn <= NSATGPS; prn++)	{SatSys s(E_Sys::GPS, prn); outFileDat.sats.insert(s);}
+	if (outSys[E_Sys::GLO])		for (int prn = 1; prn <= NSATGLO; prn++)	{SatSys s(E_Sys::GLO, prn);	outFileDat.sats.insert(s);}
+	if (outSys[E_Sys::GAL])		for (int prn = 1; prn <= NSATGAL; prn++)	{SatSys s(E_Sys::GAL, prn);	outFileDat.sats.insert(s);}
+	if (outSys[E_Sys::BDS])		for (int prn = 1; prn <= NSATCMP; prn++)	{SatSys s(E_Sys::BDS, prn);	outFileDat.sats.insert(s);}
 
 	int lineNumber	= 1;
 	int lineEntries	= 0;
@@ -200,12 +199,12 @@ void writeSp3Header(
 }
 
 void updateSp3Body(
-	string&		filename,	    ///< Path to output file.
-	Sp3SatList&	entryList,	    ///< List of data to print.
-	GTime		time)		    ///< Epoch time.
+	string&				filename,		///< Path to output file.
+	Sp3SatList&			entryList,		///< List of data to print.
+	GTime				time,			///< Epoch time.
+	OutSys				outSys,			///< Systems to include in file.
+	Sp3FileData&		outFileDat)		///< Current file editing information. 
 {
-	static Sp3fileData outFileDat;
-
 	double ep[6] = {};
 	time2epoch(time, ep);
 
@@ -228,7 +227,7 @@ void updateSp3Body(
 
 	if (endFilePos == 0)
 	{
-		writeSp3Header(sp3Stream, entryList, time, outFileDat);
+		writeSp3Header(sp3Stream, entryList, time, outSys, outFileDat);
 	}
 	else
 	{
@@ -290,10 +289,13 @@ void updateSp3Body(
 	tracepdeex(0, sp3Stream, "EOF\n");
 }
 
-void outputSp3(
-	string&			filename,
-	E_Ephemeris		sp3DataSrc,
-	GTime			time)
+void writeSysSetSp3(
+	string			filename,
+	GTime			time,
+	OutSys			outSys,
+	Sp3FileData&	outFileDat,
+	E_Ephemeris		sp3DataSrc,	
+	KFState*		kfState_ptr)
 {
 	Sp3SatList entryList;
 
@@ -302,17 +304,15 @@ void outputSp3(
 		SatSys Sat;
 		Sat.fromHash(satId);
 
-		if (acsConfig.process_sys[Sat.sys] == false)
-		{
+		if (!outSys[Sat.sys])
 			continue;
-		}
 
 		// Create a dummy observation
 		Obs obs;
-		obs.Sat			= Sat;
-		obs.satNav_ptr	= &nav.satNavMap[Sat];
+		obs.Sat = Sat;
+		obs.satNav_ptr = &nav.satNavMap[Sat];
 
-		GTime 		teph 	 = time;
+		GTime 		teph = time;
 
 		PcoMapType* pcoMap_ptr = nullptr;
 		{
@@ -322,9 +322,9 @@ void outputSp3(
 			{
 				if (Sat.prn < MINPRNSBS)
 				{
-					BOOST_LOG_TRIVIAL(warning) 
-					<< "Warning: Writing SP3 file, no satellite ("
-					<< Sat.id() << ") pco information";
+					BOOST_LOG_TRIVIAL(warning)
+						<< "Warning: Writing SP3 file, no satellite ("
+						<< Sat.id() << ") pco information";
 				}
 			}
 			else
@@ -332,25 +332,38 @@ void outputSp3(
 				pcoMap_ptr = &pcsat->pcoMap;
 			}
 		}
-		
-		bool pass = satpos(nullStream, time, teph, obs, sp3DataSrc, E_OffsetType::COM, nav, pcoMap_ptr, false);
+
+		bool pass = satpos(nullStream, time, teph, obs, acsConfig.orbits_data_source, E_OffsetType::COM, nav, pcoMap_ptr, false, kfState_ptr);
 		if (pass == false)
 		{
 			BOOST_LOG_TRIVIAL(warning) << "Warning: Writing SP3 file, failed to get data for satellite " << Sat.id();
 			continue;
 		}
-		
+
 		Sp3Entry entry;
-		entry.sat 		= Sat;
-		entry.satPos 	= obs.rSat;
-		entry.satVel 	= obs.satVel;
-		entry.clock[0]	= obs.dtSat[0];
-		entry.clock[1]	= obs.dtSat[1];
-		entry.sigma		= sqrt(obs.ephVar);
-		
+		entry.sat = Sat;
+		entry.satPos = obs.rSat;
+		entry.satVel = obs.satVel;
+		entry.clock[0] = obs.dtSat[0];
+		entry.clock[1] = obs.dtSat[1];
+		entry.sigma = sqrt(obs.ephVar);
+
 		entryList[Sat] = entry;
 	}
-	
-	updateSp3Body(filename, entryList, time);
+
+	updateSp3Body(filename, entryList, time, outSys, outFileDat);
 }
 
+
+void outputSp3(
+	GTime		time,
+	E_Ephemeris	sp3DataSrc,
+	KFState*	kfState_ptr)
+{
+	auto sysFilenames = getSysOutputFilenames(acsConfig.orbits_filename, time);
+
+	for (auto [filename, sysMap] : sysFilenames)
+	{
+		writeSysSetSp3(filename, time, sysMap, sp3CombinedFileData, sp3DataSrc, kfState_ptr);
+	}
+}

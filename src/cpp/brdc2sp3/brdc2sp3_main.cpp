@@ -75,7 +75,7 @@ int BS_satantoff( GTime time, SatSys Sat, Vector3d& rs, Vector3d& dant, int gloi
 		case E_Sys::GLO: lam1 = CLIGHT/glonfrq1; 	lam2 = CLIGHT/glonfrq2;			break;
 		case E_Sys::QZS: lam1 = CLIGHT/FREQ1; 		lam2 = CLIGHT/FREQ2;			break;
 		case E_Sys::GAL: lam1 = CLIGHT/FREQ1; 		lam2 = CLIGHT/FREQ5;	k=F5;	break;
-		case E_Sys::CMP: lam1 = CLIGHT/FREQ1_CMP; 	lam2 = CLIGHT/FREQ2_CMP; 		break;
+		case E_Sys::BDS: lam1 = CLIGHT/FREQ1_CMP; 	lam2 = CLIGHT/FREQ2_CMP; 		break;
 		default:     	 return -2; 
 	}
 	
@@ -132,7 +132,7 @@ Eph* BS_seleph( GTime time, SatSys Sat, int iode, nav_t& nav_, int opt=0)
 	{
 		case E_Sys::QZS:	valid = MAXDTOE_QZS	+ 1; break;
 		case E_Sys::GAL:	valid = MAXDTOE_GAL	+ 1; break;
-		case E_Sys::CMP:	valid = MAXDTOE_CMP	+ 1; break;
+		case E_Sys::BDS:	valid = MAXDTOE_CMP	+ 1; break;
 		default: 			valid = MAXDTOE		+ 1; break;
 	}
 	
@@ -259,8 +259,8 @@ void glorbit(double t, double* x, Vector3d& acc)
 int BS_geph2pos( GTime	time, Geph* geph, Vector3d& rs, double*	dts)
 {
 	double t = time - geph->toe;
-	*dts	= -geph->taun 
-			+  geph->gamn * t;	//todo aaron +,- correct?
+	*dts	=  geph->taun 
+			+  geph->gamn * t;
 
 	double x[6] = {0};
 	for (int i = 0; i < 3; i++)	
@@ -293,7 +293,7 @@ int BS_eph2pos( GTime	time, Eph* eph, Vector3d& rs, double*	dts) {
 	switch (sys)
 	{
 		case E_Sys::GAL: mu = MU_GAL; omge = OMGE_GAL; break;
-		case E_Sys::CMP: mu = MU_CMP; omge = OMGE_CMP; break;
+		case E_Sys::BDS: mu = MU_CMP; omge = OMGE_CMP; break;
 		default:     	 mu = MU_GPS; omge = OMGE;     break;
 	}
 
@@ -331,7 +331,7 @@ int BS_eph2pos( GTime	time, Eph* eph, Vector3d& rs, double*	dts) {
 	double cosi  = cos(i);
 
 	/* beidou geo satellite */
-	if (sys == +E_Sys::CMP && prn <= 5)
+	if (sys == +E_Sys::BDS && prn <= 5)
 	{
 		double O	= eph->OMG0
 					+ eph->OMGd * tk
@@ -462,7 +462,7 @@ int main(int argc, char **argv)
     BS_Max_Dtime[E_Sys::GLO] = 86400.0;
     BS_Max_Dtime[E_Sys::GAL] = 86400.0;
     BS_Max_Dtime[E_Sys::QZS] = 86400.0;
-    BS_Max_Dtime[E_Sys::CMP] = 86400.0;
+    BS_Max_Dtime[E_Sys::BDS] = 86400.0;
     int ephopt = 0;
     for (int i = 1; i < argc; i++) 
     {
@@ -479,7 +479,7 @@ int main(int argc, char **argv)
     	else if (!strcmp(argv[i], "-Rdt") && i+1<argc) BS_Max_Dtime[E_Sys::GLO] = atof(argv[++i]);
     	else if (!strcmp(argv[i], "-Edt") && i+1<argc) BS_Max_Dtime[E_Sys::GAL] = atof(argv[++i]);
     	else if (!strcmp(argv[i], "-Jdt") && i+1<argc) BS_Max_Dtime[E_Sys::QZS] = atof(argv[++i]);
-    	else if (!strcmp(argv[i], "-Cdt") && i+1<argc) BS_Max_Dtime[E_Sys::CMP] = atof(argv[++i]);
+    	else if (!strcmp(argv[i], "-Cdt") && i+1<argc) BS_Max_Dtime[E_Sys::BDS] = atof(argv[++i]);
     	else if (!strcmp(argv[i], "-clst"))			   ephopt = 1;
     	else if (!strcmp(argv[i], "-inav"))            GALSelection = 5;
         else if (!strcmp(argv[i], "-fnav"))  		   GALSelection = 2;
@@ -505,7 +505,7 @@ int main(int argc, char **argv)
     if (GNSSinp.find("G") != std::string::npos) GNSS_on[E_Sys::GPS] = true; //GPS
     if (GNSSinp.find("R") != std::string::npos) GNSS_on[E_Sys::GLO] = true; //GLONASS
     if (GNSSinp.find("E") != std::string::npos) GNSS_on[E_Sys::GAL] = true; //Galileo
-    if (GNSSinp.find("C") != std::string::npos) GNSS_on[E_Sys::CMP] = true; //Beidou
+    if (GNSSinp.find("C") != std::string::npos) GNSS_on[E_Sys::BDS] = true; //Beidou
     if (GNSSinp.find("J") != std::string::npos) GNSS_on[E_Sys::QZS] = true; //QZSS
     if (GNSS_on.empty())
 	{

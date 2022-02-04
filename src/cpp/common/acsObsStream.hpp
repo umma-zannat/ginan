@@ -3,6 +3,7 @@
 #define __ACSOBSSTREAM_HPP__
 
 #include "station.hpp"
+#include "enums.h"
 
 //interfaces
 
@@ -13,6 +14,7 @@ struct ObsStream
 	RinexStation	rnxStation = {};
 	list<ObsList>	obsListList;	
 	string			sourceString;
+	E_ObsWaitCode	obsWaitCode = E_ObsWaitCode::OK;
 
 	/** Return a list of observations from the stream.
 	* This function may be overridden by objects that use this interface
@@ -32,24 +34,28 @@ struct ObsStream
 
 			if (obsList.size() == 0)
 			{
+				obsWaitCode = E_ObsWaitCode::NO_DATA_WAIT;
 				return obsList;
 			}
 
 			if (time == GTime::noTime())
 			{
+				obsWaitCode = E_ObsWaitCode::OK;
 				return obsList;
 			}
 
-			if		(obsList.front().time < time - delta)
+			if	(obsList.front().time < time - delta)
 			{
 				eatObs();
 			}
 			else if	(obsList.front().time > time + delta)
 			{
+				obsWaitCode = E_ObsWaitCode::NO_DATA_EVER;
 				return ObsList();
 			}
 			else
 			{
+				obsWaitCode = E_ObsWaitCode::OK;
 				return obsList;
 			}
 		}

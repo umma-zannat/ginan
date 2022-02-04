@@ -7,19 +7,19 @@ MODULE m_orbdet
 ! Purpose:
 !  Module for GNSS Orbit Determiantion
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-!			Geoscience Australia, CRC-SI
-! Created:	20 April 2018
+! Author :  Dr. Thomas Papanikolaou
+!                 Geoscience Australia, CRC-SI
+! Created:  20 April 2018
 ! ----------------------------------------------------------------------
 
 
       IMPLICIT NONE
-      !SAVE 			
+      !SAVE                   
   
-	  
+        
 Contains
-	  
-	  
+        
+        
 SUBROUTINE orbdet (EQMfname, VEQfname, orb_icrf_final, orb_itrf_final, veqSmatrix_final, veqPmatrix_final, Vres, Vrms, Xsigma)
 
 
@@ -30,33 +30,33 @@ SUBROUTINE orbdet (EQMfname, VEQfname, orb_icrf_final, orb_itrf_final, veqSmatri
 !  GNSS Orbit Determination 
 ! ----------------------------------------------------------------------
 ! Input arguments:
-! - EQMfname: 	Input cofiguration file name for the orbit parameterization 
-! - VEQfname: 	Input cofiguration file name for the orbit parameterization 
+! - EQMfname:     Input cofiguration file name for the orbit parameterization 
+! - VEQfname:     Input cofiguration file name for the orbit parameterization 
 !
 ! Output arguments:
-! - orb_icrf: 	Satellite orbit array in ICRF including the following per epoch:
+! - orb_icrf:     Satellite orbit array in ICRF including the following per epoch:
 !               - Modified Julian Day number (including the fraction of the day) 
-!				- Seconds since 00h 
-!				- Position vector (m)
-!				- Velocity vector (m/sec)
-! - orb_itrf: 	Satellite orbit array in ITRF including the following per epoch:
+!                       - Seconds since 00h 
+!                       - Position vector (m)
+!                       - Velocity vector (m/sec)
+! - orb_itrf:     Satellite orbit array in ITRF including the following per epoch:
 !               - Modified Julian Day number (including the fraction of the day) 
-!				- Seconds since 00h 
-!				- Position vector (m)
-!				- Velocity vector (m/sec)
-! - veqSmatrix:	State trasnition matrix obtained from the Variational Equations solution based on numerical integration methods
+!                       - Seconds since 00h 
+!                       - Position vector (m)
+!                       - Velocity vector (m/sec)
+! - veqSmatrix:   State trasnition matrix obtained from the Variational Equations solution based on numerical integration methods
 ! - veqPmatrix: Sensitivity matrix obtained from the Variational Equations solution based on numerical integration methods
-! - Vres:		Orbit residuals matrix
-! - Vrms: 		RMS values of the orbit residuals per X,Y,Z components 
+! - Vres:         Orbit residuals matrix
+! - Vrms:         RMS values of the orbit residuals per X,Y,Z components 
 ! ----------------------------------------------------------------------
 ! Note 1:
 ! The time scale of the 2 first collumns of the orbit arrays (MJD and Seoncds since 00h) 
 ! refer to the time system defined by the global variable TIME_SCALE in the module mdl_param.f95
 ! according to the input parameterization file 
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-!			Geoscience Australia, CRC-SI
-! Created:	20 April 2018
+! Author :  Dr. Thomas Papanikolaou
+!                 Geoscience Australia, CRC-SI
+! Created:  20 April 2018
 !
 ! Changes:  18-12-2018  Tzupang Tseng : Enabled the function of the ECOM SRP estimation and added some conditions to judge which model
 !                                       is used to improve the GNSS orbit modelling (Currently the ECOM model is only estimated with full
@@ -68,22 +68,22 @@ SUBROUTINE orbdet (EQMfname, VEQfname, orb_icrf_final, orb_itrf_final, veqSmatri
 !           12-02-2021  Tzupang Tseng : Re-shape the parameter estimation of both EMP and SRP models
 !
 ! Last modified:
-! 20 May 2019,	Dr. Thomas Papanikolaou
-!				General upgrade for supporting the POD Tool modes of orbit determination and prediction 
-! 				1. Orbit Determination (pseudo-observations; orbit fitting)
-! 				2. Orbit Determination and Prediction
-! 				3. Orbit Integration (Equation of Motion only)
-! 				4. Orbit Integration and Partials (Equation of Motion and Variational Equations)
-! 30 May 2019,	Dr. Thomas Papanikolaou
-! 				Minor modification for the case of Orbit Determination and Prediction (POD mode 2) 
-!				for computing the orbit residuals of the estimated part only of the orbits without the predicted part 
-! 11 June 2019,	Dr. Thomas Papanikolaou
-! 				Modification of the orbit integrator step in case of eclipse seasons; 
+! 20 May 2019,    Dr. Thomas Papanikolaou
+!                       General upgrade for supporting the POD Tool modes of orbit determination and prediction 
+!                       1. Orbit Determination (pseudo-observations; orbit fitting)
+!                       2. Orbit Determination and Prediction
+!                       3. Orbit Integration (Equation of Motion only)
+!                       4. Orbit Integration and Partials (Equation of Motion and Variational Equations)
+! 30 May 2019,    Dr. Thomas Papanikolaou
+!                       Minor modification for the case of Orbit Determination and Prediction (POD mode 2) 
+!                       for computing the orbit residuals of the estimated part only of the orbits without the predicted part 
+! 11 June 2019,   Dr. Thomas Papanikolaou
+!                       Modification of the orbit integrator step in case of eclipse seasons; 
 !               Resize the orbit and partials matrices according to the initial integrator step prior passing to output arguments 
-! 17/08/2020,	Dr. Thomas Papanikolaou, Pseudo-stochastic pulses (velocity) added  
+! 17/08/2020,     Dr. Thomas Papanikolaou, Pseudo-stochastic pulses (velocity) added  
 ! ----------------------------------------------------------------------
-	  
-	  
+        
+        
       USE mdl_precision
       USE mdl_num
       USE mdl_param
@@ -104,13 +104,13 @@ SUBROUTINE orbdet (EQMfname, VEQfname, orb_icrf_final, orb_itrf_final, veqSmatri
       USE m_emp_init
       USE m_pulses_init
       IMPLICIT NONE
-	  
-	  
+        
+        
 ! ----------------------------------------------------------------------
 ! Dummy arguments declaration
 ! ----------------------------------------------------------------------
 ! IN
-      CHARACTER (LEN=100), INTENT(IN)  :: EQMfname, VEQfname				
+      CHARACTER (LEN=100), INTENT(IN)  :: EQMfname, VEQfname                        
 ! ----------------------------------------------------------------------
 ! OUT
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE, INTENT(OUT) :: orb_icrf_final, orb_itrf_final  
@@ -132,7 +132,7 @@ SUBROUTINE orbdet (EQMfname, VEQfname, orb_icrf_final, orb_itrf_final, veqSmatri
       INTEGER (KIND = prec_int8) :: IECOM, IEMP
       INTEGER (KIND = prec_int8) :: isbox 
       INTEGER (KIND = prec_int8) :: sz1, sz2 
-      INTEGER (KIND = prec_int8) :: Nepochs	  
+      INTEGER (KIND = prec_int8) :: Nepochs       
       !REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: veqSmatrix, veqPmatrix  
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: Xmatrix, Wmatrix, Amatrix
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: Vmatrix
@@ -140,21 +140,21 @@ SUBROUTINE orbdet (EQMfname, VEQfname, orb_icrf_final, orb_itrf_final, veqSmatri
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orb0, veq0, veq1  
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: dorb, dorb_icrf, dorb_itrf 
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: dorb_XYZ, dorb_RTN, dorb_Kepler
-	  REAL (KIND = prec_d), DIMENSION(5,6) :: stat_XYZ, stat_RTN, stat_Kepler
-      REAL (KIND = prec_d), DIMENSION(:), ALLOCATABLE :: RMSdsr, Sigmadsr, MEANdsr, MINdsr, MAXdsr 	  
+        REAL (KIND = prec_d), DIMENSION(5,6) :: stat_XYZ, stat_RTN, stat_Kepler
+      REAL (KIND = prec_d), DIMENSION(:), ALLOCATABLE :: RMSdsr, Sigmadsr, MEANdsr, MINdsr, MAXdsr      
       INTEGER (KIND = prec_int2) :: AllocateStatus,DeAllocateStatus
       CHARACTER (LEN=3) :: time_sys, time 
       REAL (KIND = prec_d), DIMENSION(6) :: Zest0_icrf, Zest0_itrf, Xo_estim
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d) :: Bias_corr(3), CPR_corr(3,2)
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=100) :: fname, fname1, fname2				
-      CHARACTER (LEN=50) :: fname_id				
-      CHARACTER (LEN=100) :: param_id				
-      CHARACTER (LEN=500) :: param_value				
-      REAL (KIND = prec_d) :: apriori_3(3), apriori_2(2) 				
-	  REAL (KIND = prec_q) :: Bias_0(3)
-	  REAL (KIND = prec_q) :: CPR_CS_0(3,2)
+      CHARACTER (LEN=100) :: fname, fname1, fname2                      
+      CHARACTER (LEN=50) :: fname_id                        
+      CHARACTER (LEN=100) :: param_id                       
+      CHARACTER (LEN=500) :: param_value                    
+      REAL (KIND = prec_d) :: apriori_3(3), apriori_2(2)                      
+        REAL (KIND = prec_q) :: Bias_0(3)
+        REAL (KIND = prec_q) :: CPR_CS_0(3,2)
       REAL (KIND = prec_q), DIMENSION(:), ALLOCATABLE :: EMP_0_coef,EMP_coef
       REAL (KIND = prec_q), DIMENSION(:), ALLOCATABLE :: ECOM_0_coef,ECOM_coef
       REAL (KIND = prec_q), DIMENSION(:), ALLOCATABLE :: ECOM_accel_aposteriori
@@ -162,7 +162,7 @@ SUBROUTINE orbdet (EQMfname, VEQfname, orb_icrf_final, orb_itrf_final, veqSmatri
 ! ----------------------------------------------------------------------
       CHARACTER (LEN=100) :: EQMfname_pred, VEQfname_pred
       REAL (KIND = prec_d) :: orbarc_sum
-      INTEGER (KIND = prec_int8) :: Nepochs_estim	  
+      INTEGER (KIND = prec_int8) :: Nepochs_estim       
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orb_icrf_estim
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d) :: mjd, r_sat(3), v_sat(3)
@@ -194,6 +194,7 @@ SUBROUTINE orbdet (EQMfname, VEQfname, orb_icrf_final, orb_itrf_final, veqSmatri
       REAL (KIND = prec_d), DIMENSION(3) :: PULSE_dir_vec
       CHARACTER (LEN=3) :: prn_out
       integer (KIND=prec_int4) :: prn_index
+      character (len=50) :: line
 
 ! ----------------------------------------------------------------------
 
@@ -204,19 +205,19 @@ Bias_corr = 0.d0
 
 prn_out = 'G02'
 
-	  
+        
 ! ----------------------------------------------------------------------
-! Read orbit parameterization											
+! Read orbit parameterization                                                             
 ! ----------------------------------------------------------------------
 Call prm_main (EQMfname, .false.)
 ! ----------------------------------------------------------------------
 
 ! ----------------------------------------------------------------------
-! Temp																		! ----------------------------------------------------------------------
+! Temp                                                                                                            ! ----------------------------------------------------------------------
 SVEC_Zo_ESTIM = SVEC_Zo
 !Bias_accel_aposteriori = Bias_accel_glb
 !CPR_CS_aposteriori = CPR_CS_glb
-! ----igs20214.sp3------------------------------------------------------------------	
+! ----igs20214.sp3------------------------------------------------------------------      
 
 ! ----------------------------------------------------------------------
 ! Estimator settings :: Module mdl_param.f95 global parameters
@@ -224,30 +225,44 @@ ESTmode = yml_estimator_procedure
 Niter = yml_estimator_iterations
 ! ----------------------------------------------------------------------
 
+found = .false.
+do prn_index = 1, prn_override_count
+    if (yml_prn_overrides(prn_index)%name == TRIM(PRN)) then
+        found = .true.
+        exit
+    end if
+end do
+
+if (.not. found) then
+    prn_index = new_prn_override(PRN)
+end if
+
 !Print *,"Orbit ESTmode:", ESTmode
 If (ESTmode == 0) then
-Print *,"Orbit Propagation"
+write(line, *) "Orbit Propagation"
 Else 
-Print *,"Orbit Determination"
+write(line, *) "Orbit Determination"
 End IF
+yml_prn_overrides(prn_index)%integ%integ_header = &
+        trim(yml_prn_overrides(prn_index)%integ%integ_header) // NEW_LINE('A') // line
 
 !PRINT *,"Data reading"
 ! ----------------------------------------------------------------------
 ! Data reading: Gravitational Effects
 ! ----------------------------------------------------------------------
 ! Earth Gravity Field model
-!CALL prm_gravity (EQMfname)												
+!CALL prm_gravity (EQMfname)                                                                    
 ! Planetary/Lunar DE data 
-!CALL prm_planets (EQMfname)												
+!CALL prm_planets (EQMfname)                                                                    
 ! Ocean Tides model
-!CALL prm_ocean (EQMfname)												
+!CALL prm_ocean (EQMfname)                                                                      
 ! ----------------------------------------------------------------------
 ! Pseudo-Observations: Precise Orbit (sp3) 
 pseudobs_opt = TYPE_SP3
 CALL prm_pseudobs (EQMfname, pseudobs_opt)
 ! ----------------------------------------------------------------------
 ! External Orbit comparison: Precise Orbit (sp3)
-!CALL prm_orbext (EQMfname)												
+!CALL prm_orbext (EQMfname)                                                                     
 ! ----------------------------------------------------------------------
 ! Skip bad orbits with zero value in SP3 file
 !CALL scan0orb
@@ -294,10 +309,12 @@ CALL eclipse_integstep (EQMfname, VEQfname, mjd, r_sat, v_sat, integstep_flag, i
 ! ----------------------------------------------------------------------
 ! Initial conditions for solar radiation pressure and empirical model
 ! ----------------------------------------------------------------------
-IF(yml_ECOM_mode == ECOM1) PRINT*,'ECOM1 SRP MODEL IS ACTIVATED'
-IF(yml_ECOM_mode == ECOM2) PRINT*,'ECOM2 SRP MODEL IS ACTIVATED'
-IF(yml_ECOM_mode == SBOXW) PRINT*,'SIMPLE BOX WING IS ACTIVATED'
-IF(yml_ECOM_mode == ECOM_HYBRID) PRINT*,'ECOM1+ECOM2 HYBRID MODEL IS ACTIVATED'
+IF(yml_ECOM_mode == ECOM1) write(line, *) 'ECOM1 SRP MODEL IS ACTIVATED'
+IF(yml_ECOM_mode == ECOM2) write(line, *) 'ECOM2 SRP MODEL IS ACTIVATED'
+IF(yml_ECOM_mode == SBOXW) write(line, *) 'SIMPLE BOX WING IS ACTIVATED'
+IF(yml_ECOM_mode == ECOM_HYBRID) write(line, *) 'ECOM1+ECOM2 HYBRID MODEL IS ACTIVATED'
+yml_prn_overrides(prn_index)%integ%integ_header = &
+        trim(yml_prn_overrides(prn_index)%integ%integ_header) // NEW_LINE('A') // line
 !IF(yml_ECOM_mode > SBOXW)  PRINT*,'UNKNOWN SRP MODEL IS ACTIVATED :-('
 !   ALLOCATE (ECOM_coef(NPARAM_glb), STAT = AllocateStatus)
    ALLOCATE (ECOM_coef(ECOMNUM), STAT = AllocateStatus)
@@ -314,7 +331,11 @@ IF(yml_ECOM_mode == ECOM_HYBRID) PRINT*,'ECOM1+ECOM2 HYBRID MODEL IS ACTIVATED'
    end if
    CALL ecom_init (ECOM_0_coef)
 
-IF(yml_EMP_mode) PRINT*,'EMPIRICAL MODEL IS ACTIVATED '
+IF(yml_EMP_mode) then
+   write (line, *) 'EMPIRICAL MODEL IS ACTIVATED '
+yml_prn_overrides(prn_index)%integ%integ_header = &
+        trim(yml_prn_overrides(prn_index)%integ%integ_header) // NEW_LINE('A') // line
+end if
 ALLOCATE (EMP_coef(EMPNUM), STAT = AllocateStatus)
    if (AllocateStatus .ne. 0) then
         write(mesg, *) "Not enough memory - failed to allocate EMP_coef, dimension = ", NPARAM_EMP_ECOM_glb
@@ -328,8 +349,11 @@ ALLOCATE (EMP_coef(EMPNUM), STAT = AllocateStatus)
    end if
    CALL emp_init (EMP_0_coef)
 
-IF(.not. yml_EMP_mode .AND. yml_ECOM_mode==ECOM_NONE)PRINT*,'NEITHER ECOM SRP MODEL or EMPIRICAL MODEL ARE ACTIVATED'
-
+IF(.not. yml_EMP_mode .AND. yml_ECOM_mode==ECOM_NONE) then
+        write (line, *) 'NEITHER ECOM SRP MODEL or EMPIRICAL MODEL ARE ACTIVATED'
+yml_prn_overrides(prn_index)%integ%integ_header = &
+        trim(yml_prn_overrides(prn_index)%integ%integ_header) // NEW_LINE('A') // line
+end if
 ! ----------------------------------------------------------------------
 
 ! ----------------------------------------------------------------------
@@ -384,13 +408,13 @@ Call statdelta(pseudobs_ICRF, orb_icrf, dorb_icrf, RMSdsr, Sigmadsr, MEANdsr, MI
 ! Parameter estimation: Initial Conditions and orbit parameters
 ! ----------------------------------------------------------------------
 IF (yml_veq_refsys == ICRF) THEN
-	! Orbit parameter estimator
-	Call orb_estimator(orb_icrf, veqSmatrix, veqPmatrix, pseudobs_ICRF, Xmatrix, Wmatrix, Amatrix, Vmatrix, Xsigma)			! ----------------------------------------------------------------------
+      ! Orbit parameter estimator
+      Call orb_estimator(orb_icrf, veqSmatrix, veqPmatrix, pseudobs_ICRF, Xmatrix, Wmatrix, Amatrix, Vmatrix, Xsigma)               ! ----------------------------------------------------------------------
 ELSE IF (yml_veq_refsys == ITRF) THEN
-	! Orbit transformation to terrestrial frame: ICRF to ITRF
-	CALL orbC2T (orb_icrf, yml_time_scale, orb_itrf)
-	! Orbit parameter estimator
-	Call orb_estimator(orb_itrf, veqSmatrix, veqPmatrix, pseudobs_ITRF, Xmatrix, Wmatrix, Amatrix, Vmatrix, Xsigma)		
+      ! Orbit transformation to terrestrial frame: ICRF to ITRF
+      CALL orbC2T (orb_icrf, yml_time_scale, orb_itrf)
+      ! Orbit parameter estimator
+      Call orb_estimator(orb_itrf, veqSmatrix, veqPmatrix, pseudobs_ITRF, Xmatrix, Wmatrix, Amatrix, Vmatrix, Xsigma)         
 END IF
 ! ----------------------------------------------------------------------
 IF (PRN == prn_out) THEN
@@ -416,7 +440,7 @@ END IF
 ! ----------------------------------------------------------------------
   
 ! ----------------------------------------------------------------------
-! Temp: to be replaced by writing prm_in files (EQM + VEQ)								! ----------------------------------------------------------------------
+! Temp: to be replaced by writing prm_in files (EQM + VEQ)                                            ! ----------------------------------------------------------------------
 ! ----------------------------------------------------------------------   
 !print *, "Xmatrix Z", Xmatrix(1:6,1)
 !print *, "Xmatrix P", Xmatrix(7:NPARAM_glb+6,1)
@@ -710,9 +734,9 @@ IF (yml_ECOM_mode /= ECOM_NONE .AND. yml_EMP_mode) THEN
         ECOM_coef (IECOM) = Xmatrix(6+PD_Param_ID,1)
         End If
 
-        IF (NPARAM_glb /= PD_Param_ID) THEN
+        IF (ECOMNUM+EMPNUM /= PD_Param_ID) THEN
         PRINT*, 'THE NUMBER OF FORCE PARAMETERS IS NOT CONSISTENT'
-        PRINT*,           'NPARAM_glb  =', NPARAM_glb
+        PRINT*,           'ECOMNUM+EMPNUM  =', ECOMNUM+EMPNUM
         PRINT*,           'PD_Param_ID =', PD_Param_ID
         PRINT*,'PROGRAM STOP AT m_orbdet.f95'
         STOP
@@ -728,9 +752,9 @@ IF (yml_ECOM_mode /= ECOM_NONE .AND. yml_EMP_mode) THEN
        ECOM_coef (k) = Xmatrix(6+PD_Param_ID,1)
        END DO
 
-       IF (NPARAM_glb /= PD_Param_ID) THEN
+       IF (ECOMNUM /= PD_Param_ID) THEN
        PRINT*, 'THE NUMBER OF FORCE PARAMETERS IS NOT CONSISTENT'
-       PRINT*,           'NPARAM_glb  =', NPARAM_glb
+       PRINT*,           'ECOMNUM  =', ECOMNUM
        PRINT*,           'PD_Param_ID =', PD_Param_ID
        PRINT*,'PROGRAM STOP AT m_orbdet.f95'
        STOP
@@ -837,20 +861,20 @@ END IF
 ! Pseudo-stochastic pulses: Estimated corrections added to apriori values 
 ! ----------------------------------------------------------------------
 IF (yml_pulses) Then
-	DO i_pulse = 1 , yml_pulse_parameter_count
-		delta_v_corr(i_pulse) = Xmatrix(6 + NPARAM_EMP_ECOM_glb + i_pulse ,1)
-	END DO
-	DO i1_pulse = 1 , yml_pulse_epoch_number
-		DO i2_pulse = 1 , yml_pulse_parameter_count
-			PULSES_Array_corr(i1_pulse, i2_pulse) = delta_v_corr( (i1_pulse-1) * yml_pulse_parameter_count + i2_pulse) 
-		END DO
-	END DO
-	DO i1_pulse = 1 , yml_pulse_epoch_number
-		DO i2_pulse = 1 , yml_pulse_parameter_count
-			PULSES_Array_aposteriori_glb(i1_pulse, i2_pulse+2) = PULSES_Array_corr(i1_pulse,i2_pulse)  & 
+      DO i_pulse = 1 , yml_pulse_parameter_count
+            delta_v_corr(i_pulse) = Xmatrix(6 + NPARAM_EMP_ECOM_glb + i_pulse ,1)
+      END DO
+      DO i1_pulse = 1 , yml_pulse_epoch_number
+            DO i2_pulse = 1 , yml_pulse_parameter_count
+                  PULSES_Array_corr(i1_pulse, i2_pulse) = delta_v_corr( (i1_pulse-1) * yml_pulse_parameter_count + i2_pulse) 
+            END DO
+      END DO
+      DO i1_pulse = 1 , yml_pulse_epoch_number
+            DO i2_pulse = 1 , yml_pulse_parameter_count
+                  PULSES_Array_aposteriori_glb(i1_pulse, i2_pulse+2) = PULSES_Array_corr(i1_pulse,i2_pulse)  & 
                                                                            + PULSES_Array_apriori_glb(i1_pulse, i2_pulse+2)
-		END DO
-	END DO
+            END DO
+      END DO
 END IF
 ! ----------------------------------------------------------------------
 
@@ -932,8 +956,7 @@ do i=1, prn_override_count
     end if
 end do
 if (.not.found) then
-    call new_prn_override(PRN)
-    i = prn_override_count
+    i = new_prn_override(PRN)
     yml_prn_overrides(i)%integ%arc_enabled = .true.
     yml_prn_overrides(i)%integ%arc_length = orbarc_sum
 end if
@@ -1052,9 +1075,9 @@ END IF
 ! ----------------------------------------------------------------------
 !CALL eclipse_integstep (EQMfname, VEQfname, mjd, r_sat, v_sat, integstep_flag, integstep_initial, integstep_reduced)
 IF (integstep_flag) THEN
-	integstep_rate = INT(integstep_initial/integstep_reduced) 
+      integstep_rate = INT(integstep_initial/integstep_reduced) 
 ELSE
-	integstep_rate = 0
+      integstep_rate = 0
 END IF
 ! ----------------------------------------------------------------------
 
@@ -1062,9 +1085,9 @@ END IF
 ! Orbit propagation backwards in order to propagate orbits and partials at epochs prior the ICs (initial conditions)
 ! ----------------------------------------------------------------------
 IF (yml_orbit_arc_backwards > 0.0D0) THEN
-	orbintegr_back_flag = 1
+      orbintegr_back_flag = 1
 ELSE
-	orbintegr_back_flag = 0
+      orbintegr_back_flag = 0
 END IF 
 
 IF (orbintegr_back_flag > 0) THEN
@@ -1076,10 +1099,10 @@ CALL write_prmfile2 (VEQfname, fname_id, VEQfname_back)
 
 ! Set negative sign to numerical integration step
 IF (integstep_flag) THEN
-	integstep_orb = integstep_reduced 
+      integstep_orb = integstep_reduced 
 ELSE
-	!integstep_orb = integstep_initial
-	integstep_orb = integstep
+      !integstep_orb = integstep_initial
+      integstep_orb = integstep
 END IF
 integstep_orbback = -1.0D0 * integstep_orb
 !integstep_orbback = -1.0D0 * integstep
@@ -1105,8 +1128,7 @@ do i=1, prn_override_count
     end if
 end do
 if (.not.found) then
-    call new_prn_override(PRN)
-    i = prn_override_count
+    i = new_prn_override(PRN)
     yml_prn_overrides(i)%integ%arc_enabled = .true.
     yml_prn_overrides(i)%integ%arc_length = orbarc_back
 end if

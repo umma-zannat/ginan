@@ -54,12 +54,13 @@ SUBROUTINE eclipse_integstep (EQMfname, VEQfname, mjd, r_sat, v_sat, integstep_f
       REAL (KIND = prec_d) :: beta
       real (kind = prec_d) :: frac
       DOUBLE PRECISION  JD, Zbody(6)
-      INTEGER  NTARG, NCTR, NTARG_body, i
+      INTEGER  NTARG, NCTR, NTARG_body, i, j
       CHARACTER (LEN=50) :: fname_id				
       CHARACTER (LEN=100) :: param_id				
       CHARACTER (LEN=500) :: param_value				
       logical found
       integer  reductions(6), integstep_int, integstep_int2
+      character (len=128) :: line
 ! ----------------------------------------------------------------------
 
 
@@ -94,9 +95,20 @@ r_sun = rbody
 !print *, "v_sat=", v_sat
 !print *, "r_sun=", r_sun
 
+do i=1,prn_override_count
+    if (yml_prn_overrides(i)%name == TRIM(PRN)) then
+         found = .true.
+         exit
+    end if
+end do
+
+if (.not. found) then
+    i = new_prn_override(PRN)
+end if
 CALL beta_angle (r_sat, v_sat, r_sun, beta)
 ! ----------------------------------------------------------------------
-print *,'day of year',YR,DOY,PRN,'  ',"beta", beta
+write(line, *) 'day of year',YR,DOY,PRN,'  ',"beta", beta
+yml_prn_overrides(i)%integ%integ_header = trim(yml_prn_overrides(i)%integ%integ_header) // NEW_LINE('A') // line
 
 ! ----------------------------------------------------------------------
 ! criteria for changing orbit integration stepsize
@@ -104,13 +116,15 @@ IF ( abs(beta) <= 14) THEN
 	integstep_initial = integstep
         integstep_int = INT(integstep)
 IF (integstep_initial >= 100.D0) THEN
-        do i = 1,6
-	integstep_reduced = 1.0d0 * reductions(i)
-        integstep_int2 = integstep_int/reductions(i)
-        integstep_int2 = integstep_int2*reductions(i)
+        do j = 1,6
+	integstep_reduced = 1.0d0 * reductions(j)
+        integstep_int2 = integstep_int/reductions(j)
+        integstep_int2 = integstep_int2*reductions(j)
         if (integstep_int == integstep_int2) then
 	    integstep_flag = .TRUE.
-            print *, 'eclipsing satellite ', PRN, ', reduced stepsize of ', reductions(i), ' chosen'
+            write (line,*) 'eclipsing satellite ', PRN, ', reduced stepsize of ', reductions(j), ' chosen'
+            yml_prn_overrides(i)%integ%integ_header = trim(yml_prn_overrides(i)%integ%integ_header) &
+                    // NEW_LINE('A') // line
             exit
         end if
         end do
@@ -125,28 +139,14 @@ Call write_prmfile (VEQfname, fname_id, param_id, param_value)
 end if
 END IF 
 
-do i=1,prn_override_count
-    if (yml_prn_overrides(i)%name == TRIM(PRN)) then
-        if (integstep_flag) then
-            yml_prn_overrides(i)%integ%veq_enabled = .true.
-            yml_prn_overrides(i)%integ%eqm_enabled = .true.
-            yml_prn_overrides(i)%integ%veq_stepsize = integstep_reduced
-            yml_prn_overrides(i)%integ%eqm_stepsize = integstep_reduced
-        else
-            yml_prn_overrides(i)%integ%veq_enabled = .false.
-            yml_prn_overrides(i)%integ%eqm_enabled = .false.
-        end if
-        found = .true.
-    end if
-end do
-
-if (.not.found .and. integstep_flag) then
-    call new_prn_override(PRN)
-    i = prn_override_count
+if (integstep_flag) then
     yml_prn_overrides(i)%integ%veq_enabled = .true.
     yml_prn_overrides(i)%integ%eqm_enabled = .true.
     yml_prn_overrides(i)%integ%veq_stepsize = integstep_reduced
     yml_prn_overrides(i)%integ%eqm_stepsize = integstep_reduced
+else
+    yml_prn_overrides(i)%integ%veq_enabled = .false.
+    yml_prn_overrides(i)%integ%eqm_enabled = .false.
 end if
 
 ! ----------------------------------------------------------------------

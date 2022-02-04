@@ -26,9 +26,8 @@ void removeUnmeasuredAmbiguities(
 			trace << std::endl << "Removing " << key.str << " " << key.Sat.id();
 			kfState.procNoiseMap.			erase(key);
 			kfState.initNoiseMap.			erase(key);
-			kfState.rateTransitionMap.		erase(key);
-			kfState.rateRateTransitionMap.	erase(key);
 			kfState.gaussMarkovTauMap.		erase(key);
+			kfState.gaussMarkovMuMap.		erase(key);
 
 			it = kfState.stateTransitionMap.erase(it);
 		}
@@ -55,8 +54,6 @@ void ResetDisconnectedStates( Trace& trace, KFState& kfState)
 			tracepdeex(wltrclvl, trace, "\n#WLR Resetting ambiguity between %s - %s", key.str.c_str(), key.Sat.id().c_str());
 			kfState.procNoiseMap.			erase(key);
 			kfState.initNoiseMap.			erase(key);
-			kfState.rateTransitionMap.		erase(key);
-			kfState.rateRateTransitionMap.	erase(key);
 
 			it = kfState.stateTransitionMap.erase(it);
 		}
@@ -65,8 +62,6 @@ void ResetDisconnectedStates( Trace& trace, KFState& kfState)
 			tracepdeex(wltrclvl + 1, trace, "\n#WLR Resetting satellite bias for %s", key.Sat.id().c_str());
 			kfState.procNoiseMap.			erase(key);
 			kfState.initNoiseMap.			erase(key);
-			kfState.rateTransitionMap.		erase(key);
-			kfState.rateRateTransitionMap.	erase(key);
 
 			it = kfState.stateTransitionMap.erase(it);
 		}
@@ -75,8 +70,6 @@ void ResetDisconnectedStates( Trace& trace, KFState& kfState)
 			tracepdeex(wltrclvl + 1, trace, "\n#WLR Resetting station bias for %s", key.str.c_str());
 			kfState.procNoiseMap.			erase(key);
 			kfState.initNoiseMap.			erase(key);
-			kfState.rateTransitionMap.		erase(key);
-			kfState.rateRateTransitionMap.	erase(key);
 
 			it = kfState.stateTransitionMap.erase(it);
 		}
@@ -91,7 +84,7 @@ void ResetDisconnectedStates( Trace& trace, KFState& kfState)
 void WLambRes(Trace& trace, KFState& KFstate, ARState& ambState, bool wlonly)
 {
 	KFstate.initFilterEpoch();
-	list<KFKey>    kfKeyList;
+	map<KFKey, int>    kfKeyMap;
 
 	ambState.ambmap.clear();
 	int ind = 0;
@@ -108,15 +101,15 @@ void WLambRes(Trace& trace, KFState& KFstate, ARState& ambState, bool wlonly)
 				StatAmbMap_list[kfKey.Sat.sys][kfKey.str].SignList[kfKey.Sat].state = 0;
 				continue;
 			}
-
-			ambState.ambmap[ind++] = kfKey;
-			kfKeyList.push_back(kfKey);
+			kfKeyMap[kfKey]			= ind;
+			ambState.ambmap[ind]	= kfKey;
+			ind++;
 		}
 	}
 
 	int namb = ind;
 
-	ambState.aflt = KFstate.getSubState(kfKeyList, &ambState.Paflt);
+	ambState.aflt = KFstate.getSubState(kfKeyMap, &ambState.Paflt);
 	tracepdeex(wltrclvl, trace, "\n#WLR Solving WL ambiguities ...");
 	int nfix = GNSS_AR(trace, &ambState);
 	VectorXd fixX = ambState.zfix;

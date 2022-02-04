@@ -711,7 +711,7 @@ NPARAM_EMP_ECOM_glb = NPARAM_glb
 ! ----------------------------------------------------------------------
 If (yml_pulses) Then
 		!NPARAM_EMP_ECOM_glb = NPARAM_glb
-		NPARAM_glb = NPARAM_glb + yml_pulse_parameter_count
+		NPARAM_glb = NPARAM_glb + yml_pulse_parameter_count * yml_pulse_epoch_number
 END IF
 
 ! ----------------------------------------------------------------------

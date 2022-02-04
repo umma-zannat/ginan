@@ -7,18 +7,18 @@ MODULE m_orbT2C
 ! Purpose:
 !  Module for calling the orbT2C subroutine 
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
-! Created:	6 November 2017
+! Author :  Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
+! Created:  6 November 2017
 ! ----------------------------------------------------------------------
 
 
       IMPLICIT NONE
-      !SAVE 			
+      !SAVE                   
   
-	  
+        
 Contains
-	  
-	  
+        
+        
 SUBROUTINE orbT2C (orbT, time, orbC)
 
 
@@ -29,36 +29,36 @@ SUBROUTINE orbT2C (orbT, time, orbC)
 !  Orbit transformation from terrestrial (ITRF) to inertial (ICRF) reference frame 
 ! ----------------------------------------------------------------------
 ! Input arguments:
-! - orbT: 		Satellite orbit array in ITRF including the following per epoch:
+! - orbT:         Satellite orbit array in ITRF including the following per epoch:
 !               - Modified Julian Day number (including the fraction of the day) 
-!				- Seconds since 00h 
-!				- Position vector (m)
-!				- Velocity vector (m/sec)
-! - time:		Time scale of the input orbit array (2 first collumns); Options
-!				TT  (Terrestrial Time)
-! 				GPS (GPS Time)
-! 				TAI
-! 				UTC
+!                       - Seconds since 00h 
+!                       - Position vector (m)
+!                       - Velocity vector (m/sec)
+! - time:         Time scale of the input orbit array (2 first collumns); Options
+!                       TT  (Terrestrial Time)
+!                       GPS (GPS Time)
+!                       TAI
+!                       UTC
 !
 ! Output arguments:
-! - orbC: 		Satellite orbit array in ICRF including the following per epoch:
+! - orbC:         Satellite orbit array in ICRF including the following per epoch:
 !               - Modified Julian Day number in the input time scale (including the fraction of the day) 
-!				- Seconds since 00h in the input time scale
-!				- Position vector (m)
-!				- Velocity vector (m/sec)
+!                       - Seconds since 00h in the input time scale
+!                       - Position vector (m)
+!                       - Velocity vector (m/sec)
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
-! Created:	6 November 2017
+! Author :  Dr. Thomas Papanikolaou, Cooperative Research Centre for Spatial Information, Australia
+! Created:  6 November 2017
 ! ----------------------------------------------------------------------
-	  
-	  
+        
+        
       USE mdl_precision
 !      USE mdl_num
 !      USE mdl_param
       use pod_yaml
       IMPLICIT NONE
 
-	  
+        
 ! ----------------------------------------------------------------------
 ! Dummy arguments declaration
 ! ----------------------------------------------------------------------
@@ -73,18 +73,21 @@ SUBROUTINE orbT2C (orbT, time, orbC)
 ! ----------------------------------------------------------------------
 ! Local variables declaration
 ! ----------------------------------------------------------------------
-      INTEGER (KIND = prec_int8) :: Nepochs, i, j
+      INTEGER (KIND = prec_int8) :: Nepochs, i
+!       , j
       INTEGER (KIND = prec_int8) :: sz1, sz2 
-      INTEGER (KIND = prec_int2) :: AllocateStatus, DeAllocateStatus  
-	  REAL (KIND = prec_d) :: mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC
+      INTEGER (KIND = prec_int2) :: AllocateStatus
+!       , DeAllocateStatus  
+        REAL (KIND = prec_d) :: mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC
       DOUBLE PRECISION EOP_cr(7)
       DOUBLE PRECISION CRS2TRS(3,3), TRS2CRS(3,3), d_CRS2TRS(3,3), d_TRS2CRS(3,3)
       REAL (KIND = prec_d) :: r_TRS(3), v_TRS(3)
       REAL (KIND = prec_d) :: r_CRS(3), v_CRS(3)
-      REAL (KIND = prec_d) :: v_TRS_1(3), v_TRS_2(3), v_CRS_1(3), v_CRS_2(3)	  
+      REAL (KIND = prec_d) :: v_CRS_2(3), v_CRS_1(3)
+!       ,     v_TRS_1(3), v_TRS_2(3)
 ! ----------------------------------------------------------------------
-      INTEGER IY, IM, ID, J_flag
-      DOUBLE PRECISION DJM0, sec, FD, Sec0
+!       INTEGER IY, IM, ID, J_flag
+!       DOUBLE PRECISION DJM0, sec, FD, Sec0
 
 
 
@@ -107,14 +110,14 @@ mjd = orbT(i,1)
 
 ! Time scale transformation to TT
 If (time == TT_time) Then
-	CALL time_TT (mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC)
+      CALL time_TT (mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC)
 Else If (time == GPS_time) then
-	CALL time_GPS (mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC)
+      CALL time_GPS (mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC)
 Else if (time == UTC_time) then
-	CALL time_UTC (mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC)
+      CALL time_UTC (mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC)
 Else if (time == TAI_time) then
-	CALL time_TAI (mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC)
-End If	
+      CALL time_TAI (mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC)
+End If      
 
 ! Position and Velocity vectors in ICRF
 r_TRS(1:3) = orbT(i,3:5)
@@ -128,7 +131,7 @@ CALL EOP (mjd_TT, EOP_cr, CRS2TRS, TRS2CRS, d_CRS2TRS, d_TRS2CRS)
 
 ! r_CRS = TRS2CRS * r_TRS
 CALL matrix_Rr (TRS2CRS, r_TRS , r_CRS)
-	  
+        
 ! v_CRS = TRS2CRS * v_TRS + d_TRS2CRS * r_TRS
 CALL matrix_Rr (TRS2CRS,   v_TRS , v_CRS_1)
 CALL matrix_Rr (d_TRS2CRS, r_TRS , v_CRS_2)

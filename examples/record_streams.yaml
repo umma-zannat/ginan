@@ -1,0 +1,37 @@
+
+station_data:
+
+    stream_root: "https://<USER>:<PASS>@ntrip.data.gnss.ga.gov.au/"
+        
+    nav_streams:
+        - SSRA00CNE0 #orbits, clocks and bias
+        - BCEP00BKG0
+        
+    ssr_input_antenna_offset: APC
+
+    obs_streams:
+         - ALIC00AUS0
+
+output_files:
+
+    root_output_directory:     recordings
+    
+    record_rtcm:        true
+    output_rinex_obs:   true
+    output_rinex_nav:   true
+    
+processing_options:
+
+    epoch_interval:             1          #seconds
+    wait_next_epoch:            31
+    wait_all_stations:          1
+    max_epochs:                 3600
+    
+    process_modes:
+        preprocessor:           false
+        
+    process_sys:   
+        gps:    true
+        gal:    true
+
+    delete_old_ephemerides:     true

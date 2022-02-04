@@ -1,3 +1,6 @@
+
+//#pragma GCC optimize ("O0")
+
 /*------------------------------------------------------------------------------
 * preceph.c : precise ephemeris and clock functions
 *
@@ -12,10 +15,6 @@
 *     [4] D.A.Vallado, Fundamentals of Astrodynamics and Applications 2nd ed,
 *         Space Technology Library, 2004
 *-----------------------------------------------------------------------------*/
-
-
-#pragma GCC optimize ("O0")
-
 
 #include <iostream>
 #include <string>
@@ -35,9 +34,9 @@ using std::map;
 #include "corrections.hpp"
 #include "navigation.hpp"
 #include "constants.hpp"
+#include "ephemeris.hpp"
 #include "station.hpp"
 #include "algebra.hpp"
-#include "preceph.hpp"
 #include "algebra.hpp"
 #include "gTime.hpp"
 #include "common.hpp"
@@ -59,7 +58,7 @@ map<string, map<E_Sys, array<double, 3>>> stationRBiasMap;
 * return : status (1:ok,0:error)
 * notes  : only support antex format for the antenna parameter file
 *-----------------------------------------------------------------------------*/
-/*extern int readsap(char *file, gtime_t time, nav_t *nav)
+/* int readsap(char *file, gtime_t time, nav_t *nav)
 {
 	pcvs_t pcvs={0};
 	pcv_t pcv0={0},*pcv;
@@ -578,6 +577,12 @@ void satantoff(
 	{
 		k = F5;
 	}
+	
+	/* WARNING: In principle there should be a 
+
+	if (sys == E_Sys::GPS && acsConfig.ionoOpts.iflc_freqs == +E_LinearCombo::L1L5_ONLY) k = F5;
+
+	here, but (as of Nov. 2021) ANTEX files do not have the L5 antenna parameters for GPS */
 
 	if 	( lamMap[j] == 0
 		||lamMap[k] == 0)

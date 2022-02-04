@@ -81,8 +81,8 @@ SUBROUTINE obsorbT2C (orbT, time, orbC)
       REAL (KIND = prec_d) :: r_CRS(3), v_CRS(3)
       REAL (KIND = prec_d) :: v_TRS_1(3), v_TRS_2(3), v_CRS_1(3), v_CRS_2(3)	  
 ! ----------------------------------------------------------------------
-      INTEGER IY, IM, ID, J_flag
-      DOUBLE PRECISION DJM0, sec, FD, Sec0
+!       INTEGER IY, IM, ID, J_flag
+!       DOUBLE PRECISION DJM0, sec, FD, Sec0
 
 
 

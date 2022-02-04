@@ -20,6 +20,18 @@
 #include "enums.h"
 
 
+struct Average
+{
+	double	mean	= 0;
+	double	var		= 0;
+};
+
+
+void lowPassFilter(
+	Average&	avg,
+	double		meas,
+	double		procNoise,
+	double		measVar = 1);
 
 /* coordinates transformation ------------------------------------------------*/
 
@@ -36,7 +48,7 @@ void eci2ecef(
 
 void ecef2pos(const double *r, double *pos);
 void ecef2pos(Vector3d& r, double *pos);
-void pos2ecef(const double *pos, double *r);
+void pos2ecef(const double *pos, Vector3d& r);
 
 double geodist(Vector3d& rs, Vector3d& rr, Vector3d& e);
 
@@ -75,9 +87,11 @@ int  geterp (const erp_t *erp, GTime time, double *val);
 
 int satexclude(SatSys& sat, E_Svh svh);
 
-
 extern int		epoch;
 extern GTime	tsync;
 
+void replaceTimes(
+	string&						str,		///< String to replace macros within
+	boost::posix_time::ptime	time_time);	///< Time to use for replacements
 
 #endif

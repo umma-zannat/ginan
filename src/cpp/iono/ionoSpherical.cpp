@@ -234,12 +234,14 @@ int Ipp_check_sphhar(GTime time, double* Ion_pp)
 		}
 	}
 
-	double pos[3], rpp[3], rrot[3];
+	Vector3d rpp;
+	double pos[3];
+	double rrot[3];
 	pos[0] = Ion_pp[0];
 	pos[1] = Ion_pp[1];
 	pos[2] = acsConfig.ionFilterOpts.layer_heights[0];
 	pos2ecef(pos, rpp);
-	matmul("NN", 3, 1, 3, 1, shar_rotmtx, rpp, 0, rrot);
+	matmul("NN", 3, 1, 3, 1, shar_rotmtx, rpp.data(), 0, rrot);
 	ecef2pos(rrot, pos);
 
 	Ion_pp[0] = pos[0] + PI / 2;			/* colatitude for spherical harmonics */

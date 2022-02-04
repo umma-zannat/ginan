@@ -31,7 +31,7 @@ struct GTime
 		return nothing;
 	}
 
-	string to_string(int n)
+	string to_string(int n) const
 	{
 		char buff[64];
 		time2str(*this, buff, n);

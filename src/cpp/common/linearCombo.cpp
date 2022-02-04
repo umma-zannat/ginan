@@ -1,4 +1,6 @@
 
+//#pragma GCC optimize ("O0")
+
 #include "linearCombo.hpp"
 #include "streamTrace.hpp"
 #include "testUtils.hpp"
@@ -148,7 +150,7 @@ S_LC& getLC(
 	lc = getLC(L_A, L_B, P_A, P_B, lamA, lamB, nullptr, nullptr);
 
 	//special cases
-	if (fB == F5 && (obs.Sat.sys == +E_Sys::GAL || obs.Sat.sys == +E_Sys::CMP))
+	if (fB == F5 && (obs.Sat.sys == +E_Sys::GAL || obs.Sat.sys == +E_Sys::BDS))
 		lc.MW_c *= -1; /* cycle */
 
 	if (fA == F1 && fB == F2)
@@ -241,7 +243,7 @@ void obs2lc(
 
 /** Function to prepare some predefined linear combinations from a list of observations
 */
-extern void obs2lcs(
+void obs2lcs(
 	Trace&		trace,		///< Trace to output to
 	ObsList&	obsList)	///< List of bservation to prepare combinations for
 {

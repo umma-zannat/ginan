@@ -156,11 +156,12 @@ def _get_snx_matrix(path_or_bytes,
         prev_idx += idx
     return output, stypes,stypes_content
 
-def snxdf2xyzdf(snxdf):
+def snxdf2xyzdf(snxdf,unstack=True):
     types_mask = snxdf.TYPE.isin(['STAX','STAY', 'STAZ', 'VELX', 'VELY', 'VELZ',]).values
     snxdf.drop(index = snxdf.index.values[~types_mask],inplace=True)
     snxdf['CODE_PT'] = snxdf.CODE.values + '_' + snxdf.PT.values.astype(object)
-    return snxdf.drop(columns=['CODE','PT','SOLN']).set_index(['CODE_PT', 'REF_EPOCH','TYPE']).unstack(2)
+    snx_df = snxdf.drop(columns=['CODE','PT','SOLN']).set_index(['CODE_PT', 'REF_EPOCH','TYPE'])
+    return snx_df.unstack(2) if unstack else snx_df
 
 def _get_snx_vector(path_or_bytes, stypes=('APR', 'EST'), snx_format=True,verbose=True):
     '''stypes = "APR","EST","NEQ"
@@ -240,9 +241,11 @@ def _get_snx_vector(path_or_bytes, stypes=('APR', 'EST'), snx_format=True,verbos
         prev_idx += idx
     output = _pd.concat(output, axis=1)
 
-    if snx_format:
+    if snx_format is None:
         return output
-    return snxdf2xyzdf(output)
+    if snx_format:
+        return snxdf2xyzdf(output,unstack=False)
+    return snxdf2xyzdf(output,unstack=True)
 
 def _matrix_raw2square(matrix_raw,matrix_content_type,stypes_form,n_elements=None):
     if stypes_form == b'U':
@@ -362,7 +365,7 @@ def _get_snx_vector_gzchunks(filename,block_name='SOLUTION/ESTIMATE',size_lookba
                     stop=True
             i+=1
 
-    return _get_snx_vector(path_or_bytes=block_bytes,stypes=['EST'])
+    return _get_snx_vector(path_or_bytes=block_bytes,stypes=['EST'],snx_format=None)
 
 
 #SINEX ID BLOCK

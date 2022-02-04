@@ -7,10 +7,12 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <string>
 #include <boost/format.hpp>
 #include <boost/iostreams/stream.hpp>
 #include <boost/log/trivial.hpp>
 
+using std::string;
 
 extern boost::iostreams::stream< boost::iostreams::null_sink > nullStream;
 
@@ -85,7 +87,7 @@ void tracematpde(int level, FILE *fppde, const double *A, int n,
 
 /* debug trace functions -----------------------------------------------------*/
 void tracelevel(int level);
-
+void traceFormatedFloat(Trace& trace, double val, string formatStr);
 void matfprint(const double *A, int n, int m, int p, int q, FILE *fp);
 
 void fatalerr(const char *format, ...);

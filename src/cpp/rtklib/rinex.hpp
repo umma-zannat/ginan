@@ -28,4 +28,11 @@ int readrnx(
 	int&							tsys,
 	map<E_Sys, vector<CodeType>>&	sysCodeTypes);
 
+int sisaToSva(double sisa);
+double svaToSisa(int sva);
+double svaToUra(int sva);
+
+string rinexSysDesc(
+	E_Sys sys);
+
 #endif

@@ -29,7 +29,7 @@ Truncation is set up by the resolution parameter eps0
 -----------------------------------------------------
 Author: German Olivares @ GA 17 January 2019
 -----------------------------------------------------*/
-static double legendre_function(int m, double n, double x)
+double legendre_function(int m, double n, double x)
 {
 	double A, Kmn, P, Ptmp;
 	double eps = 10 * LEG_EPSILON0;
@@ -42,7 +42,7 @@ static double legendre_function(int m, double n, double x)
 		p = pow(n / m, 2) - 1;
 		e1 = -(1 + 1 / p) / (12 * m);
 		e2 = (1 + 3 / pow(p, 2) + 4 / pow(p, 3)) / (360 * pow(m, 3));
-		Kmn = pow(2, -m) * pow((n + m) / (n - m), (n + 2) / 4) * pow(p, m / 2) * exp(e1 + e2) / sqrt(m * PI);
+		Kmn = pow(2, -m) * pow((n + m) / (n - m), (n + 2) / 4) * pow(p, m / 2.0) * exp(e1 + e2) / sqrt(m * PI);
 		A = Kmn * pow(sin(x), m);
 	}
 
@@ -69,7 +69,7 @@ Truncation is set up by the resolution parameter eps0
 ---------------------------------------------------------------------
 Author: German Olivares @ GA 17 January 2019
 ---------------------------------------------------------------------*/
-static double legendre_derivatv(int m, double n, double x)
+double legendre_derivatv(int m, double n, double x)
 {
 	double A, Kmn, dP, P, Ptmp, dPtmp;
 	double eps = 10.0 * LEG_EPSILON0;
@@ -86,7 +86,7 @@ static double legendre_derivatv(int m, double n, double x)
 		p = pow(n / m, 2) - 1;
 		e1 = -(1 + 1 / p) / (12 * m);
 		e2 = (1 + 3 / pow(p, 2) + 4 / pow(p, 3)) / (360 * pow(m, 3));
-		Kmn = pow(2, -m) * pow((n + m) / (n - m), (n + 2) / 4) * pow(p, m / 2) * exp(e1 + e2) / sqrt(m * PI);
+		Kmn = pow(2, -m) * pow((n + m) / (n - m), (n + 2) / 4) * pow(p, m / 2.0) * exp(e1 + e2) / sqrt(m * PI);
 		A = Kmn * pow(sin(x), m);
 	}
 
@@ -125,7 +125,7 @@ static double legendre_derivatv(int m, double n, double x)
 }
 
 /* Returns the root of legendre functions in the interval (ntmp[0], ntmp[1]) */
-static double bisection(int m, double* ntmp, double x, int nu)
+double bisection(int m, double* ntmp, double x, int nu)
 {
 	double Pa, Pd, err;
 	double a = ntmp[0], b = ntmp[1];
@@ -185,12 +185,14 @@ Author: Ken Harima @ RMIT 01 August 2020
 -----------------------------------------------------*/
 int Ipp_check_sphcap(GTime time, double* Ion_pp)
 {
-	double pos[3], rpp[3], rrot[3];
+	Vector3d	rpp;
+	double		pos[3];
+	double		rrot[3];
 	pos[0] = Ion_pp[0];
 	pos[1] = Ion_pp[1];
 	pos[2] = acsConfig.ionFilterOpts.layer_heights[0];
 	pos2ecef(pos, rpp);
-	matmul("NN", 3, 1, 3, 1, scap_rotmtx, rpp, 0, rrot);
+	matmul("NN", 3, 1, 3, 1, scap_rotmtx, rpp.data(), 0, rrot);
 	ecef2pos(rrot, pos);
 
 	Ion_pp[0] = PI / 2 - pos[0];			/* colatitude for spherical harmonic caps */

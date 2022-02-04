@@ -7,45 +7,45 @@ MODULE m_orbitmain
 ! Purpose:
 !  Module for Precise Orbit Determination
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-!			Geoscience Australia, Frontier-SI
-! Created:	21 March 2019
+! Author :  Dr. Thomas Papanikolaou
+!                 Geoscience Australia, Frontier-SI
+! Created:  21 March 2019
 ! ----------------------------------------------------------------------
 
 
       IMPLICIT NONE
-      !SAVE 			
+      !SAVE                   
   
-	  
+        
 Contains
-	  
-	  
+        
+        
 !SUBROUTINE orbitmain (EQMfname, VEQfname, orb_icrf, orb_itrf, veqSmatrix, veqPmatrix, Vres, Vrms)
 SUBROUTINE orbitmain (EQMfname, VEQfname, orb_icrf, orb_itrf, veqSmatrix, veqPmatrix, Vres, Vrms, Xsigma, &
-					  dorb_icrf, dorb_RTN, dorb_Kepler, dorb_itrf,orbdiff)
+                                dorb_icrf, dorb_RTN, dorb_Kepler, dorb_itrf,orbdiff)
 
 ! ----------------------------------------------------------------------
-! SUBROUTINE:	orbitmain.f03
+! SUBROUTINE:     orbitmain.f03
 ! ----------------------------------------------------------------------
 ! Purpose:
 !  Precise Orbit Determination 
 ! ----------------------------------------------------------------------
 ! Input arguments:
-! - EQMfname: 	Input cofiguration file name for the orbit parameterization 
-! - VEQfname: 	Input cofiguration file name for the orbit parameterization 
+! - EQMfname:     Input cofiguration file name for the orbit parameterization 
+! - VEQfname:     Input cofiguration file name for the orbit parameterization 
 !
 ! Output arguments:
-! - orb_icrf: 	Satellite orbit array in ICRF including the following per epoch:
+! - orb_icrf:     Satellite orbit array in ICRF including the following per epoch:
 !               - Modified Julian Day number (including the fraction of the day) 
-!				- Seconds since 00h 
-!				- Position vector (m)
-!				- Velocity vector (m/sec)
-! - orb_itrf: 	Satellite orbit array in ITRF including the following per epoch:
+!                       - Seconds since 00h 
+!                       - Position vector (m)
+!                       - Velocity vector (m/sec)
+! - orb_itrf:     Satellite orbit array in ITRF including the following per epoch:
 !               - Modified Julian Day number (including the fraction of the day) 
-!				- Seconds since 00h 
-!				- Position vector (m)
-!				- Velocity vector (m/sec)
-! - veqSmatrix:	State trasnition matrix obtained from the Variational Equations solution based on numerical integration methods
+!                       - Seconds since 00h 
+!                       - Position vector (m)
+!                       - Velocity vector (m/sec)
+! - veqSmatrix:   State trasnition matrix obtained from the Variational Equations solution based on numerical integration methods
 ! - veqPmatrix: Sensitivity matrix obtained from the Variational Equations solution based on numerical integration methods
 ! - Vres:               Orbit residuals matrix in ICRF
 ! - Vrms:               RMS (in XYZ) of orbit residuals in ICRF
@@ -78,9 +78,9 @@ SUBROUTINE orbitmain (EQMfname, VEQfname, orb_icrf, orb_itrf, veqSmatrix, veqPma
 ! refer to the time system defined by the global variable TIME_SCALE in the module mdl_param.f03
 ! according to the input parameterization file 
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-!			Geoscience Australia, Frontier-SI
-! Created:	21 March 2019
+! Author :  Dr. Thomas Papanikolaou
+!                 Geoscience Australia, Frontier-SI
+! Created:  21 March 2019
 !
 ! Changes:      20-05-2019 Tzupang Tseng: output the orbital information for data analysis
 ! ----------------------------------------------------------------------
@@ -97,35 +97,39 @@ SUBROUTINE orbitmain (EQMfname, VEQfname, orb_icrf, orb_itrf, veqSmatrix, veqPma
       use pod_yaml
       IMPLICIT NONE
 
-	  
+        
 ! ----------------------------------------------------------------------
-      REAL (KIND = prec_d) :: CPU_t0, CPU_t1
-      CHARACTER (LEN=512) :: filename, EQMfname, VEQfname				
+!       REAL (KIND = prec_d) :: CPU_t0, CPU_t1
+      CHARACTER (LEN=512) :: filename, EQMfname, VEQfname                     
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orb_icrf, orb_itrf  
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: veqSmatrix, veqPmatrix
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: Vres, Xsigma 
-      REAL (KIND = prec_d), DIMENSION(3) :: Vrms 	    
-	  REAL (KIND = prec_d), DIMENSION(5,6) :: stat_XYZ_extC, stat_RTN_extC, stat_Kepler_extC, stat_XYZ_extT
+      REAL (KIND = prec_d), DIMENSION(3) :: Vrms          
+        REAL (KIND = prec_d), DIMENSION(5,6) :: stat_XYZ_extC, stat_RTN_extC, stat_Kepler_extC, stat_XYZ_extT
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=2) :: GNSS_id
-	  INTEGER (KIND = prec_int2) :: ORB_mode
+!       CHARACTER (LEN=2) :: GNSS_id
+!         INTEGER (KIND = prec_int2) :: ORB_mode
 ! ----------------------------------------------------------------------
-	  INTEGER (KIND = prec_int8) :: Nsat, isat
-	  INTEGER (KIND = prec_int8) :: iepoch, iparam
-	  INTEGER (KIND = prec_int8) :: i
-	  INTEGER (KIND = prec_int8) :: sz1, sz2, Nepochs, N2_orb, N2_veqSmatrix, N2_veqPmatrix, N2sum  
-      REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE :: orbit_veq  
-      INTEGER (KIND = prec_int2) :: AllocateStatus, DeAllocateStatus  
-	  CHARACTER (LEN=3), ALLOCATABLE :: PRN_array(:)
-	  CHARACTER (LEN=3) :: PRN_isat
-	  INTEGER :: ios
+!         INTEGER (KIND = prec_int8) :: Nsat, isat
+!         INTEGER (KIND = prec_int8) :: iepoch, iparam
+        INTEGER (KIND = prec_int8) :: i
+!         INTEGER (KIND = prec_int8) :: Nepochs, N2_orb, N2_veqSmatrix, N2_veqPmatrix, N2sum  
+!       ,sz1, sz2, 
+!       REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE :: orbit_veq  
+!       INTEGER (KIND = prec_int2) ::  DeAllocateStatus 
+!       AllocateStatus,
+!       CHARACTER (LEN=3), ALLOCATABLE :: PRN_array(:)
+!       CHARACTER (LEN=3) :: PRN_isat
+!         INTEGER :: ios
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: dorb_icrf, dorb_itrf 
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: dorb_RTN, dorb_Kepler
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orbdiff
 ! ----------------------------------------------------------------------
-
+      CHARACTER (LEN=2048) :: output
+      CHARACTER (LEN=256) :: line
+      logical found
 
 
 ! ----------------------------------------------------------------------
@@ -135,8 +139,7 @@ if (.not.Allocated(orb_icrf)) then
         print *,"Error from orbdet orb_icrf not allocated"
 end if
 ! ----------------------------------------------------------------------
-print *,"Orbit residuals: ICRF" 
-WRITE (*,FMT='(A17, A4, 3F14.4)') "RMS-XYZ ICRF FIT", PRN, Vrms
+WRITE (output, FMT='(A, A17, A4, 3F14.4)') "Orbit residuals: ICRF" // NEW_LINE ('A'), "RMS-XYZ ICRF FIT", PRN, Vrms
 !PRINT *,"Orbit Determination: Completed"
 !CALL cpu_time (CPU_t1)
 !PRINT *,"CPU Time (sec)", CPU_t1-CPU_t0
@@ -150,14 +153,18 @@ Call orbext(EQMfname, orb_icrf, orb_itrf, stat_XYZ_extC, stat_RTN_extC, stat_Kep
 CALL orbext2(EQMfname, orb_icrf, orb_itrf, stat_XYZ_extC, stat_RTN_extC, stat_Kepler_extC, stat_XYZ_extT, &
               dorb_icrf, dorb_RTN, dorb_Kepler, dorb_itrf)
 ! ----------------------------------------------------------------------
-PRINT *,"External Orbit comparison"
-print *,"Orbit comparison: ICRF"
-WRITE (*,FMT='(A17, A4, 3F14.4)') "RMS-RTN ICRF CMP", PRN, stat_RTN_extC(1, 1:3)
-WRITE (*,FMT='(A17, A4, 3F14.4)') "RMS-XYZ ICRF CMP", PRN, stat_XYZ_extC(1, 1:3)
+write (line, '(A)') "External Orbit comparison" // NEW_LINE('A') // "Orbit comparison: ICRF"
+output = trim(output) // NEW_LINE ('A') // line
+WRITE (line, FMT='(A17, A4, 3F14.4)') "RMS-RTN ICRF CMP", PRN, stat_RTN_extC(1, 1:3)
+output = trim(output) // NEW_LINE ('A') // line
+WRITE (line, FMT='(A17, A4, 3F14.4)') "RMS-XYZ ICRF CMP", PRN, stat_XYZ_extC(1, 1:3)
+output = trim(output) // NEW_LINE ('A') // line
 !WRITE (*,FMT='(A9, 3F17.9)'),"RMS Vxyz", stat_XYZ_extC(1, 4:6)
 
-print *,"Orbit comparison: ITRF"
-WRITE (*,FMT='(A17, A4, 3F14.4)') "RMS-XYZ ITRF CMP", PRN, stat_XYZ_extT(1, 1:3)
+write (line, '(A)') "Orbit comparison: ITRF"
+output = trim(output) // NEW_LINE ('A') // line
+WRITE (line, FMT='(A17, A4, 3F14.4)') "RMS-XYZ ITRF CMP", PRN, stat_XYZ_extT(1, 1:3)
+output = trim(output) // NEW_LINE ('A') // line
 !WRITE (*,FMT='(A9, 3F17.9)'),"RMS Vxyz", stat_XYZ_extT(1,4:6)
 End If
 
@@ -193,6 +200,15 @@ write(filename, '(AAA)')  trim(yml_output_dir), "/" ,"dorb_rtn_ext.out"
 ! ----------------------------------------------------------------------
 
 
+found = .false.
+do i = 1, prn_override_count
+    if (yml_prn_overrides(i)%name == trim(prn)) then
+       found = .true.
+       exit
+    end if
+end do
+
+print *, trim(yml_prn_overrides(i)%integ%integ_header) // NEW_LINE('A') // trim(output)
 
 End SUBROUTINE
 

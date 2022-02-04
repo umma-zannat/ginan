@@ -21,7 +21,8 @@ void NtripStream::connected()
 	start_read_stream();   
 }
 
-bool NtripStream::dataChunkDownloaded(vector<char> dataChunk)
+bool NtripStream::dataChunkDownloaded(
+	vector<char> dataChunk)
 {
 	receivedDataBufferMtx.lock();
 	{

@@ -1,4 +1,6 @@
 
+// #pragma GCC optimize ("O0")
+
 #include <map>
 #include <string>
 
@@ -42,11 +44,12 @@ int config_ionosph_model()
 		case E_IonoModel::SPHERICAL_HARMONICS:	return configure_iono_model_sphhar();
 		case E_IonoModel::SPHERICAL_CAPS:		return configure_iono_model_sphcap();
 		case E_IonoModel::BSPLINE:				return configure_iono_model_bsplin();
+		case E_IonoModel::NONE:					return 0;
 	}
 	return 0;
 }
 
-static double ion_coef(
+double ion_coef(
 	int		ind,
 	Obs&	obs, 
 	bool	slant)
@@ -56,8 +59,8 @@ static double ion_coef(
 		case E_IonoModel::SPHERICAL_HARMONICS:	return ion_coef_sphhar(ind, obs, slant);
 		case E_IonoModel::SPHERICAL_CAPS:		return ion_coef_sphcap(ind, obs, slant);
 		case E_IonoModel::BSPLINE:				return ion_coef_bsplin(ind, obs, slant);
+		default:								return 0;
 	}
-	return 0;
 }
 
 /*****************************************************************************************/
@@ -68,7 +71,7 @@ static double ion_coef(
 void update_ionosph_model(
 	Trace&			trace,			///< Trace to output to
 	StationMap&		stations,		///< List of pointers to stations to use
-	GTime 			iontime)		///< Time of this epoch
+	GTime 			time)			///< Time of this epoch
 {
 	TestStack ts(__FUNCTION__);
 	
@@ -78,17 +81,17 @@ void update_ionosph_model(
 		return;
 	
 	if (acsConfig.output_ionstec)
-		write_receivr_measr(trace, stations, iono_KFState.time);
+		write_receivr_measr(trace, stations, time);
 	
 	if (acsConfig.ionFilterOpts.model== +E_IonoModel::MEAS_OUT) 
 		return; 
 
 	tracepde(3, trace,"UPDATE IONO MODEL ...\n");
 	//count valid measurements for each station
-	map<string, map<E_Sys,int>> stationlist;
-	map<SatSys, int> satelltlist;
-	map<E_Sys, string> maxCountSta;
-	map<E_Sys,int> satCount;
+	map<string, map<E_Sys,int>>		stationlist;
+	map<SatSys, int>				satelltlist;
+	map<E_Sys, string>				maxCountSta;
+	map<E_Sys,int>					satCount;
 	
 	for (auto& [id, rec] : stations)
 	{
@@ -101,6 +104,7 @@ void update_ionosph_model(
 			satcnt[obs.Sat.sys]++;
 			satelltlist[obs.Sat]++;
 		}
+		
 		for(auto& [sys,nsat] : satcnt)
 		{
 			if(nsat<MIN_NSAT_STA) 
@@ -124,7 +128,7 @@ void update_ionosph_model(
 	for(auto& [rec,list] : stationlist) 
 		NStaTot+=list.size();
 	
-	for(auto& [sat,nrec] : satelltlist)
+	for (auto& [sat,nrec] : satelltlist)
 	{
 		NSatTot++;
 		NMeaTot += nrec;
@@ -137,14 +141,17 @@ void update_ionosph_model(
 	}
 	
 	map<E_Sys,bool> reset_DCBs;
-	for(auto& [sys,nsat] : satCount)
+	for (auto& [sys,nsat] : satCount)
 	{
-		reset_DCBs[sys]=false;
-		if(nsat<MIN_NSAT_STA) continue;
-		if(maxCountSta[sys]!=IonRefSta[sys])
+		reset_DCBs[sys] = false;
+		
+		if (nsat < MIN_NSAT_STA) 
+			continue;
+		
+		if (maxCountSta[sys] != IonRefSta[sys])
 		{
 			tracepde(2, trace,"#IONO_MOD WARNING change in reference station for %s: %s\n", sys._to_string(), maxCountSta[sys]);
-			reset_DCBs[sys]=false;
+			reset_DCBs[sys] = false;
 		}
 		IonRefSta[sys]=maxCountSta[sys];
 		tracepde(4, trace,"#IONO_MOD REF STATION for %s: %s\n", sys._to_string(), maxCountSta[sys]);
@@ -225,7 +232,7 @@ void update_ionosph_model(
 	}
 	
 	//add process noise to existing states as per their initialisations.
-	iono_KFState.stateTransition(trace, iontime);
+	iono_KFState.stateTransition(trace, time);
 
 	//combine the measurement list into a single design matrix, measurement vector, and measurement noise vector
 	KFMeas combinedMeas = iono_KFState.combineKFMeasList(kfMeasEntryList);
@@ -259,12 +266,12 @@ void update_ionosph_model(
 	
 	if (acsConfig.output_ionex)
 	{
-		ionex_file_write(trace, iontime);
+		ionex_file_write(trace, time);
 	}
 	
 	
-	
-	if (acsConfig.output_biasSINEX) for (auto& [dcbKey, index] : iono_KFState.kfIndexMap)
+	if (acsConfig.output_bias_sinex)
+	for (auto& [dcbKey, index] : iono_KFState.kfIndexMap)
 	{
 		if (dcbKey.type != KF::DCB) 
 			continue;

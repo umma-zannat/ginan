@@ -7,16 +7,16 @@ MODULE m_pod_gnss
 ! Purpose:
 !  Module for Precise Orbit Determination
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-!			Geoscience Australia, Frontier-SI
-! Created:	20 May 2019
+! Author :  Dr. Thomas Papanikolaou
+!                 Geoscience Australia, Frontier-SI
+! Created:  20 May 2019
 ! ----------------------------------------------------------------------
 
 
       IMPLICIT NONE
-      !SAVE 			
+      !SAVE                   
   
-	  
+        
 Contains
 
 
@@ -24,37 +24,37 @@ SUBROUTINE pod_gnss (EQMfname, VEQfname, PRNmatrix, orbpara_sigma, orbits_partia
                      orbits_ics_icrf, orbit_resR, orbit_resT, orbit_resN, orbdiff2)
 
 ! ----------------------------------------------------------------------
-! SUBROUTINE:	pod_gnss.f95
+! SUBROUTINE:     pod_gnss.f95
 ! ----------------------------------------------------------------------
 ! Purpose:
 !  Precise Orbit Determination (POD) of GNSS constellations 
 ! ----------------------------------------------------------------------
 ! Input arguments:
-! - EQMfname: 	Input configuration file name for the orbit integration of the Equation of Motion  
-! - VEQfname: 	Input configuration file name for the orbit integration of the Variational Equations
+! - EQMfname:     Input configuration file name for the orbit integration of the Equation of Motion  
+! - VEQfname:     Input configuration file name for the orbit integration of the Variational Equations
 !
 ! Output arguments:
-! - PRNmatrix:				PRN numbers array e.g. G01, .., G32, E01, .., E30
-! - orbits_partials_icrf: 	Satellite Orbits and Partial derivatives of the estimated parameters in inertial frame (ICRF) per satellite per epoch:
+! - PRNmatrix:                      PRN numbers array e.g. G01, .., G32, E01, .., E30
+! - orbits_partials_icrf:     Satellite Orbits and Partial derivatives of the estimated parameters in inertial frame (ICRF) per satellite per epoch:
 !   Format:
-! 				Row 1   :: Satellite 1, Epoch 1 :: Format:
+!                       Row 1   :: Satellite 1, Epoch 1 :: Format:
 !               - Modified Julian Day number (including the fraction of the day) 
-!				- Seconds since 00h 
-!				- Position vector (m)
-!				- Velocity vector (m/sec)
-! 				- Partial Derivatives
-! 				...
-! 				Row N   :: Satellite N, Epoch 1 :: Format as per above
-!				Row N+1 :: Satellite 1, Epoch 2 :: Format as per above
-!				...
-!				Row Nsat*Nepochs :: Satellite N, Epoch Final :: Format as per above 
+!                       - Seconds since 00h 
+!                       - Position vector (m)
+!                       - Velocity vector (m/sec)
+!                       - Partial Derivatives
+!                       ...
+!                       Row N   :: Satellite N, Epoch 1 :: Format as per above
+!                       Row N+1 :: Satellite 1, Epoch 2 :: Format as per above
+!                       ...
+!                       Row Nsat*Nepochs :: Satellite N, Epoch Final :: Format as per above 
 ! - orbits_partials_itrf:   
-! - orbits_residuals: 	
+! - orbits_residuals:   
 !
 ! ----------------------------------------------------------------------
-! Author :	Dr. Thomas Papanikolaou
-!			Geoscience Australia, Frontier-SI
-! Created:	20 May 2019
+! Author :  Dr. Thomas Papanikolaou
+!                 Geoscience Australia, Frontier-SI
+! Created:  20 May 2019
 ! ----------------------------------------------------------------------
 !
 ! Changes: 21-07-2021 Tzupang Tseng: allocate two arrays storing the ERP values from EOP file and IC file
@@ -72,11 +72,11 @@ SUBROUTINE pod_gnss (EQMfname, VEQfname, PRNmatrix, orbpara_sigma, orbits_partia
       USE m_orbext
       USE m_writearray
       USE m_writeorbit
-	  USE mdl_planets
-	  USE mdl_tides
-	  USE mdl_eop
-	  USE m_sp3_PRN
-	  USE m_write_orb2sp3
+        USE mdl_planets
+        USE mdl_tides
+        USE mdl_eop
+        USE m_sp3_PRN
+        USE m_write_orb2sp3
       USE m_orbitIC
       USE m_read_satsnx 
       use pod_yaml
@@ -88,10 +88,10 @@ SUBROUTINE pod_gnss (EQMfname, VEQfname, PRNmatrix, orbpara_sigma, orbits_partia
 ! Dummy arguments declaration
 ! ----------------------------------------------------------------------
 ! IN
-      CHARACTER (LEN=100), INTENT(IN)  :: EQMfname, VEQfname				
+      CHARACTER (LEN=100), INTENT(IN)  :: EQMfname, VEQfname                        
 ! ----------------------------------------------------------------------
 ! OUT
-	  CHARACTER (LEN=3), ALLOCATABLE, INTENT(OUT) :: PRNmatrix(:)
+        CHARACTER (LEN=3), ALLOCATABLE, INTENT(OUT) :: PRNmatrix(:)
       REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE, INTENT(OUT) :: orbits_partials_icrf  
       REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE, INTENT(OUT) :: orbits_partials_itrf  
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE, INTENT(OUT) :: orbits_ics_icrf  
@@ -104,47 +104,50 @@ SUBROUTINE pod_gnss (EQMfname, VEQfname, PRNmatrix, orbpara_sigma, orbits_partia
 ! ----------------------------------------------------------------------
 ! Local variables declaration
 ! ----------------------------------------------------------------------
-      REAL (KIND = prec_d) :: CPU_t0, CPU_t1
-      CHARACTER (LEN=100) :: PODfname, ORBMODfname				
+!       REAL (KIND = prec_d) :: CPU_t0, CPU_t1
+!       CHARACTER (LEN=100) :: PODfname, ORBMODfname                      
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orb_icrf, orb_itrf  
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: veqSmatrix, veqPmatrix
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: Vres, Xsigma
-      REAL (KIND = prec_d), DIMENSION(3) :: Vrms 	    
-	  !REAL (KIND = prec_d), DIMENSION(5,6) :: stat_XYZ_extC, stat_RTN_extC, stat_Kepler_extC, stat_XYZ_extT
+      REAL (KIND = prec_d), DIMENSION(3) :: Vrms          
+        !REAL (KIND = prec_d), DIMENSION(5,6) :: stat_XYZ_extC, stat_RTN_extC, stat_Kepler_extC, stat_XYZ_extT
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=2) :: GNSS_id
-	  INTEGER (KIND = prec_int2) :: ORB_mode
+!       CHARACTER (LEN=2) :: GNSS_id
+!         INTEGER (KIND = prec_int2) :: ORB_mode
 ! ----------------------------------------------------------------------
-	  INTEGER (KIND = prec_int8) :: Nsat, isat
-	  INTEGER (KIND = prec_int8) :: iepoch, iparam, jparam, npart
-	  INTEGER (KIND = prec_int8) :: iele
-	  INTEGER (KIND = prec_int8) :: i,icnt,jcnt
-	  INTEGER (KIND = prec_int8) :: sz1, sz2, Nepochs, N2_orb, N2_veqSmatrix, N2_veqPmatrix, N2sum , N2ics
+        INTEGER (KIND = prec_int8) :: Nsat, isat, jsat
+        INTEGER (KIND = prec_int8) :: iepoch, iparam, jparam, npart
+        INTEGER (KIND = prec_int8) :: iele
+        INTEGER (KIND = prec_int8) :: i,icnt,jcnt
+        INTEGER (KIND = prec_int8) :: sz1, sz2, Nepochs, N2_orb, N2_veqSmatrix, N2_veqPmatrix, N2sum , N2ics
       !REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE :: orbits_partials_icrf  
       !REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE :: orbits_partials_itrf  
-	  !CHARACTER (LEN=3), ALLOCATABLE :: PRNmatrix(:)
+        !CHARACTER (LEN=3), ALLOCATABLE :: PRNmatrix(:)
       INTEGER (KIND = prec_int2) :: AllocateStatus, DeAllocateStatus  
-	  CHARACTER (LEN=3) :: PRN_isat
-	  INTEGER :: ios,ios_key
-      CHARACTER (LEN=100) :: orbits_fname				
-      CHARACTER (LEN=100) :: fname_write				
-      CHARACTER (LEN=100) :: filename				
-      CHARACTER (LEN=300) :: fname_sp3, ORBpseudobs_fname, ORBEXT_fname				
+        CHARACTER (LEN=3) :: PRN_isat
+!         INTEGER :: ios,ios_key
+!       CHARACTER (LEN=100) :: orbits_fname                       
+      CHARACTER (LEN=100) :: fname_write                    
+!       CHARACTER (LEN=100) :: filename                       
+      CHARACTER (LEN=300) ::  ORBpseudobs_fname
+!       , ORBEXT_fname        
+!       fname_sp3,     
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d) :: mjd, mjd0, jd0
-      REAL (KIND = prec_d) :: Sec_00 	    
-	  INTEGER :: year, month, day
-	  INTEGER :: Iyear, Imonth, Iday
+      REAL (KIND = prec_d) :: Sec_00          
+!         INTEGER :: month, day
+!       year, 
+        INTEGER :: Iyear, Imonth, Iday
       INTEGER J_flag
       DOUBLE PRECISION FD
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=50) :: fname_id				
-      CHARACTER (LEN=100) :: param_id				
-      CHARACTER (LEN=500) :: param_value				
+      CHARACTER (LEN=50) :: fname_id                        
+      CHARACTER (LEN=100) :: param_id                       
+      CHARACTER (LEN=500) :: param_value                    
       REAL (KIND = prec_d) :: Zo(6) 
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=100) :: ORB2sp3_fname				
-      INTEGER (KIND = prec_int2) :: sat_vel	  	  
+!       CHARACTER (LEN=100) :: ORB2sp3_fname                        
+!       INTEGER (KIND = prec_int2) :: sat_vel           
 ! ----------------------------------------------------------------------
       !REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orbit_resR  
       !REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orbit_resT  
@@ -153,32 +156,33 @@ SUBROUTINE pod_gnss (EQMfname, VEQfname, PRNmatrix, orbpara_sigma, orbits_partia
       !INTEGER (KIND = prec_int8) :: GPS_week, GPSweek_mod1024
       !REAL (KIND = prec_d) :: GPS_wsec, GPS_day
 ! ----------------------------------------------------------------------
-	  INTEGER (KIND = prec_int8) :: Ncommon  
+        INTEGER (KIND = prec_int8) :: Ncommon  
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: dorb_icrf, dorb_itrf 
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: dorb_RTN, dorb_Kepler
 ! ----------------------------------------------------------------------
       !REAL (KIND = prec_d) :: ORBPRED_ARC_glb
       !REAL (KIND = prec_d) :: orbarc_sum
-      !INTEGER (KIND = prec_int2) :: IC_MODE	  	  
-      !CHARACTER (LEN=500) :: IC_REF				
+      !INTEGER (KIND = prec_int2) :: IC_MODE            
+      !CHARACTER (LEN=500) :: IC_REF                        
 ! ----------------------------------------------------------------------
       REAL (KIND = prec_d), DIMENSION(:,:), ALLOCATABLE :: orbdiff
       REAL (KIND = prec_d), DIMENSION(:,:,:), ALLOCATABLE :: orbdiff2
 ! ----------------------------------------------------------------------
-      CHARACTER (LEN=512) :: EQMfname_PRN, VEQfname_PRN				
+      CHARACTER (LEN=512) :: EQMfname_PRN, VEQfname_PRN                       
       CHARACTER (LEN=100) :: mesg
+      character (len=512) :: line !must be private to thread
 
-      INTEGER (KIND = prec_int4) :: J
+      INTEGER (KIND = prec_int4) :: J, idx
       DOUBLE PRECISION MJDD0, MJDD, MJDref  
 ! ----------------------------------------------------------------------
-	  REAL (KIND = prec_d) :: mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC
-	  REAL (KIND = prec_d) :: dt_TT_TAI, dt_TAI_UTC, dt_TAI_GPS
+      REAL (KIND = prec_d) :: mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC
+      REAL (KIND = prec_d) :: dt_TT_TAI, dt_TAI_UTC, dt_TAI_GPS
       REAL (KIND = prec_d) :: t_sec     
 ! ----------------------------------------------------------------------
       INTEGER (KIND = prec_int2) :: pseudobs_opt
       INTEGER (KIND = prec_int2) :: cofactor = 0 ! 0: default
                                                  ! 1: output parameter correlation 
-      LOGICAL found, first_sat
+      LOGICAL found, first_sat, jfound, docycle
                                                    
 
 ! ----------------------------------------------------------------------
@@ -193,14 +197,14 @@ CLOSE (UNIT=7, STATUS="DELETE")
 ! ----------------------------------------------------------------------
 ! Data reading: Gravitational Effects
 ! ----------------------------------------------------------------------
-! General orbit parameterization											
+! General orbit parameterization                                                                
 !Call prm_main (EQMfname)
 ! Earth Gravity Field model
-!CALL prm_gravity (EQMfname)												
+!CALL prm_gravity (EQMfname)                                                                    
 ! Planetary/Lunar ephemeris DE data 
-!CALL prm_planets (EQMfname)												
+!CALL prm_planets (EQMfname)                                                                    
 ! Ocean Tides model
-!CALL prm_ocean (EQMfname)												
+!CALL prm_ocean (EQMfname)                                                                      
 ! ----------------------------------------------------------------------
 
 !Allocate a global array for storing ERP values (NJD, XP, YP, UT1-UTC)
@@ -301,21 +305,21 @@ DOY = IDNINT(MJDD-MJDref) + 1
 YR = Iyear
 !PRINT*,'Day Of Year =', Iyear,DOY
 
-! Last modified: 19/02/2020 Thomas Papanikolaou: Correct MJD epoch for the computation of the time-variable gravity coefficients					
+! Last modified: 19/02/2020 Thomas Papanikolaou: Correct MJD epoch for the computation of the time-variable gravity coefficients                            
 ! ----------------------------------------------------------------------
 ! Satellite Orbits :: common configuration :: Forces model
 ! ----------------------------------------------------------------------
 ! Data reading: Gravitational Effects
 ! ----------------------------------------------------------------------
-! General orbit parameterization											
+! General orbit parameterization                                                                
 ECOMNUM = 0
 Call prm_main (EQMfname, .false.)
 ! Earth Gravity Field model
-CALL prm_gravity (EQMfname)												
+CALL prm_gravity (EQMfname)                                                                     
 ! Planetary/Lunar ephemeris DE data 
-CALL prm_planets (EQMfname)												
+CALL prm_planets (EQMfname)                                                                     
 ! Ocean Tides model
-CALL prm_ocean (EQMfname)												
+CALL prm_ocean (EQMfname)                                                                       
 ! ----------------------------------------------------------------------
 !PRINT*,'NUMBER OF FORCE PARAMETERS =', NPARAM_glb
 write(mesg, *) "A priori SRP model = ",yml_apriori_srp
@@ -337,6 +341,10 @@ print*,' '
 ! ----------------------------------------------------------------------
 ! Precise Orbit Determination :: Multi-GNSS multi-satellites POD loop
 ! ----------------------------------------------------------------------
+! read the (eop? and) sinex files to load up memory before starting the satellite loop
+PRN_isat = PRNmatrix(1)
+CALL read_satsnx(yml_satsinex_filename, Iyear, DOY, SEC_00, PRN_isat)
+
 ! ----------------------------------------------------------------------
 first_sat = .true.
 allocate(yml_satellites(Nsat),stat = allocatestatus)
@@ -355,18 +363,55 @@ PRN_isat = PRNmatrix(isat)
 PRN = trim(PRN_isat)
 yml_pod_data_prn = PRN
 
-if (.not. yml_gps_constellation .and. PRN(1:1) == "G") cycle
-if (.not. yml_gal_constellation .and. PRN(1:1) == "E") cycle
-if (.not. yml_glo_constellation .and. PRN(1:1) == "R") cycle
-if (.not. yml_bds_constellation .and. PRN(1:1) == "C") cycle
-if (.not. yml_qzss_constellation .and. PRN(1:1) == "J") cycle
+docycle = .false.
+
+if (.not. yml_gps_constellation .and. PRN(1:1) == "G") docycle = .true.
+if (.not. yml_gal_constellation .and. PRN(1:1) == "E") docycle = .true.
+if (.not. yml_glo_constellation .and. PRN(1:1) == "R") docycle = .true.
+if (.not. yml_bds_constellation .and. PRN(1:1) == "C") docycle = .true.
+if (.not. yml_qzss_constellation .and. PRN(1:1) == "J") docycle = .true.
+
+if (yml_include_prn_count > 0) then
+    jfound = .false.
+    do jsat = 1, yml_include_prn_count
+        if (trim(yml_include_prns(jsat)%prn_name) == PRN) then
+            jfound = .true.
+            exit
+        end if
+    end do
+    if (.not. docycle .and. .not. jfound) docycle = .true. !not in include list
+    if (docycle .and. jfound) docycle = .false. !was excluded by constellation, user overwrote that exclusion
+end if
+
+if (yml_exclude_prn_count > 0) then
+    jfound = .false.
+    do jsat = 1, yml_exclude_prn_count
+        if (trim(yml_exclude_prns(jsat)%prn_name) == PRN) then
+            jfound = .true.
+            exit
+        end if
+    end do
+    if (.not. docycle .and. jfound) docycle = .true. !forcefully excluded
+end if
+
+if (docycle) cycle
+
 yml_satellites(isat) = .true.
 !print *,"Satellite: ", PRNmatrix(isat) ! isat
 ! Read Satellite information from SINEX file
 ! ----------------------------------------------------------------------
 CALL read_satsnx (yml_satsinex_filename, Iyear, DOY, Sec_00, PRN_isat)
+found = .false.
+do idx = 1, prn_override_count
+    if (yml_prn_overrides(idx)%name == trim(PRN)) then
+          found = .true.
+          exit
+    end if
+end do
+if (.not. found) idx = new_prn_override(PRN)
 
-write(*,10) trim(PRN_isat),SVNID,trim(BLKTYP),BLKID,POWER,MASS
+write(yml_prn_overrides(idx)%integ%integ_header,10) trim(PRN_isat),&
+        SVNID,trim(BLKTYP),BLKID,POWER,MASS
 10 format(' PRN: ',a,', SVN: ',i03,', BLK TYP: ',a,', BLKID: ',i3,', TX PWR: ',i3,', MASS: ',f8.3)
 ! ----------------------------------------------------------------------
 ! Copy Initial Configuration files 
@@ -391,7 +436,7 @@ Call prm_main     (EQMfname_PRN, .false.)
 pseudobs_opt = TYPE_INTERP
 CALL prm_pseudobs (EQMfname_PRN, pseudobs_opt)
 Zo = pseudobs_ITRF(1,3:8)
-print *,"IC: ", pseudobs_ITRF(1,:)
+write(line,*) "IC: ", pseudobs_ITRF(1,:)
 Deallocate(pseudobs_ITRF, STAT = DeAllocateStatus)
 Deallocate(pseudobs_ICRF, STAT = DeAllocateStatus)
 
@@ -411,11 +456,13 @@ DO i =1, sz1
 IC_sat_pulse_glb(i,:) = IC_pulse_matrix_glb (isat,i,1:sz2)
 END DO
 
-print *,"Zo", IC_matrix_glb (isat,1:)
+write(line,*) "Zo", IC_matrix_glb (isat,1:)
 ELSE
-print *,"Zo", Zo
+write(line,*) "Zo", Zo
 END IF
 
+yml_prn_overrides(idx)%integ%integ_header = &
+        trim(yml_prn_overrides(idx)%integ%integ_header) // NEW_LINE('A') // line
 ! Write Initial Conditions (state vector only) in the configuration files
 write (fname_id, *) '_imd' !isat
 param_id = 'state_vector'
@@ -435,8 +482,7 @@ if (yaml_found) then
         end if
     end do
     if (.not. found) then
-        call new_prn_override(PRN_isat)
-        i = prn_override_count
+        i = new_prn_override(PRN_isat)
         yml_prn_overrides(i)%integ%state_vector_enabled = .true.
         yml_prn_overrides(i)%integ%xpos = Zo(1)
         yml_prn_overrides(i)%integ%ypos = Zo(2)
@@ -452,11 +498,11 @@ Call write_prmfile (EQMfname_PRN, fname_id, param_id, param_value)
 Call write_prmfile (VEQfname_PRN, fname_id, param_id, param_value)
 ! Write Initial Conditions Reference System in the configuration files
 IF (yml_ic_input_format == IC_FILE) THEN
-	write (fname_id, *) '_imd' !isat
-	param_id = 'Reference_frame'
-	write (param_value, *) IC_REF_cfg
-	Call write_prmfile (EQMfname_PRN, fname_id, param_id, param_value)
-	Call write_prmfile (VEQfname_PRN, fname_id, param_id, param_value)
+      write (fname_id, *) '_imd' !isat
+      param_id = 'Reference_frame'
+      write (param_value, *) IC_REF_cfg
+      Call write_prmfile (EQMfname_PRN, fname_id, param_id, param_value)
+      Call write_prmfile (VEQfname_PRN, fname_id, param_id, param_value)
 END IF
 ! ----------------------------------------------------------------------
 
@@ -467,7 +513,7 @@ END IF
 ! Precise Orbit Determination :: main subroutine
 !CAll orbitmain (EQMfname, VEQfname, orb_icrf, orb_itrf, veqSmatrix, veqPmatrix, Vres, Vrms)
 CALL orbitmain (EQMfname_PRN, VEQfname_PRN, orb_icrf, orb_itrf, veqSmatrix, veqPmatrix, Vres, Vrms, Xsigma, &
-		dorb_icrf, dorb_RTN, dorb_Kepler, dorb_itrf, orbdiff) 
+            dorb_icrf, dorb_RTN, dorb_Kepler, dorb_itrf, orbdiff) 
 ! ----------------------------------------------------------------------
 print *," "
 print *," "
@@ -545,8 +591,8 @@ orbit_resN(:,1:2) = dorb_RTN(:,1:2)
 
 sz1 = size(orbdiff, DIM = 1)
 sz2 = size(orbdiff, DIM = 2)
-
 ALLOCATE (orbdiff2(Nsat, sz1, sz2), STAT = AllocateStatus)
+!print *, "orbdiff2 allocated to size (", Nsat, ",", sz1, ",", sz2, ")" 
 orbdiff2=0.0d0
 end if
 
@@ -624,17 +670,17 @@ CALL time_TT (mjd , mjd_TT, mjd_GPS, mjd_TAI, mjd_UTC)
 Call time_TT_sec (mjd , dt_TT_TAI, dt_TAI_UTC, dt_TAI_GPS)
 !print *,"dt_TT_TAI, dt_TAI_UTC, dt_TAI_GPS", dt_TT_TAI, dt_TAI_UTC, dt_TAI_GPS
 
-! Test the TIME_SCALE global variable in mdl_param.f95	
+! Test the TIME_SCALE global variable in mdl_param.f95      
 If (yml_time_scale == GPS_time) then
-	mjd = mjd_GPS
-	t_sec = t_sec - (dt_TT_TAI + dt_TAI_GPS)
+      mjd = mjd_GPS
+      t_sec = t_sec - (dt_TT_TAI + dt_TAI_GPS)
 Else if (yml_time_scale == UTC_time) then
-	mjd = mjd_UTC		
-	t_sec = t_sec - (dt_TT_TAI + dt_TAI_UTC)
+      mjd = mjd_UTC           
+      t_sec = t_sec - (dt_TT_TAI + dt_TAI_UTC)
 Else if (yml_time_scale == TAI_time) then
-	mjd = mjd_TAI
-	t_sec = t_sec - (dt_TT_TAI)	
-End If	
+      mjd = mjd_TAI
+      t_sec = t_sec - (dt_TT_TAI)   
+End If      
 !print *, "TIME_SCALE ", TIME_SCALE
 !print *, "(dt_TT_TAI + dt_TAI_GPS) ", (dt_TT_TAI + dt_TAI_GPS)
 !print *, "t_sec ", t_sec

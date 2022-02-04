@@ -1,4 +1,6 @@
 
+//#pragma GCC optimize ("O0")
+
 #include <iostream>
 #include <string>
 
@@ -22,7 +24,7 @@ E_Sys code2sys(char code)
 	if (code=='R') return E_Sys::GLO;
 	if (code=='E') return E_Sys::GAL; /* extension to sp3-c */
 	if (code=='J') return E_Sys::QZS; /* extension to sp3-c */
-	if (code=='C') return E_Sys::CMP; /* extension to sp3-c */
+	if (code=='C') return E_Sys::BDS; /* extension to sp3-c */
 	if (code=='L') return E_Sys::LEO; /* extension to sp3-c */
 	return E_Sys::NONE;
 }

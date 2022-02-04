@@ -1,4 +1,6 @@
 
+//#pragma GCC optimize ("O0")
+
 
 #include <math.h>
 #include <stdlib.h>
@@ -369,13 +371,19 @@ int readantexf(
 			
 			continue;
 		}
+
+		if (strstr(comment, "SINEX CODE"))
+		{
+			ds_pcv.calibModel	.assign(buff,		10);
+			continue;
+		}
 		
 		if (strstr(comment, "TYPE / SERIAL NO"))
 		{
-			ds_pcv.type		.assign(buff,		20);
-			ds_pcv.code		.assign(buff+20,	20);
-			ds_pcv.svn		.assign(buff+40,	4);
-			ds_pcv.cospar	.assign(buff+50,	10);
+			ds_pcv.type			.assign(buff,		20);
+			ds_pcv.code			.assign(buff+20,	20);
+			ds_pcv.svn			.assign(buff+40,	4);
+			ds_pcv.cospar		.assign(buff+50,	10);
 			
 			continue;
 		}

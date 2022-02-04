@@ -17,7 +17,7 @@ using std::pair;
 #include "acsQC.hpp"
 
 [[deprecated]]
-extern double *mat(int n, int m)
+double *mat(int n, int m)
 {
 	double *p;
 
@@ -28,7 +28,7 @@ extern double *mat(int n, int m)
 	return p;
 }
 [[deprecated]]
-extern int *imat(int n, int m)
+int *imat(int n, int m)
 {
 	int *p;
 
@@ -39,7 +39,7 @@ extern int *imat(int n, int m)
 	return p;
 }
 [[deprecated]]
-extern double *zeros(int n, int m)
+double *zeros(int n, int m)
 {
 	double *p;
 
@@ -54,7 +54,7 @@ extern double *zeros(int n, int m)
 	return p;
 }
 [[deprecated]]
-extern double *eye(int n)
+double *eye(int n)
 {
 	double *p;
 	int i;
@@ -63,7 +63,7 @@ extern double *eye(int n)
 	return p;
 }
 [[deprecated]]
-extern double dot(const double *a, const double *b, int n)
+double dot(const double *a, const double *b, int n)
 {
 	double c=0.0;
 
@@ -71,18 +71,18 @@ extern double dot(const double *a, const double *b, int n)
 	return c;
 }
 [[deprecated]]
-extern double norm(const double *a, int n)
+double norm(const double *a, int n)
 {
 	return sqrt(dot(a,a,n));
 }
 [[deprecated]]
-extern void matcpy(double *A, const double *B, int n, int m)
+void matcpy(double *A, const double *B, int n, int m)
 {
 	memcpy(A,B,sizeof(double)*n*m);
 }
 #ifdef LAPACK 
 [[deprecated]]
-extern void matmul(const char *tr, int n, int k, int m, double alpha,
+void matmul(const char *tr, int n, int k, int m, double alpha,
 				const double *A, const double *B, double beta, double *C)
 {
 	int lda=tr[0]=='T'?m:n,ldb=tr[1]=='T'?k:m;
@@ -91,7 +91,7 @@ extern void matmul(const char *tr, int n, int k, int m, double alpha,
 		&ldb,&beta,C,&n);
 }
 [[deprecated]]
-extern int matinv(double *A, int n)
+int matinv(double *A, int n)
 {
 	double *work;
 	int info,lwork=n*16,*ipiv=imat(n,1);
@@ -114,7 +114,7 @@ extern int matinv(double *A, int n)
 *          X can be same as Y
 *-----------------------------------------------------------------------------*/
 [[deprecated]]
-extern int solve(const char *tr, const double *A, const double *Y, int n,
+int solve(const char *tr, const double *A, const double *Y, int n,
 				int m, double *X)
 {
 	double *B=mat(n,n);
@@ -132,7 +132,7 @@ extern int solve(const char *tr, const double *A, const double *Y, int n,
 
 /* multiply matrix -----------------------------------------------------------*/
 [[deprecated]]
-extern void matmul(const char *tr, int n, int k, int m, double alpha,
+void matmul(const char *tr, int n, int k, int m, double alpha,
 				const double *A, const double *B, double beta, double *C)
 {
 	double d;
@@ -200,7 +200,7 @@ void lubksb(const double *A, int n, const int *indx, double *b)
 	}
 }
 [[deprecated]]
-extern int matinv(double *A, int n)
+int matinv(double *A, int n)
 {
 	double d,*B;
 	int i,j,*indx;
@@ -218,7 +218,7 @@ extern int matinv(double *A, int n)
 	return 0;
 }
 [[deprecated]]
-extern int solve(const char *tr, const double *A, const double *Y, int n,
+int solve(const char *tr, const double *A, const double *Y, int n,
 				int m, double *X)
 {
 	double *B=mat(n,n);
@@ -250,7 +250,7 @@ extern int solve(const char *tr, const double *A, const double *Y, int n,
 *          if state x[i]==0.0, not updates state x[i]/P[i+i*n]
 *-----------------------------------------------------------------------------*/
 [[deprecated]]
-extern int filter_(const double *x, const double *P, const double *H,
+int filter_(const double *x, const double *P, const double *H,
 				const double *v, const double *R, int n, int m,
 				double *xp, double *Pp)
 {
@@ -282,46 +282,40 @@ extern int filter_(const double *x, const double *P, const double *H,
 *                  int n                   I       number of unknowns (always 2)
 *
 * return   :       0 - no cycle slip, 1 - cycle slip detected
-*
-* ref [2], weighted ionosphere model
 * ---------------------------------------------------------------------------*/
-extern int lsqqc(
+int lsqqc(
 	Trace&	trace,
 	const double *H,
 	const double *P,
 	const double *Z,
 	double *v,
-	double *xo,
-	double *Po,
 	int m,
 	int n,
 	int ind,
-	int norb)
+	int norb,
+	double *xo,
+	double *Po)
 {
-	double *xp, *N, *N1, *Pp, *vtp, *L, *g, *S;
-	int info = 0, i;
-
-	/* memory allocation */
-	xp = mat(n, 1);
-	N = mat(n, m);
-	Pp = mat(n, n);
-	N1 = mat(n, 1);
-	vtp = mat(1, m);
-	L = mat(n, n);
-	g = mat(n, 1);
-
-	S = zeros(n, n);
+	double* xp	= mat(n, 1);
+	double* N	= mat(n, m);
+	double* N1	= mat(n, 1);
+	double* Pp	= mat(n, n);
+	double* vtp	= mat(1, m);
+	double* L	= mat(n, n);
+	double* g	= mat(n, 1);
+	double* S	= zeros(n, n);
+	int info = 0;
 
 	/* least-squares */
-	matmul("TN", n, m, m, 1.0, H, P, 0.0, N); /* H'*P */
-	matmul("NN", n, n, m, 1.0, N, H, 0.0, Pp); /* H'*P*H */
-	matmul("NN", n, 1, m, 1.0, N, Z, 0.0, N1); /* Nl=H'*P*Z */
+	matmul("TN", n, m, m, 1, H, P, 0, N); /* H'*P */
+	matmul("NN", n, n, m, 1, N, H, 0, Pp); /* H'*P*H */
+	matmul("NN", n, 1, m, 1, N, Z, 0, N1); /* Nl=H'*P*Z */
 
 	//TODO build constraint matrix about here
 	/* constrain the 1st epoch LS orbit estimation, to be refined */
 	if (norb > 0)
 	{
-		for (i = 0; i < norb; i++)
+		for (int i = 0; i < norb; i++)
 		{
 			Pp[i + i * n] += 1E6;
 		}
@@ -370,10 +364,8 @@ extern int lsqqc(
 *                  int n                   I       number of unknowns
 *
 * return   :       0 - no outlier, 1 - outlier detected
-*
-* ref [2], weighted ionosphere model
 * ---------------------------------------------------------------------------*/
-extern int chiqc(
+int chiqc(
 	Trace&	trace,
 	const double *H,
 	const double *P,

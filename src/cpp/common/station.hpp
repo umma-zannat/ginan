@@ -3,8 +3,9 @@
 
 #include <memory>
 
+
 #include "eigenIncluder.hpp"
-#include "writeRinex.hpp"
+#include "common.hpp"
 #include "gTime.hpp"
 #include "snx.hpp"
 #include "ppp.hpp"
@@ -65,11 +66,12 @@ struct Station : IonoStation, StationLogs
 	ClockJump			cj				= {};
 
 	string				traceFilename;
-	
-	RinexOutput			rinexOutput = {};
+	string				tropFilename;
+	string				rtsTropFilename;
+	string				solutFilename;
 	
 	bool		primaryApriori = false;
-	GTime		aprioriTime	= {};
+	int			aprioriTime[3]	= {};
 	Vector3d	aprioriPos	= Vector3d::Zero();		///< station position (ecef) (m)
 	Vector3d	aprioriVar	= Vector3d::Zero();
 	bool		ready = false;
@@ -83,6 +85,8 @@ struct Network
 	string clockFilename;
 	string orbitsFilename;
 	string rtsClockFilename;
+	string tropFilename;
+	string rtsTropFilename;
 	string biasSINEXFilename;
 	string id				= "NET";
 	KFState kfState			= {};

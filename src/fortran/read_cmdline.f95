@@ -172,10 +172,10 @@ do
           read(optarg(1:len_optarg),'(a200)') yaml_config
           yaml_found = .true.
       case( 'h' )
-          print*,'Default master POD config file = POD.in'
+              print*,'Default master POD (if not using yaml) config file = POD.in'
 		  print*,'To run from default config file: ',trim(pgm_name),' or ',trim(pgm_name),' -c POD.in'
           print*,''
-		  print*,'POD.in config file options by defaut can be overridden on the command line'
+		  print*,'POD.in/yaml config file options by default can be overridden on the command line'
           print*,''
           print*,'Command line: ',trim(pgm_name),' -m -s -o -a -p -r -t -n -i -u -q -k -w -y -h '
           print*,''

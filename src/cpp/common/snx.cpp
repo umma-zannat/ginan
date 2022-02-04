@@ -1,3 +1,6 @@
+
+// #pragma GCC optimize ("O0")
+
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -621,7 +624,8 @@ void sinex_update_header(
 	int			soln_end[3],
 	const char	obsCode,
 	const char	constCode,
-	string&		contents)
+	string&		contents,
+	double		sinexVer)
 {
 	Sinex_input_history_t siht;
 
@@ -638,9 +642,10 @@ void sinex_update_header(
 	memcpy(siht.start,			theSinex.solution_start_date,	sizeof(siht.start));
 	memcpy(siht.stop,			theSinex.solution_end_date,		sizeof(siht.stop));
 
-	theSinex.inputHistory.push_back(siht);
+	if (theSinex.inputHistory.empty())
+		theSinex.inputHistory.push_back(siht);
 
-	theSinex.ver = 2.02;	// Fix this if the sinex format gets updated!
+	theSinex.ver = sinexVer;
 
 	if (data_agc.size() > 0)
 		theSinex.data_agc = data_agc;
@@ -1077,7 +1082,7 @@ int write_snx_siteids(ofstream& out)
 }
 
 // compare by the 2 station ids only. 
-static bool compare_sitedata(const Sinex_sitedata_t& left, const Sinex_sitedata_t& right)
+bool compare_sitedata(const Sinex_sitedata_t& left, const Sinex_sitedata_t& right)
 {
 	int sitec = left.site.compare(right.site);
 
@@ -1380,7 +1385,7 @@ int write_snx_antennas(ofstream& out)
 }
 
 // compare by antenna type and serial number.
-static bool compare_gps_pc(Sinex_gps_phase_center_t& left, Sinex_gps_phase_center_t& right)
+bool compare_gps_pc(Sinex_gps_phase_center_t& left, Sinex_gps_phase_center_t& right)
 {
 	int comp = left.antname.compare(right.antname);
 
@@ -1494,7 +1499,7 @@ int write_snx_gps_pcs(ofstream& out, std::list<Sinex_stn_snx_t>* pstns)
 }
 
 // compare by antenna type and serial number. return true0 if left < right
-static bool compare_gal_pc(Sinex_gal_phase_center_t& left, Sinex_gal_phase_center_t& right)
+bool compare_gal_pc(Sinex_gal_phase_center_t& left, Sinex_gal_phase_center_t& right)
 {
 	int comp = left.antname.compare(right.antname);
 
@@ -1748,7 +1753,7 @@ int write_snx_site_eccs(ofstream& out)
 	return 0;
 }
 
-static bool compare_site_epochs(Sinex_solepoch_t& left, Sinex_solepoch_t& right)
+bool compare_site_epochs(Sinex_solepoch_t& left, Sinex_solepoch_t& right)
 {
 	int comp = left.sitecode.compare(right.sitecode);
 	int i = 0;
@@ -2171,10 +2176,6 @@ int write_snx_apriori_from_stations(
 	for (auto& [id, rec] : stationMap)
 	{
 		auto& sst = rec.snx;
-		int		yds[3]		= {};
-		double	epoch[6]	= {};
-		time2epoch(rec.aprioriTime, epoch);
-		epoch2yds(epoch, yds);
 		
 		for (int i = 0; i < 3; i++)
 		{
@@ -2187,9 +2188,9 @@ int write_snx_apriori_from_stations(
 					id.c_str(),
 					sst.ptcode.c_str(),
 					1, //sst.solnnum.c_str(),
-					((int)epoch[0]) % 100,
-					epoch[1],
-					epoch[2],
+					rec.aprioriTime[0] % 100,
+					rec.aprioriTime[1],
+					rec.aprioriTime[2],
 					"m", //sst.unit.c_str(),
 					'3',//sst.constraint,
 					rec.aprioriPos(i),// sst.param,
@@ -2204,7 +2205,7 @@ int write_snx_apriori_from_stations(
 	return 0;
 }
 
-static bool compare_normals(Sinex_solneq_t& left, Sinex_solneq_t& right)
+bool compare_normals(Sinex_solneq_t& left, Sinex_solneq_t& right)
 {
 	int comp = left.site.compare(right.site);
 
@@ -2403,18 +2404,14 @@ void write_snx_matrices_from_filter(
 	for (auto& mv : {COVARIANCE})
 	{
 		//print header
-		tracepdeex(0, out, "+%s %c %s\n",
-			type_strings[mt],
-			'L',
-			mt == NORMAL_EQN ? "" : value_strings[mv]);
+		tracepdeex(0, out, "+%s %c %s\n", type_strings[mt], 'L', mt == NORMAL_EQN ? "" : value_strings[mv]);
 
 		write_as_comments(out, theSinex.matrix_comments);
 
 		MatrixXd& P = theSinex.kfState.P;
 
-
-		for (int i = 1; i < P.rows();	i++)
-		for (int j = 1; j <= i;		)
+		for (int i = 1; i <  P.rows();	i++)
+		for (int j = 1; j <= i;			   )
 		{
 			if (P(i,j) == 0)
 			{
@@ -2423,16 +2420,13 @@ void write_snx_matrices_from_filter(
 			}
 
 			//start printing a line
-			tracepdeex(0, out, " %5d %5d %21.14le",
-					i,
-					j,
-					P(i,j));
+			tracepdeex(0, out, " %5d %5d %21.14le",	i,	j,	P(i,j));
 			j++;
 
 			for (int k = 0; k < 2; k++)
 			{
-				if	( (P(i,j) == 0)
-					||(j > i))
+				if	( (j > i)
+					||(P(i,j) == 0))
 				{
 					break;
 				}
@@ -2445,10 +2439,7 @@ void write_snx_matrices_from_filter(
 		}
 
 		//print footer
-		tracepdeex(0, out, "-%s %c %s\n",
-			type_strings[mt],
-			'L',
-			mt == NORMAL_EQN ? "" : value_strings[mv]);
+		tracepdeex(0, out, "-%s %c %s\n", type_strings[mt], 'L', mt == NORMAL_EQN ? "" : value_strings[mv]);
 	}
 }
 
@@ -2548,7 +2539,7 @@ int write_snx_sourceids(ofstream& out)
 	return 0;
 }
 
-static bool compare_satids(Sinex_satid_t& left, Sinex_satid_t& right)
+bool compare_satids(Sinex_satid_t& left, Sinex_satid_t& right)
 {
 	char	constleft	= left.svn[0];
 	char    constright	= right.svn[0];
@@ -2629,7 +2620,7 @@ int write_snx_satids(ofstream& out)
 	return 0;
 }
 
-static bool compare_satidents(Sinex_satident_t& left, Sinex_satident_t& right)
+bool compare_satidents(Sinex_satident_t& left, Sinex_satident_t& right)
 {
 	char	constleft	= left.svn[0];
 	char    constright	= right.svn[0];
@@ -2684,7 +2675,7 @@ int write_snx_satidents(ofstream& out)
 }
 
 // NB this DOES not compare by PRN!!
-static bool compare_satprns(Sinex_satprn_t& left, Sinex_satprn_t& right)
+bool compare_satprns(Sinex_satprn_t& left, Sinex_satprn_t& right)
 {
 	char	constleft	= left.svn[0];
 	char    constright	= right.svn[0];
@@ -2756,7 +2747,7 @@ int write_snx_satprns(ofstream& out)
 	return 0;
 }
 
-static bool compare_freq_channels(Sinex_satfreqchn_t& left, Sinex_satfreqchn_t& right)
+bool compare_freq_channels(Sinex_satfreqchn_t& left, Sinex_satfreqchn_t& right)
 {
 	// start by comparing SVN...
 	char	constleft	= left.svn[0];
@@ -2834,7 +2825,7 @@ int write_snx_satfreqchn(ofstream& out)
 	return 0;
 }
 
-static bool compare_satmass(Sinex_satmass_t& left, Sinex_satmass_t& right)
+bool compare_satmass(Sinex_satmass_t& left, Sinex_satmass_t& right)
 {
 	// start by comparing SVN...
 	char	constleft	= left.svn[0];
@@ -2912,7 +2903,7 @@ int write_snx_satmass(ofstream& out)
 	return 0;
 }
 
-static bool compare_satcom(Sinex_satcom_t& left, Sinex_satcom_t& right)
+bool compare_satcom(Sinex_satcom_t& left, Sinex_satcom_t& right)
 {
 	// start by comparing SVN...
 	char	constleft		= left.svn[0];
@@ -2994,7 +2985,7 @@ int write_snx_satcom(ofstream& out)
 	return 0;
 }
 
-static bool compare_satecc(Sinex_satecc_t& left, Sinex_satecc_t& right)
+bool compare_satecc(Sinex_satecc_t& left, Sinex_satecc_t& right)
 {
 	// start by comparing SVN...
 	char	constleft	= left.svn[0];
@@ -3066,7 +3057,7 @@ int write_snx_satecc(ofstream& out)
 	return 0;
 }
 
-static bool compare_satpower(Sinex_satpower_t& left, Sinex_satpower_t& right)
+bool compare_satpower(Sinex_satpower_t& left, Sinex_satpower_t& right)
 {
 	// start by comparing SVN...
 	char	constleft	= left.svn[0];
@@ -3144,7 +3135,7 @@ int write_snx_satpower(ofstream& out)
 	return 0;
 }
 
-static bool compare_satpc(Sinex_satpc_t& left, Sinex_satpc_t& right)
+bool compare_satpc(Sinex_satpc_t& left, Sinex_satpc_t& right)
 {
 	// start by comparing SVN...
 	char	constleft	= left.svn[0];
@@ -3584,7 +3575,7 @@ void sinex_add_statistic(
 	theSinex.list_statistics.push_back(sst);
 }
 
-int sinex_check_add_ga_reference()
+int sinex_check_add_ga_reference(string solType, string peaVer, bool isTrop)
 {
 	// step 1: check it is not already there
 	for (auto it = theSinex.refstrings.begin(); it != theSinex.refstrings.end(); it++)
@@ -3625,8 +3616,7 @@ int sinex_check_add_ga_reference()
 	srt.refline = line;
 	theSinex.refstrings.push_back(srt);
 
-	// FIXME: network solution could be different?
-	sprintf(line, " %-18s %s", "OUTPUT", "PPP Solution");
+	sprintf(line, " %-18s %s", "OUTPUT", solType.c_str());
 	srt.refline = line;
 	theSinex.refstrings.push_back(srt);
 
@@ -3634,8 +3624,7 @@ int sinex_check_add_ga_reference()
 	srt.refline = line;
 	theSinex.refstrings.push_back(srt);
 
-	// TODO: replace 0.1 with some auto generated variable or config file entry, should be current version in bitbucket
-	sprintf(line, " %-18s %s", "SOFTWARE", "Ginan PEA Version 0.1");
+	sprintf(line, " %-18s %s", "SOFTWARE", ("Ginan PEA Version " + peaVer).c_str());
 	srt.refline = line;
 	theSinex.refstrings.push_back(srt);
 
@@ -3675,6 +3664,12 @@ int sinex_check_add_ga_reference()
 	srt.refline = line;
 	theSinex.refstrings.push_back(srt);
 
+	if(isTrop)
+	{
+		sprintf(line, " %-18s %03d", "VERSION NUMBER", 1); //note: increment if the processing is modified in a way that might lead to a different error characteristics of the product - see trop snx specs
+		srt.refline = line;
+		theSinex.refstrings.push_back(srt);
+	}
 	return 0;
 }
 
@@ -3841,13 +3836,13 @@ void setRestrictiveEndTime(
 // 4 = eccentricity
 // 5 = gps phase center
 // 6 = estimate
-int getstnsnx(
+E_SnxDataMissing getstnsnx(
 	string				station,
 	int					yds[3],
 	Sinex_stn_snx_t&	stn_snx)
 {
 	bool	found 		= false;
-	int		retval 		= 0;
+	E_SnxDataMissing retval = E_SnxDataMissing::NONE_MISSING;
 
 	stn_snx = {};
 	
@@ -3878,7 +3873,7 @@ int getstnsnx(
 	}
 
 	if (!found)
-		return 1;
+		return E_SnxDataMissing::SITE_ID;
 
 	found = false;
 	
@@ -3916,7 +3911,7 @@ int getstnsnx(
 	}
 	
 	if (!found)
-		retval = 2;
+		retval = E_SnxDataMissing::RECEIVER;
 
 	found = false;
 
@@ -3943,7 +3938,7 @@ int getstnsnx(
 	}
 
 	if (!found)
-		retval = 3;
+		retval = E_SnxDataMissing::ANTENNA;
 
 	found = false;
 
@@ -3972,7 +3967,7 @@ int getstnsnx(
 	}
 
 	if (!found)
-		retval = 4;
+		retval = E_SnxDataMissing::ECCENTRICITY;
 
 // 	found = false;
 // 
@@ -3994,7 +3989,7 @@ int getstnsnx(
 // 	}
 
 	if (!found)
-		retval = 5;
+		retval = E_SnxDataMissing::GPS_PHASE_CENTRE;
 
 	for (auto estMap_ptr :	{
 								&theSinex.map_estimates_primary,
@@ -4056,7 +4051,7 @@ int getstnsnx(
 
 	if (found == false)
 	{
-		retval = 6;
+		retval = E_SnxDataMissing::ESTIMATE;
 	}
 
 	return retval;

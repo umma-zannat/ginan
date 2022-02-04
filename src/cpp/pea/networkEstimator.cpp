@@ -1,8 +1,11 @@
 
+// #pragma GCC optimize ("O0")
+
 #include <iostream>
 #include <vector>
 
 #include "networkEstimator.hpp"
+#include "eigenIncluder.hpp"
 #include "algebraTrace.hpp"
 #include "streamTrace.hpp"
 #include "navigation.hpp"
@@ -16,7 +19,6 @@
 #include "enums.h"
 #include "ppp.hpp"
 
-#include "eigenIncluder.hpp"
 
 
 /** Remove ambiguity states from filter when they deemed old or bad
@@ -70,6 +72,34 @@ void removeBadAmbiguities(
 					kfState.removeState(kfKey);
 				}
 			}
+		}
+	}
+}
+
+/** Remove ambiguity states from filter when they deemed old or bad
+ * This effectively reinitialises them on the following epoch as a new state, and can be used for simple
+ * resolution of cycle-slips
+ */
+void removeBadIonospheres(
+	Trace&				trace,				///< Trace to output to
+	KFState&			kfState) 			///< Filter to remove states from
+{
+	for (auto [key, index] : kfState.kfIndexMap)
+	{
+		if (key.type != KF::IONO_STEC)
+		{
+			continue;
+		}
+		
+		double state;
+		double variance;
+		kfState.getKFValue(key, state, &variance);
+		
+		if (variance > 10000)
+		{
+			trace << std::endl << "Ionosphere removed due to high variance: " << key;
+			
+			kfState.removeState(key);
 		}
 	}
 }
@@ -167,6 +197,20 @@ void correctRecClocks(
 	}
 }
 
+void incrementOutageCount(
+	StationMap&		stations)
+{
+	//increment the outage count for all signals
+	for (auto& [id, rec] : stations)
+	{
+		for (auto& [Sat,	satStat] : rec.rtk.satStatMap)
+		for (auto& [ft,		sigStat] : satStat.sigStatMap)
+		{
+			sigStat.netwPhaseOutageCount++;
+		}
+	}
+}
+
 /** Estimates parameters for a network of stations simultaneously
  */
 void networkEstimator(
@@ -181,15 +225,7 @@ void networkEstimator(
 	
 	removeBadAmbiguities(trace, kfState);
 	
-	//increment the outage count for all signals
-	for (auto& [id, rec] : stations)
-	{
-		for (auto& [Sat,	satStat] : rec.rtk.satStatMap)
-		for (auto& [ft,		sigStat] : satStat.sigStatMap)
-		{
-			sigStat.netwPhaseOutageCount++;
-		}
-	}
+	incrementOutageCount(stations);
 
 	//count the satellites common between receivers
 	int total = 0;
@@ -236,12 +272,13 @@ void networkEstimator(
 			continue;
 		}
 		
-		orbPartials(trace, tsync, Sat, satNav.satPartialMat);	
+		auto& satOpts = acsConfig.getSatOpts(Sat);
+		
+		if (satOpts.orb.estimate)
+			orbPartials(trace, tsync, Sat, satNav.satPartialMat);	
 	}
-	
-	string obsString;
 
-	for (auto& [id, rec]	: stations)  														if (obsString += rec.id, true)
+	for (auto& [id, rec]	: stations)
 	for (auto& obs 			: rec.obsList)
 	for (auto& [ft, sig] 	: obs.Sigs)
 	{
@@ -254,12 +291,13 @@ void networkEstimator(
 			||(obs.		exclude)
 			||(satOpts.	exclude)
 			||(recOpts.	exclude)
-			||(sig.vsig == false)
-			||(ft != FTYPE_IF12))
+			||(sig.vsig == false))
 		{
 			continue;
 		}
-																								obsString += "," + obs.Sat.id();
+
+		if (obs.Sat.sys	== +E_Sys::GAL)		{	if (ft != FTYPE_IF15)	{	continue;	}}
+		else 								{	if (ft != FTYPE_IF12)	{	continue;	}}
 
 		if	(    refRec					== nullptr
 			&&( acsConfig.pivot_station	== rec.id
@@ -282,8 +320,8 @@ void networkEstimator(
 		codeMeas.metaDataMap["obs_ptr"]	= &obs;
 		phasMeas.metaDataMap["obs_ptr"]	= &obs;
 		
-		phasMeas.metaDataMap["phaseRejectCount_ptr"] = &sigStat.netwPhaseRejectCount;
-		phasMeas.metaDataMap["phaseOutageCount_ptr"] = &sigStat.netwPhaseOutageCount;
+		phasMeas.metaDataMap["PhaseRejectCount_ptr"] = &sigStat.netwPhaseRejectCount;
+		phasMeas.metaDataMap["PhaseOutageCount_ptr"] = &sigStat.netwPhaseOutageCount;
 
 		//initialise this rec/sat's measurements
 		codeMeas.setValue(sig.codeRes);
@@ -299,13 +337,15 @@ void networkEstimator(
 		//they determine which states the measurements are applied to
 		//in some cases they are per receiver, some states are per rec/sat pair etc..
 							//type					sat			receiver
-		KFKey satClockKey		=	{KF::SAT_CLOCK,			obs.Sat};
-		KFKey satClockRateKey	=	{KF::SAT_CLOCK_RATE,	obs.Sat};
-		KFKey ambiguityKey		=	{KF::AMBIGUITY,			obs.Sat,	rec.id, (short)ft,						&rec	};
-		KFKey refClockKey		=	{KF::REF_SYS_BIAS,		{},			rec.id,	SatSys(E_Sys::GPS).biasGroup(),	&rec	};
-		KFKey recClockKey		=	{KF::REC_SYS_BIAS,		{},			rec.id,	SatSys(E_Sys::GPS).biasGroup(),	&rec	};
-		KFKey recClockRateKey	=	{KF::REC_SYS_BIAS_RATE,	{},			rec.id,	SatSys(E_Sys::GPS).biasGroup(),	&rec	};
-		KFKey recSysBiasKey		=	{KF::REC_SYS_BIAS,		{},			rec.id, obs.Sat.biasGroup(),			&rec	};
+		KFKey satClockKey		=	{KF::SAT_CLOCK,				obs.Sat};
+		KFKey satClockRateKey	=	{KF::SAT_CLOCK_RATE,		obs.Sat};
+		KFKey satClockRateGMKey	=	{KF::SAT_CLOCK_RATE_GM,		obs.Sat};
+		KFKey ambiguityKey		=	{KF::AMBIGUITY,				obs.Sat,	rec.id, (short)ft,						&rec	};
+		KFKey refClockKey		=	{KF::REF_SYS_BIAS,			{},			rec.id,	SatSys(E_Sys::GPS).biasGroup(),	&rec	};
+		KFKey recClockKey		=	{KF::REC_SYS_BIAS,			{},			rec.id,	SatSys(E_Sys::GPS).biasGroup(),	&rec	};
+		KFKey recClockRateKey	=	{KF::REC_SYS_BIAS_RATE,		{},			rec.id,	SatSys(E_Sys::GPS).biasGroup(),	&rec	};
+		KFKey recClockRateGMKey	=	{KF::REC_SYS_BIAS_RATE_GM,	{},			rec.id,	SatSys(E_Sys::GPS).biasGroup(),	&rec	};
+		KFKey recSysBiasKey		=	{KF::REC_SYS_BIAS,			{},			rec.id, obs.Sat.biasGroup(),			&rec	};
 		KFKey recPosKeys	[3];
 		KFKey satPosKeys	[3];
 		KFKey tropKeys		[3];
@@ -338,47 +378,62 @@ void networkEstimator(
 
 		//all obs have GPS clock bias
 		if (recOpts.clk.estimate)
-		if (&rec != refRec)
 		{
-			InitialState init		= initialStateFromConfig(recOpts.clk);
-			codeMeas.addDsgnEntry(recClockKey,		+1,					init);
-			phasMeas.addDsgnEntry(recClockKey,		+1,					init);
-
-			if (recOpts.clk_rate.estimate)
+			if (&rec != refRec)
 			{
-				InitialState init	= initialStateFromConfig(recOpts.clk_rate);
-				kfState.setKFTransRate(recClockKey, recClockRateKey,	1, init);
+				InitialState init		= initialStateFromConfig(recOpts.clk);
+				codeMeas.addDsgnEntry(recClockKey,		+1,					init);
+				phasMeas.addDsgnEntry(recClockKey,		+1,					init);
+
+				if (recOpts.clk_rate.estimate)
+				{
+					InitialState recClkRateInit	= initialStateFromConfig(recOpts.clk_rate);
+					kfState.setKFTransRate(recClockKey, recClockRateKey,	1, recClkRateInit);
+				}
+				
+				if (recOpts.clk_rate_gauss_markov.estimate)
+				{
+					InitialState gmInit			= initialStateFromConfig(recOpts.clk_rate_gauss_markov);
+					kfState.setKFTransRate(recClockKey, recClockRateGMKey,	1, gmInit);
+				}
+			
+			        // other systems may have inter-system bias too.
+				if (obs.Sat.sys != +E_Sys::GPS)
+				{
+					InitialState init		= initialStateFromConfig(recOpts.clk);
+					codeMeas.addDsgnEntry(recSysBiasKey,	+1,						init);
+					phasMeas.addDsgnEntry(recSysBiasKey,	+1,						init);
+				}
+			}
+			else
+			{
+				if (refClk == false)
+				{
+					refClk = true;
+					
+					InitialState init		= {0, SQR(0.0001), SQR(0)};
+
+					ObsKey obsKeyCode = {{}, "REF"};
+					KFMeasEntry	pseudoMeas1(&kfState, obsKeyCode);
+					pseudoMeas1.setValue(0);
+					pseudoMeas1.setNoise(0.000001);
+					pseudoMeas1.addDsgnEntry(refClockKey,	+1,					init);
+					kfMeasEntryList.push_back(pseudoMeas1);
+					
+					KFMeasEntry	pseudoMeas2(&kfState, obsKeyCode);
+					pseudoMeas2.setValue(0);
+					pseudoMeas2.setNoise(0.000001);
+					pseudoMeas2.addDsgnEntry(recSysBiasKey,	+1,					init);
+					kfMeasEntryList.push_back(pseudoMeas2);
+				}
 			}
 		}
-		else
-		{
-			if (refClk == false)
-			{
-				refClk = true;
 
-				KFMeasEntry	pseudoMeas(&kfState);
-				pseudoMeas.setValue(0);
-				pseudoMeas.setNoise(0.000001);
-
-				InitialState init		= {0, SQR(0.0001), SQR(0)};
-				pseudoMeas.addDsgnEntry(refClockKey,	+1,					init);
-				kfMeasEntryList.push_back(pseudoMeas);
-			}
-		}
-
-		//other systems may have inter-system bias too.
-		if (recOpts.clk.estimate)
-		if (obs.Sat.sys != +E_Sys::GPS)
-		{
-			InitialState init		= initialStateFromConfig(recOpts.clk);
-			codeMeas.addDsgnEntry(recSysBiasKey,	+1,						init);
-			phasMeas.addDsgnEntry(recSysBiasKey,	+1,						init);
-		}
-
+		
 		if (recOpts.pos.estimate)
 		for (int i = 0; i < 3; i++)
 		{
-			InitialState init		= initialStateFromConfig(recOpts.pos, i);
+			InitialState init		= initialStateFromConfig(recOpts.pos,						i);
 			codeMeas.addDsgnEntry(recPosKeys[i],	-satStat.e[i], 			init);
 			phasMeas.addDsgnEntry(recPosKeys[i],	-satStat.e[i], 			init);
 			if (rec.aprioriVar(i) == 0)
@@ -392,30 +447,29 @@ void networkEstimator(
 			InitialState init		= initialStateFromConfig(recOpts.trop);
 			codeMeas.addDsgnEntry(tropKeys[0],		satStat.mapWet,			init);
 			phasMeas.addDsgnEntry(tropKeys[0],		satStat.mapWet,			init);
+		}
 
-			if (recOpts.trop_gauss_markov.estimate)
-			{
-				InitialState initGM		= initialStateFromConfig(recOpts.trop_gauss_markov);
-				codeMeas.addDsgnEntry(		tropGMKeys[0],	satStat.mapWet,	initGM);
-				phasMeas.addDsgnEntry(		tropGMKeys[0],	satStat.mapWet,	initGM);
-				kfState.setKFGaussMarkovTau(tropGMKeys[0],	recOpts.trop_gauss_markov.tau.front());
-			}
+		if (recOpts.trop_gauss_markov.estimate)
+		{
+			InitialState gmInit		= initialStateFromConfig(recOpts.trop_gauss_markov);
+			codeMeas.addDsgnEntry(tropGMKeys[0],	satStat.mapWet,			gmInit);
+			phasMeas.addDsgnEntry(tropGMKeys[0],	satStat.mapWet,			gmInit);
 		}
 
 		if (recOpts.trop_grads.estimate)
 		for (int i = 0; i < 2; i++)
 		{
-			InitialState init	= initialStateFromConfig(recOpts.trop_grads, i);
+			InitialState init		= initialStateFromConfig(recOpts.trop_grads,				i);
 			codeMeas.addDsgnEntry(tropKeys[i+1],	satStat.mapWetGrads[i],	init);
 			phasMeas.addDsgnEntry(tropKeys[i+1],	satStat.mapWetGrads[i],	init);
+		}
 
-			if (recOpts.trop_grads_gauss_markov.estimate)
-			{
-				InitialState initGM		= initialStateFromConfig(recOpts.trop_grads_gauss_markov);
-				codeMeas.addDsgnEntry(		tropGMKeys[i+1],	satStat.mapWet,	initGM);
-				phasMeas.addDsgnEntry(		tropGMKeys[i+1],	satStat.mapWet,	initGM);
-				kfState.setKFGaussMarkovTau(tropGMKeys[i+1],	recOpts.trop_grads_gauss_markov.tau.front());
-			}
+		if (recOpts.trop_grads_gauss_markov.estimate)
+		for (int i = 0; i < 2; i++)
+		{
+			InitialState gmInit		= initialStateFromConfig(recOpts.trop_grads_gauss_markov,	i);
+			codeMeas.addDsgnEntry(tropGMKeys[i+1],	satStat.mapWetGrads[i],	gmInit);
+			phasMeas.addDsgnEntry(tropGMKeys[i+1],	satStat.mapWetGrads[i],	gmInit);
 		}
 
 		if (satOpts.clk.estimate)
@@ -429,18 +483,24 @@ void networkEstimator(
 				InitialState satClkRateInit	= initialStateFromConfig(satOpts.clk_rate);
 				kfState.setKFTransRate(satClockKey, satClockRateKey,	1,	satClkRateInit);
 			}
+
+			if (satOpts.clk_rate_gauss_markov.estimate)
+			{
+				InitialState gmInit			= initialStateFromConfig(satOpts.clk_rate_gauss_markov);
+				kfState.setKFTransRate(satClockKey, satClockRateGMKey,	1,	gmInit);
+			}
 		}
 		
 		if (satOpts.pos.estimate)
 		for (int i = 0; i < 3; i++)
 		{
-			InitialState init		= initialStateFromConfig(satOpts.pos, i);
+			InitialState init		= initialStateFromConfig(satOpts.pos,						i);
 			codeMeas.addDsgnEntry(satPosKeys[i],	-satStat.e[i], 			init);
 			phasMeas.addDsgnEntry(satPosKeys[i],	-satStat.e[i], 			init);
 		
 			if (satOpts.pos_rate.estimate)
 			{
-				InitialState satPosRateInit	= initialStateFromConfig(satOpts.pos_rate);
+				InitialState satPosRateInit	= initialStateFromConfig(satOpts.pos_rate,			i);
 				kfState.setKFTransRate(satClockKey, satClockRateKey,	1,	satPosRateInit);
 			}
 		}
@@ -475,13 +535,13 @@ void networkEstimator(
 
 			for (int i = 0; i < 3; i++)
 			{
-				InitialState init	= initialStateFromConfig(acsConfig.netwOpts.eop, i);
+				InitialState init	= initialStateFromConfig(acsConfig.netwOpts.eop,					i);
 				codeMeas.addDsgnEntry(eopKeys[i],	eopPartials(i),				init);
 				phasMeas.addDsgnEntry(eopKeys[i],	eopPartials(i),				init);
 				
 				if (acsConfig.netwOpts.eop_rates.estimate)
 				{
-					InitialState eopRateInit	= initialStateFromConfig(acsConfig.netwOpts.eop_rates, i);
+					InitialState eopRateInit	= initialStateFromConfig(acsConfig.netwOpts.eop_rates,	i);
 					
 					kfState.setKFTransRate(eopKeys[i], eopRateKeys[i],	1/86400.0,	eopRateInit);
 				}
@@ -492,7 +552,7 @@ void networkEstimator(
 		kfMeasEntryList.push_back(phasMeas);
 
 		//record number of observations per satellite - for publishing SSR corrections
-		nav.satNavMap[obs.Sat].ssrOut.numObs++;
+		nav.satNavMap[obs.Sat].ssrOut.numObs++;			//todo aaron, get rid of this.
 	}
 
 	//add process noise to existing states as per their initialisations.
@@ -510,9 +570,6 @@ void networkEstimator(
 	combinedMeas.time = time;
 
 	correctRecClocks(trace, kfState, refRec);
-																								TestStack::testStr("obsString", obsString);
-																								TestStack::testMat("A", combinedMeas.A, 1e-3);
-																								TestStack::testMat("Y",	combinedMeas.Y);
 
 	//if there are uninitialised state values, estimate them using least squares
 
@@ -537,9 +594,5 @@ void networkEstimator(
 		kfState.filterKalman(trace, combinedMeas, false);
 	}
 	
-	
 	postFilterChecks(combinedMeas);
-																								TestStack::testMat("x",	kfState.x, 	0, 		&kfState.P);
-																								TestStack::testMat("P",	kfState.P, 	5e-3);
-	return;
 }

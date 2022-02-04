@@ -15,26 +15,26 @@ struct RtcmEncoder
 	{
 		std::vector<uint8_t> data;
         
-        void encodeWriteMessages(std::ostream& outputStream);
-        void encodeWriteMessageToBuffer(unsigned char * buf, int messLength);
+		void encodeWriteMessages(std::ostream& outputStream);
+		void encodeWriteMessageToBuffer(unsigned char * buf, int messLength);
     };
  
     struct CustomEndcoder : Encoder
     {
-        void encodeTimeStampRTCM();
+		void encodeTimeStampRTCM();
     };
     
 	struct SSREncoder : Encoder
 	{
 		void encodeSsr		(bool useSSROut);
-        void encodeSsrComb	(E_Sys targetSys, bool useSSROut);
-        void encodeSsrPhase	(E_Sys targetSys, bool useSSROut);
-        void encodeSsrCode	(E_Sys targetSys, bool useSSROut);
+		void encodeSsrComb	(E_Sys targetSys, bool useSSROut);
+		void encodeSsrPhase	(E_Sys targetSys, bool useSSROut);
+		void encodeSsrCode	(E_Sys targetSys, bool useSSROut);
         
-        virtual void traceSsrEph(SatSys Sat,SSREph ssrEph){}
-        virtual void traceSsrClk(SatSys Sat,SSRClk ssrClk){}
-        virtual void traceSsrCodeB(SatSys Sat,E_ObsCode mode, SSRBias ssrBias){}
-        virtual void traceSsrPhasB(SatSys Sat,E_ObsCode mode, SSRBias ssrBias){}        
+		virtual void traceSsrEph(SatSys Sat,SSREph ssrEph){}
+		virtual void traceSsrClk(SatSys Sat,SSRClk ssrClk){}
+		virtual void traceSsrCodeB(SatSys Sat,E_ObsCode mode, SSRBias ssrBias){}
+		virtual void traceSsrPhasB(SatSys Sat,E_ObsCode mode, SSRBias ssrBias){}        
     };
 };
 
